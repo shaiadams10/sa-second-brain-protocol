@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible protocol defect using synthetic data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach private vault content, raw conversations, credentials, or machine-specific paths."
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction
+      description: Provide the smallest safe fixture or command sequence that reproduces the issue.
+    validations:
+      required: true
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Affected boundary
+      options:
+        - Collection and deduplication
+        - Model packet and schema validation
+        - Publishing and generated markers
+        - Review and promotion
+        - Git and public export
+        - Scheduling and recovery
+        - Search and code graphs
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks already performed
+      description: Include relevant synthetic tests and health output with secrets removed.

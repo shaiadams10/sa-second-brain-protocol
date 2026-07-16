@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "kind", "subject", "claim", "evidence_refs", "confidence", "source_count", "project_count", "sensitivity", "promotion_tier", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "kind": {"type": "string"},
+    "subject": {"type": "string"},
+    "claim": {"type": "string"},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "source_count": {"type": "integer", "minimum": 1},
+    "project_count": {"type": "integer", "minimum": 0},
+    "sensitivity": {"enum": ["normal", "personal", "restricted"]},
+    "promotion_tier": {"type": "string"},
+    "status": {"enum": ["pending", "approved", "rejected", "promoted", "resolved"]},
+    "rejection_reason": {"type": ["string", "null"]}
+  }
+}
