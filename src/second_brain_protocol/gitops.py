@@ -279,11 +279,21 @@ def _redaction_policy(protocol: Path) -> dict[str, Any]:
 
 def _genericize(text: str, relative: Path, policy: dict[str, Any]) -> str:
     replacements = dict(policy.get("replacements", {}))
+    protected: dict[str, str] = {}
     if relative.as_posix() in AUTHORSHIP_FILES:
-        for term in policy.get("preserve_in_authorship_files", []):
+        preserved_terms = sorted(
+            policy.get("preserve_in_authorship_files", []), key=len, reverse=True
+        )
+        for index, term in enumerate(preserved_terms):
             replacements.pop(term, None)
+            placeholder = f"\uf000SB_PRESERVE_{index}\uf001"
+            if term in text:
+                text = text.replace(term, placeholder)
+                protected[placeholder] = term
     for source, target in replacements.items():
         text = text.replace(source, target)
+    for placeholder, term in protected.items():
+        text = text.replace(placeholder, term)
     if relative.as_posix() == "config/defaults.json":
         data = json.loads(text)
         data["runtime_directory_name"] = "PersonalSecondBrain"
@@ -338,6 +348,13 @@ def export_public_protocol(protocol: Path, destination: Path) -> None:
         raise GitPolicyError(f"Public export failed privacy policy: {violations}; findings={findings[:5]}")
 
 
+def _protocol_commit_message() -> str:
+    message = os.environ.get("SB_PROTOCOL_COMMIT_MESSAGE", "Publish sanitized protocol update").strip()
+    if not message or "\n" in message or "\r" in message or len(message) > 120:
+        raise GitPolicyError("Protocol commit message must be one non-empty line of at most 120 characters.")
+    return message
+
+
 def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) -> str:
     config = load_runtime_config(paths)
     _ensure_account(repository.split("/", 1)[0])
@@ -369,7 +386,7 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
     _run(export_root, "git", "config", "user.email", config["git_email"])
     _run(export_root, "git", "add", "-A")
     if _run(export_root, "git", "diff", "--cached", "--quiet", check=False).returncode != 0:
-        _run(export_root, "git", "commit", "-m", "Publish sanitized protocol update")
+        _run(export_root, "git", "commit", "-m", _protocol_commit_message())
         _run(export_root, "git", "push", "-u", "origin", PUBLIC_BRANCH, timeout=600)
     prs = _run(export_root, "gh", "pr", "list", "--repo", repository, "--head", PUBLIC_BRANCH, "--state", "open", "--json", "url", "--jq", ".[0].url")
     if prs.stdout.strip():
