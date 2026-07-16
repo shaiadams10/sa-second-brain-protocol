@@ -126,8 +126,29 @@ def snapshot_manual_markdown(vault: Path) -> bool:
 
 
 def _active_gh_account() -> str:
-    result = _run(Path.cwd(), "gh", "api", "user", "--jq", ".login")
-    return result.stdout.strip()
+    result = _run(Path.cwd(), "gh", "api", "user", "--jq", ".login", check=False)
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+
+    # GitHub can return its HTML "Unicorn" 503 page from /user while the
+    # locally selected credential and other API surfaces remain usable. In
+    # that narrow case, preserve the wrong-account guard using gh's structured
+    # local auth state instead of blocking every publication on /user.
+    status = _run(Path.cwd(), "gh", "auth", "status", "--json", "hosts", check=False)
+    if status.returncode == 0:
+        try:
+            entries = json.loads(status.stdout).get("hosts", {}).get("github.com", [])
+        except json.JSONDecodeError:
+            entries = []
+        for entry in entries:
+            error = str(entry.get("error", ""))
+            if entry.get("active") and entry.get("login") and (
+                entry.get("state") == "success" or "HTTP 503" in error
+            ):
+                return str(entry["login"])
+
+    detail = result.stderr.strip() or result.stdout.strip() or "GitHub account lookup failed"
+    raise GitPolicyError(detail)
 
 
 def _ensure_account(expected: str) -> None:
@@ -219,6 +240,7 @@ def safe_push_private(vault: Path) -> None:
 
 ALLOWLIST_DIRS = {
     ".github",
+    "assets",
     "config",
     "docs",
     "prompts",
