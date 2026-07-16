@@ -68,11 +68,15 @@ def test_automatic_private_commit_excludes_obsidian_ui_state(tmp_path: Path) -> 
     (tmp_path / "Journal" / "daily.md").write_text("safe\n", encoding="utf-8")
     (tmp_path / ".obsidian").mkdir()
     (tmp_path / ".obsidian" / "app.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / ".obsidian" / "core-plugins.json").write_text(
+        '{"properties":true,"bases":true}\n', encoding="utf-8"
+    )
     assert commit_if_changed(tmp_path, "safe generated update")
     tracked = subprocess.run(
         ["git", "ls-files"], cwd=tmp_path, check=True, capture_output=True, text=True
     ).stdout.splitlines()
     assert "Journal/daily.md" in tracked
+    assert ".obsidian/core-plugins.json" in tracked
     assert ".obsidian/app.json" not in tracked
 
 
