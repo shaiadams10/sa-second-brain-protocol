@@ -59,6 +59,28 @@ def test_public_export_excludes_personal_project_name(tmp_path: Path) -> None:
     assert "Project A" in exported
 
 
+def test_public_export_preserves_full_author_name_from_shorter_redaction(tmp_path: Path) -> None:
+    protocol = tmp_path / "Protocol"
+    protocol.mkdir()
+    system = tmp_path / "System"
+    system.mkdir()
+    (system / "PublicExportRedactions.json").write_text(
+        '{"replacements":{"YOUR_NAME":"YOUR_NAME","the user":"the user"},'
+        '"forbidden_terms":[],"preserve_in_authorship_files":["YOUR_NAME"]}',
+        encoding="utf-8",
+    )
+    (protocol / "README.md").write_text(
+        "# YOUR_NAME Second Brain Protocol\n", encoding="utf-8"
+    )
+    destination = tmp_path / "public"
+
+    export_public_protocol(protocol, destination)
+
+    exported = (destination / "README.md").read_text(encoding="utf-8")
+    assert "YOUR_NAME Second Brain Protocol" in exported
+    assert "the user Adams" not in exported
+
+
 def test_scheduler_is_interactive_missed_run_safe_and_single_instance() -> None:
     xml = task_xml(task_name="Personal Brain", script_path=Path("C:/safe/scheduled-run.ps1"), username="DOMAIN\\user")
     assert "InteractiveToken" in xml

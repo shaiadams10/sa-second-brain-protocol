@@ -9,7 +9,7 @@ description = "Evidence-backed local-first personal second-brain protocol"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = { file = "LICENSE" }
-authors = [{ name = "the user Adams" }]
+authors = [{ name = "Shai Adams" }]
 dependencies = [
   "basic-memory==0.22.1",
   "graphifyy==0.9.16",

@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧠 the user Adams Second Brain Protocol
+# 🧠 Shai Adams Second Brain Protocol
 
 ### A privacy-first personal knowledge system that learns from your work—without taking over your projects.
 
-![the user Adams Second Brain Protocol — a privacy-first knowledge system](assets/shai-adams-second-brain-protocol-hero.png)
+![Shai Adams Second Brain Protocol — a privacy-first knowledge system](assets/shai-adams-second-brain-protocol-hero.png)
 
 [![Protocol checks](https://github.com/shaiadams10/sa-second-brain-protocol/actions/workflows/protocol-tests.yml/badge.svg)](https://github.com/shaiadams10/sa-second-brain-protocol/actions/workflows/protocol-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
@@ -242,6 +242,6 @@ Privacy hardening, parser fixtures, checkpoint recovery, deterministic publishin
 
 <div align="center">
 
-Built and maintained by **the user Adams** · MIT License
+Built and maintained by **Shai Adams** · MIT License
 
 </div>

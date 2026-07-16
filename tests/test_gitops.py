@@ -69,3 +69,9 @@ def test_active_account_does_not_fallback_for_other_auth_errors(monkeypatch) -> 
         assert "authentication failed" in str(exc)
     else:
         raise AssertionError("Expected non-503 authentication failure to remain blocking")
+
+
+def test_protocol_commit_message_supports_a_descriptive_override(monkeypatch) -> None:
+    monkeypatch.setenv("SB_PROTOCOL_COMMIT_MESSAGE", "Fix public README author-name redaction")
+
+    assert gitops._protocol_commit_message() == "Fix public README author-name redaction"
