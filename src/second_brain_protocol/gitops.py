@@ -369,8 +369,9 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
             shutil.rmtree(export_root)
         _run(paths.root, "gh", "repo", "clone", repository, str(export_root), timeout=600)
     _run(export_root, "git", "fetch", "origin", timeout=600)
+    prs = _run(export_root, "gh", "pr", "list", "--repo", repository, "--head", PUBLIC_BRANCH, "--state", "open", "--json", "url", "--jq", ".[0].url")
     branch_exists = _run(export_root, "git", "show-ref", "--verify", f"refs/remotes/origin/{PUBLIC_BRANCH}", check=False)
-    if branch_exists.returncode == 0:
+    if branch_exists.returncode == 0 and prs.stdout.strip():
         _run(export_root, "git", "switch", "-C", PUBLIC_BRANCH, f"origin/{PUBLIC_BRANCH}")
     else:
         _run(export_root, "git", "switch", "-C", PUBLIC_BRANCH, "origin/main")
@@ -388,7 +389,6 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
     if _run(export_root, "git", "diff", "--cached", "--quiet", check=False).returncode != 0:
         _run(export_root, "git", "commit", "-m", _protocol_commit_message())
         _run(export_root, "git", "push", "-u", "origin", PUBLIC_BRANCH, timeout=600)
-    prs = _run(export_root, "gh", "pr", "list", "--repo", repository, "--head", PUBLIC_BRANCH, "--state", "open", "--json", "url", "--jq", ".[0].url")
     if prs.stdout.strip():
         return prs.stdout.strip()
     result = _run(
