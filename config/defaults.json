@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "runtime_directory_name": "PersonalSecondBrain",
+  "schedule": {
+    "daily_time": "22:30",
+    "weekly_day": "Saturday",
+    "timezone": "America/New_York"
+  },
+  "models": {
+    "daily": {
+      "name": "gpt-5.6-luna",
+      "reasoning": "medium"
+    },
+    "weekly": {
+      "name": "gpt-5.6-terra",
+      "reasoning": "medium"
+    },
+    "bootstrap": {
+      "name": "gpt-5.6-sol",
+      "reasoning": "high"
+    },
+    "escalation": {
+      "name": "gpt-5.6-sol",
+      "reasoning": "high"
+    }
+  },
+  "limits": {
+    "max_evidence_text_chars": 6000,
+    "max_packet_chars": 180000,
+    "max_model_calls_daily": 1,
+    "max_model_calls_weekly": 2,
+    "max_model_calls_bootstrap": 64
+  },
+  "identity": {
+    "confirmed_git_owners": [
+      "YOUR_GITHUB_USER"
+    ],
+    "confirmed_author_names": [
+      "YOUR_NAME"
+    ],
+    "confirmed_author_emails": [
+      "YOUR_EMAIL@example.com"
+    ],
+    "excluded_authors": []
+  },
+  "privacy": {
+    "track_voice_samples": true,
+    "raw_conversations_in_git": false,
+    "absolute_paths_in_git": false
+  }
+}

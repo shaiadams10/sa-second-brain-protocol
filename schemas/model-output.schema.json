@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["summary", "observations", "pattern_signals", "project_updates", "skill_updates", "voice_samples", "review_items", "question_resolutions"],
+  "additionalProperties": false,
+  "properties": {
+    "summary": {"type": "string", "maxLength": 20000},
+    "observations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/observation"},
+      "maxItems": 300
+    },
+    "pattern_signals": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/patternSignal"},
+      "maxItems": 100
+    },
+    "project_updates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/projectUpdate"},
+      "maxItems": 100
+    },
+    "skill_updates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/skillUpdate"},
+      "maxItems": 200
+    },
+    "voice_samples": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/voiceSample"},
+      "maxItems": 100
+    },
+    "review_items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/reviewItem"},
+      "maxItems": 200
+    },
+    "question_resolutions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/questionResolution"},
+      "maxItems": 50
+    }
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "required": ["kind", "subject", "claim", "evidence_refs", "confidence", "explicit", "public_claim", "authoritative"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["explicit_fact", "project_fact", "decision", "lesson", "preference", "work_style", "voice_style", "personality", "experience", "education", "military", "goal"]},
+        "subject": {"type": "string", "maxLength": 300},
+        "claim": {"type": "string", "maxLength": 4000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "explicit": {"type": "boolean"},
+        "public_claim": {"type": "boolean"},
+        "authoritative": {"type": "boolean", "default": false}
+      }
+    },
+    "patternSignal": {
+      "type": "object",
+      "required": ["pattern_key", "kind", "label", "claim", "evidence_refs", "confidence", "explicit"],
+      "additionalProperties": false,
+      "properties": {
+        "pattern_key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"},
+        "kind": {"enum": ["preference", "work_style", "voice_style", "personality", "protocol_preference"]},
+        "label": {"type": "string", "maxLength": 160},
+        "claim": {"type": "string", "maxLength": 2000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "explicit": {"type": "boolean"}
+      }
+    },
+    "projectUpdate": {
+      "type": "object",
+      "required": ["project_id", "name", "summary", "evidence_refs"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"},
+        "name": {"type": "string", "maxLength": 200},
+        "summary": {"type": "string", "maxLength": 12000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 50}
+      }
+    },
+    "skillUpdate": {
+      "type": "object",
+      "required": ["skill_id", "name", "claim", "evidence_refs", "confidence", "authorship_confirmed", "successful_implementation"],
+      "additionalProperties": false,
+      "properties": {
+        "skill_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"},
+        "name": {"type": "string", "maxLength": 150},
+        "claim": {"type": "string", "maxLength": 4000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "authorship_confirmed": {"type": "boolean"},
+        "successful_implementation": {"type": "boolean"}
+      }
+    },
+    "voiceSample": {
+      "type": "object",
+      "required": ["excerpt", "evidence_ref", "safe_for_private_git"],
+      "additionalProperties": false,
+      "properties": {
+        "excerpt": {"type": "string", "maxLength": 1200},
+        "evidence_ref": {"type": "string"},
+        "safe_for_private_git": {"type": "boolean"}
+      }
+    },
+    "reviewItem": {
+      "type": "object",
+      "required": ["kind", "subject", "description", "question", "evidence_refs", "confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["contradiction", "missing_information", "ambiguity"]},
+        "subject": {"type": "string", "maxLength": 300},
+        "description": {"type": "string", "maxLength": 4000},
+        "question": {"type": "string", "maxLength": 2000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "questionResolution": {
+      "type": "object",
+      "required": ["question_id", "answer", "evidence_refs", "confidence", "authoritative"],
+      "additionalProperties": false,
+      "properties": {
+        "question_id": {"type": "string", "pattern": "^obs-[a-z0-9]{8,64}$"},
+        "answer": {"type": "string", "maxLength": 2000},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "authoritative": {"type": "boolean"}
+      }
+    }
+  }
+}
