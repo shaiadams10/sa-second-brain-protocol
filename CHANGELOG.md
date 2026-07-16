@@ -1,5 +1,12 @@
 # 📝 Changelog
 
+## Unreleased
+
+- Renamed the public distribution to `sa-second-brain-protocol`.
+- Expanded the public landing page and added a complete implementation guide.
+- Added Windows protocol checks plus privacy-safe issue and pull-request templates.
+- Added protected-main publication guidance while preserving manual draft-PR review.
+
 ## 0.1.0
 
 - Added resumable one-time bootstrap and incremental daily/weekly pipelines.

@@ -77,7 +77,7 @@ def default_runtime_config(paths: RuntimePaths | None = None) -> dict[str, Any]:
         "git_name": "YOUR_NAME",
         "git_email": "YOUR_GITHUB_ID+YOUR_GITHUB_USER@users.noreply.github.com",
         "private_repository": "YOUR_GITHUB_USER/Personal-Second-Brain",
-        "public_repository": "YOUR_GITHUB_USER/second-brain-protocol",
+        "public_repository": "YOUR_GITHUB_USER/sa-second-brain-protocol",
         "task_name": "Personal Second Brain Daily",
     }
 

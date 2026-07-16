@@ -16,10 +16,14 @@ def test_public_export_is_allowlisted_and_generic(tmp_path: Path) -> None:
     (protocol / "src").mkdir(parents=True)
     (protocol / "docs").mkdir()
     (protocol / "config").mkdir()
+    (protocol / ".github" / "workflows").mkdir(parents=True)
     (protocol / "src" / "tool.py").write_text("NAME='Personal Second Brain'", encoding="utf-8")
     (protocol / "docs" / "ReviewFlow.md").write_text("# Review flow", encoding="utf-8")
     (protocol / "README.md").write_text("Personal Second Brain", encoding="utf-8")
     (protocol / "CONTRIBUTING.md").write_text("# Contributing", encoding="utf-8")
+    (protocol / ".github" / "workflows" / "checks.yml").write_text(
+        "name: checks\n", encoding="utf-8"
+    )
     (protocol / "config" / "defaults.json").write_text(
         '{"runtime_directory_name":"PrivateName","identity":{"confirmed_author_names":["Private Person"]}}',
         encoding="utf-8",
@@ -31,6 +35,7 @@ def test_public_export_is_allowlisted_and_generic(tmp_path: Path) -> None:
     assert "Personal Second Brain" in (destination / "README.md").read_text(encoding="utf-8")
     assert (destination / "docs" / "ReviewFlow.md").is_file()
     assert (destination / "CONTRIBUTING.md").is_file()
+    assert (destination / ".github" / "workflows" / "checks.yml").is_file()
     exported_defaults = (destination / "config" / "defaults.json").read_text(encoding="utf-8")
     assert "Private Person" not in exported_defaults
     assert '"YOUR_NAME"' in exported_defaults

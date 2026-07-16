@@ -1,166 +1,245 @@
-# 🧠 Personal Second Brain Protocol
+<div align="center">
 
-> An evidence-backed, local-first system that learns from your projects and AI-agent history without becoming the controller of those projects.
+# 🧠 SA Second Brain Protocol
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.13-3776AB.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](runbooks/Setup.md)
-[![Review](https://img.shields.io/badge/Human_review-required-6f42c1.svg)](docs/ReviewFlow.md)
+### A privacy-first personal knowledge system that learns from your work—without taking over your projects.
 
-The protocol builds a durable personal knowledge base from read-only evidence: source repositories, Git history, visible coding-agent conversations, documents, and guided interview answers. Obsidian Markdown remains the human-readable source of truth; deterministic state, search indexes, code graphs, and cloud reasoning support it without replacing it.
+[![Protocol checks](https://github.com/shaiadams10/sa-second-brain-protocol/actions/workflows/protocol-tests.yml/badge.svg)](https://github.com/shaiadams10/sa-second-brain-protocol/actions/workflows/protocol-tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB.svg)](pyproject.toml)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](runbooks/Setup.md)
+[![Obsidian](https://img.shields.io/badge/Knowledge_base-Obsidian-7C3AED.svg)](docs/Architecture.md)
 
-## ✨ What it does
+**Projects + Git + Codex + Antigravity + documents + guided interviews → one evidence-backed second brain**
 
-- 🔍 Performs a resumable, one-time deep audit of existing projects and agent history.
-- 🧾 Separates raw evidence from verified canonical knowledge.
-- 🧠 Builds identity, experience, project, skill, memory, goal, and journal notes.
-- ✅ Promotes only claims that meet explicit evidence and authorship rules.
-- 👀 Presents a short review dashboard instead of a wall of machine IDs.
-- 📅 Supports daily collection and weekly synthesis with missed-run recovery.
-- 🔁 Tracks byte/row checkpoints, explicit project deltas, DB-only Antigravity chats, and recurring cross-project work patterns.
-- 🔒 Keeps credentials, raw chats, local paths, indexes, and runtime logs out of Git.
-- 🌐 Generates a sanitized public protocol mirror through a strict allowlist.
-- 🔌 Reserves a read-only MCP service boundary without enabling it by default.
+[Quick start](#-quick-start) · [How it works](#-how-it-works) · [Implementation guide](docs/ImplementationGuide.md) · [Safety model](#-safety-by-design) · [Contributing](CONTRIBUTING.md)
 
-## 🎯 What it is—and is not
+</div>
 
-This is a personal knowledge and reflection system. It observes configured projects read-only, learns what was built and how the owner works, and turns supported observations into useful personal context.
+---
 
-It is **not** a monorepo, project manager, autonomous project controller, or a reason to install hooks and exporters into every project. Source projects stay independent and unmodified.
+## 💡 Why this exists
 
-## 🏗️ Architecture
+Coding agents remember the current task. Project-specific brains remember one repository. Neither gives you a durable, cross-project understanding of **who you are, what you have built, which skills you can prove, how you work, and how you are changing over time**.
+
+SA Second Brain Protocol fills that gap. It observes configured evidence sources read-only, tracks only what is new, and turns supported facts into a private Obsidian vault that can help with reflection, career material, project recall, personal writing, and future context building.
+
+It is deliberately **not** a monorepo, project controller, or exporter installed into every project. Your projects remain independent and unmodified.
+
+## ✨ What you get
+
+| Capability | What it means in practice |
+| --- | --- |
+| 🔎 Deep one-time bootstrap | Audit existing repositories, Git history, agent sessions, documents, and interview answers without executing project code. |
+| 📈 Incremental daily updates | Read only new session records and changed project fingerprints; make no model call on an empty day. |
+| 🗓️ Weekly synthesis | Connect wins, trajectories, repeated preferences, lessons, skills, and unresolved questions across projects. |
+| 🧾 Evidence-backed knowledge | Every generated claim keeps stable provenance, confidence, dates, and promotion status. |
+| 👀 Human review | Ambiguous, sensitive, contradictory, and public-facing claims remain reviewable instead of silently becoming truth. |
+| ✍️ Useful personal context | Search the vault, build bounded context, draft in your voice, and create career material from verified facts. |
+| 🔒 Strong privacy boundaries | Raw chats, credentials, local paths, runtime state, and private evidence never enter the public protocol repository. |
+| 🔌 Future-ready service layer | A disabled read-only MCP boundary is reserved for opt-in project queries later. |
+
+## 🏗️ How it works
 
 ```mermaid
 flowchart LR
-    A["Read-only evidence<br/>projects · Git · agent sessions · documents"] --> B["Deterministic collectors<br/>IDs · checkpoints · redaction"]
-    B --> C["Sanitized evidence packet"]
-    C --> D["Bounded cloud reasoning"]
-    D --> E["Schema validation"]
+    A["Read-only evidence<br/>projects · Git · visible agent sessions · documents"] --> B["Deterministic collection<br/>stable IDs · checkpoints · fingerprints"]
+    B --> C["Sanitized, bounded packet"]
+    C --> D["Cloud reasoning role"]
+    D --> E["Schema + policy validation"]
     E --> F["Deterministic publisher"]
     F --> G["Canonical Obsidian Markdown"]
-    G --> H["Local search index"]
-    G --> I["Human review dashboard"]
+    G --> H["Local search + relationships"]
+    G --> I["Review dashboard"]
     J["Local code graphs"] --> C
     K["Machine-only SQLite ledger"] --> B
     E --> K
 ```
 
-The generative model never writes the vault directly. It receives only a bounded, sanitized packet and returns structured candidates. A deterministic publisher validates promotion rules and updates only marked generated sections.
+The model never writes the vault directly. It receives only a sanitized evidence packet and returns structured candidates. Deterministic code validates authorship, corroboration, sensitivity, conflicts, and promotion rules before updating bounded generated sections in Markdown.
 
-See [Architecture](docs/Architecture.md) for the full data and trust boundaries, and [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior.
+### The three data layers
 
-## 📁 Repository map
+| Layer | Role | Examples |
+| --- | --- | --- |
+| Private vault | Human-readable source of truth | Identity, experience, projects, skills, memories, goals, daily and weekly notes |
+| Machine-local runtime | Operational state outside Git | Credentials, SQLite checkpoints, raw evidence, staging, logs, indexes, code graphs |
+| Public protocol | Reusable implementation | Generic code, schemas, prompts, templates, tests, docs, and runbooks |
 
-```text
-config/       Generic schedules, model roles, limits, and policy defaults
-docs/         Architecture, review, and reuse guides
-prompts/      Bounded reasoning instructions
-runbooks/     Setup, privacy, and recovery procedures
-schemas/      Structured model and review contracts
-scripts/      Windows scheduled-run entrypoint
-src/          The `sb` Python package
-templates/    Reusable notes and thin agent entrypoints
-tests/        State, parser, privacy, publishing, and recovery checks
+See [Architecture](docs/Architecture.md) for the trust boundaries and [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior.
+
+## 🔁 How it stays current
+
+```mermaid
+flowchart TD
+    A["22:30 scheduled run"] --> B["Collect source deltas"]
+    B --> C{"Anything new?"}
+    C -- "No" --> D["Record empty run · no model call"]
+    C -- "Yes" --> E["Daily synthesis"]
+    E --> F["Validate · publish · index · notify"]
+    F --> G{"Saturday?"}
+    G -- "No" --> H["Done"]
+    G -- "Yes" --> I["Weekly cross-project synthesis"]
+    I --> J["Review durable patterns and trajectories"]
 ```
 
-Machine-specific state belongs outside Git. A typical runtime contains isolated authentication, SQLite state, staging packets, logs, local indexes, code graphs, and the public-export checkout.
+- Codex JSONL sources use file identity plus byte position and content hash.
+- Antigravity sources use conversation, row or event identity, and content hash.
+- Git activity uses stable project identity plus commit and source fingerprints.
+- Checkpoints advance only after validated publication, so crashes retry safely.
+- Rejected claims receive tombstones and are not proposed repeatedly.
 
-## 🔀 Two-repository model
+## 📁 What the private vault looks like
 
-The working system uses two repositories with different privacy boundaries:
-
-| Repository | Contains | Publication rule |
-| --- | --- | --- |
-| Private vault | Personal notes plus the canonical `Protocol/` source | Private remote only |
-| Public protocol | Allowlisted generic code, docs, schemas, prompts, templates, and tests | Generated draft PR plus manual review |
-
-Protocol changes flow in one direction: canonical private `Protocol/` → deterministic sanitizer → public export checkout → draft pull request. Personal vault files are never candidates for the public mirror, and the generated public checkout is not the source of truth.
+```text
+Identity/                 Persona, voice, values, preferences, work style
+Experience/               Employment, education, military, career timeline
+Projects/                 Evidence-backed project dossiers
+Skills/                   Skills with proof, confidence, and verification dates
+Memory/                   Decisions, lessons, patterns, long-term memories
+Goals/                    Active and archived goals
+Journal/Daily/            Incremental activity summaries
+Journal/Weekly/           Cross-project synthesis and reflection
+Inbox/Review/             Ambiguous or sensitive observations
+Evidence/VoiceSamples/    Sanitized excerpts only
+System/Audits/Bootstrap/  One-time audit reports and completion marker
+Protocol/                 Canonical reusable implementation
+```
 
 ## 🚀 Quick start
 
-Requirements: Windows, Python 3.13, [`uv`](https://docs.astral.sh/uv/), Git, GitHub CLI, Obsidian, and a dedicated cloud account for unattended model calls.
+> [!IMPORTANT]
+> Read the full [Implementation Guide](docs/ImplementationGuide.md) before connecting real personal data. The bootstrap is intentionally deep and becomes one-time after final approval.
+
+### Requirements
+
+- Windows 11 or a compatible Windows environment
+- Python 3.13
+- [`uv`](https://docs.astral.sh/uv/)
+- Git and GitHub CLI
+- Obsidian
+- Codex CLI access from an account suitable for unattended cloud reasoning
+
+### Install
 
 ```powershell
-git clone https://github.com/YOUR_GITHUB_USER/second-brain-protocol.git
-Set-Location second-brain-protocol
-uv sync --all-groups
-uv run sb setup
+git clone https://github.com/shaiadams10/sa-second-brain-protocol.git
+Set-Location sa-second-brain-protocol
+uv sync --locked --all-groups
+uv run --locked sb setup
 ```
 
-Then:
+Then follow these phases:
 
-1. Configure the generated machine-local runtime file with your vault path, project roots, session-history roots, GitHub repositories, and confirmed authorship aliases.
-2. Authenticate the isolated Codex CLI account with `uv run sb auth login`.
-3. Verify every configured model with `uv run sb models check`.
-4. Start the one-time audit with `uv run sb bootstrap --linkedin-export <path>`.
-5. Answer guided interview questions gradually with `uv run sb interview next` and `uv run sb interview answer`.
-6. Open the short review dashboard with `uv run sb review digest`.
-7. Approve bootstrap only after reviewing the canonical notes and health gates.
+1. **Configure** the machine-local `runtime.json` with your private vault, project roots, visible session-history roots, repositories, and verified Git aliases.
+2. **Isolate authentication** with `uv run --locked sb auth login`; do not reuse whichever coding-agent account happens to be active elsewhere.
+3. **Verify models** with `uv run --locked sb models check`. The protocol never silently substitutes a different role.
+4. **Bootstrap once** with `uv run --locked sb bootstrap --linkedin-export <path>` and answer narrow guided questions over time.
+5. **Review** with `uv run --locked sb review digest`, then explicitly approve the bootstrap only when the canonical notes and health gates are acceptable.
+6. **Operate incrementally** with the installed daily task, `sb daily`, `sb weekly`, targeted refreshes, search, and review.
 
-Read the complete [Setup runbook](runbooks/Setup.md) before using real personal data.
+The detailed guide includes the two-repository layout, runtime boundary, account isolation, first audit, review gate, scheduling, Git publication, verification, and recovery.
 
-## 👀 Human review without review fatigue
+## 👀 Review without review fatigue
 
-The machine ledger uses stable `obs-*` observation IDs and `ev-*` evidence IDs for traceability and deduplication. Humans should normally start from a short dashboard that links to focused topic pages:
+The complete ledger uses stable `obs-*` and `ev-*` identifiers for deduplication and auditability. Humans normally use three simpler layers:
 
-- Questions that can be answered gradually
-- Public-facing career and project claims
-- Private experience, project, and work-pattern observations
+1. **Dashboard** — counts, status, and links.
+2. **Topic pages** — grouped questions and claims in plain language.
+3. **Machine ledger** — full provenance only when debugging or auditing.
 
-Non-question groups receive snapshot-specific decision tokens. If group membership changes, an older token becomes invalid, preventing accidental approval of unseen items. Clarification groups are always answer-only.
+Public-facing career claims always require review. Stable personality or work-style inferences need repeated evidence across sessions, dates, and projects unless the user explicitly stated them. See [Review flow](docs/ReviewFlow.md).
 
-See [Review flow](docs/ReviewFlow.md).
-
-## 🛠️ Main commands
+## 🛠️ Command map
 
 | Command | Purpose |
 | --- | --- |
-| `sb bootstrap` | Run or resume the one-time audit |
-| `sb bootstrap --refresh-evidence` | Backfill a changed collector/parser while awaiting final approval |
+| `sb setup` | Create machine-local runtime and install the standalone Codex CLI |
+| `sb auth login` | Authenticate the isolated automation account |
+| `sb models check` | Run structured-output canaries for every locked model role |
+| `sb bootstrap` | Run or resume the one-time deep audit |
+| `sb bootstrap --approve` | Close bootstrap after explicit final review |
 | `sb daily` / `sb weekly` | Process incremental evidence |
+| `sb refresh-project <project>` | Refresh one known dossier and derived code graph |
 | `sb review digest` | Generate the short Obsidian review dashboard |
-| `sb review list` | Return a concise grouped review summary |
-| `sb review show <token>` | Inspect one group or observation |
-| `sb review approve-group <token>` | Explicitly approve every visible claim in a snapshot |
-| `sb review answer <token> <number>` | Answer one grouped clarification without handling machine IDs |
-| `sb refresh-project <project>` | Refresh one known project dossier and graph |
+| `sb review show <token>` | Inspect one grouped decision or observation |
+| `sb review approve-group <token>` | Approve the exact visible snapshot of a group |
+| `sb review answer <token> <number>` | Answer one clarification without handling machine IDs |
 | `sb search <query>` | Search canonical personal knowledge |
 | `sb write-as-me <request>` | Draft from verified voice and identity context |
 | `sb career <request>` | Draft review-required career material |
-| `sb health` | Check runtime, dependencies, state, Git, and scheduling |
-| `sb protocol publish` | Export and open/update a sanitized public draft PR |
+| `sb reindex` | Rebuild local search from canonical Markdown |
+| `sb health` | Check dependencies, state, Git, and scheduling |
+| `sb protocol publish` | Update the sanitized public draft PR |
 
-## 🛡️ Safety model
+## 🛡️ Safety by design
 
-- Projects and agent histories are read-only evidence sources.
-- Collected text is untrusted data, never executable instruction.
-- Raw chats, hidden reasoning, tool dumps, credentials, and local paths stay outside Git.
-- Checkpoints advance only after validated publication.
-- Generated Markdown is confined to `sb:generated` markers; manual prose is preserved.
-- Rejections create durable tombstones so unwanted claims do not reappear.
-- Model failure stops the run; no silent fallback is permitted.
-- Public export uses an allowlist, deterministic redaction, secret scanning, and manual draft-PR review.
+- Source projects and agent histories are read-only evidence sources.
+- Collected text is untrusted data, never an instruction source.
+- The scanner never executes project code, installs dependencies, invokes hooks, or writes into projects.
+- Raw chats, hidden reasoning, tool dumps, credentials, and absolute machine mappings stay out of tracked Markdown.
+- Generated content is confined to `sb:generated` markers; manual prose is preserved.
+- Model, graph, privacy, Git, or notification failure stops the run and preserves unprocessed evidence.
+- Public export uses a strict allowlist, deterministic redaction, secret scanning, and a draft PR that requires manual review.
+- Completed bootstrap cannot be casually rerun; incremental commands take over afterward.
 
-Read the binding [Operating Contract](OperatingContract.md) and [Privacy runbook](runbooks/Privacy.md).
+Read the binding [Operating Contract](OperatingContract.md), [Privacy runbook](runbooks/Privacy.md), and [Recovery runbook](runbooks/Recovery.md).
 
-## 🤖 Agent surfaces
+## 🤖 Supported agent surfaces
 
-Reusable thin entrypoint templates are included for Codex and Antigravity. All behavior remains in the shared protocol package so wrappers cannot drift into separate implementations.
+The reusable templates provide thin entrypoints for:
 
-This implementation intentionally does not include Claude-native files, hooks, commands, SDKs, or workflows.
+- **Codex** — `AGENTS.md` plus task-specific skills.
+- **Antigravity** — shared rules, skills, and workflows.
 
-## ♻️ Reusing the protocol
+All real behavior remains in the common `sb` package so wrappers cannot drift into separate protocols. This repository intentionally contains no Claude-native files, hooks, commands, SDKs, or workflows.
 
-You can use the protocol as a standalone personal vault or adapt its generic templates and policies to another project. Keep personal facts and machine configuration outside the reusable repository, and keep project-local brains focused on their own project context.
+## 🔌 Read-only MCP future
 
-See [Reuse guide](docs/ReuseGuide.md).
+The transport is disabled in v1, but the service boundary reserves these safe operations:
+
+- `search`
+- `read_note`
+- `build_context`
+- `recent_activity`
+- `query_project_graph`
+- `get_project_neighbors`
+- `trace_project_path`
+
+Future consumers may receive canonical notes and sanitized graph results only—never raw evidence, local paths, ingestion state, or write/delete access.
+
+## ✅ Production-readiness checklist
+
+- [ ] Source paths are explicitly configured and treated read-only.
+- [ ] Git owners, author names, emails, forks, vendors, and exclusions are verified.
+- [ ] Automation authentication is isolated from everyday coding-agent accounts.
+- [ ] Every configured model role passes its canary without fallback.
+- [ ] Bootstrap final packet and canonical notes are reviewed.
+- [ ] Private repository visibility and SSH identity are verified.
+- [ ] Public export privacy scan and test suite pass.
+- [ ] Scheduled-task canary passes and missed-run recovery is enabled.
+- [ ] Recovery procedure is documented before unattended operation.
+
+## ♻️ Reuse and customization
+
+Fork the protocol, keep private facts in a private vault, and change generic configuration only through explicit, tested policy updates. A project-local second brain should understand that project; the personal brain can observe it later through the read-only scanner.
+
+See the [Reuse guide](docs/ReuseGuide.md) for personal-vault and project-local patterns.
 
 ## 📦 Dependencies and licensing
 
-Original protocol code is MIT-licensed. [Basic Memory](https://github.com/basicmachines-co/basic-memory) and [Graphify](https://github.com/safishamsi/graphify) remain external pinned dependencies under their own licenses; their source code is not vendored here. See [NOTICE](NOTICE.md).
+Original protocol code is MIT-licensed. [Basic Memory](https://github.com/basicmachines-co/basic-memory) and [Graphify](https://github.com/safishamsi/graphify) remain pinned external dependencies under their own licenses; their source is not vendored. See [NOTICE](NOTICE.md).
 
-The project was conceptually inspired by [`coleam00/second-brain-starter`](https://github.com/coleam00/second-brain-starter). No unlicensed source files are copied from it.
+The design was conceptually inspired by [`coleam00/second-brain-starter`](https://github.com/coleam00/second-brain-starter). No unlicensed source files are copied from it.
 
 ## 🤝 Contributing
 
-Bug reports, privacy hardening, new parser fixtures, and deterministic workflow improvements are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+Privacy hardening, parser fixtures, checkpoint recovery, deterministic publishing, review usability, and clear documentation are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+---
+
+<div align="center">
+
+Built and maintained by **the user Adams** · MIT License
+
+</div>

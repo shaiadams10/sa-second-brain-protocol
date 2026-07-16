@@ -218,6 +218,7 @@ def safe_push_private(vault: Path) -> None:
 
 
 ALLOWLIST_DIRS = {
+    ".github",
     "config",
     "docs",
     "prompts",
@@ -244,7 +245,7 @@ ALLOWLIST_FILES = {
 PRIVATE_ONLY_EXPORT_FILES = {"tests/test_structure.py"}
 
 
-AUTHORSHIP_FILES = {"LICENSE", "NOTICE.md", "pyproject.toml"}
+AUTHORSHIP_FILES = {"LICENSE", "NOTICE.md", "README.md", "pyproject.toml"}
 
 
 def _redaction_policy(protocol: Path) -> dict[str, Any]:
