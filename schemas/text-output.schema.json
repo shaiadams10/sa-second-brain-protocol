@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["content", "evidence_refs"],
+  "additionalProperties": false,
+  "properties": {
+    "content": {"type": "string", "maxLength": 30000},
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "maxItems": 100
+    }
+  }
+}

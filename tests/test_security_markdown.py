@@ -1,0 +1,30 @@
+from pathlib import Path
+
+import pytest
+
+from second_brain_protocol.markdown import GeneratedSectionError, replace_generated_section
+from second_brain_protocol.security import repair_mojibake, sanitize_text, scan_text
+
+
+def test_secret_and_path_sanitization() -> None:
+    text = "key=" + "sk-" + "abcdefghijklmnopqrstuvwxyz123456 path=C:\\Users\\person\\secret.txt"
+    sanitized = sanitize_text(text)
+    assert "sk-" not in sanitized
+    assert "C:\\Users" not in sanitized
+    assert "[REDACTED_SECRET]" in sanitized
+    assert scan_text(text, "fixture")
+
+
+def test_generated_section_preserves_manual_prose() -> None:
+    original = "# Note\nmanual before\n<!-- sb:generated canonical:start -->\nold\n<!-- sb:generated canonical:end -->\nmanual after\n"
+    updated = replace_generated_section(original, "canonical", "new")
+    assert "manual before" in updated and "manual after" in updated and "new" in updated
+    assert "old" not in updated
+    with pytest.raises(GeneratedSectionError):
+        replace_generated_section("# malformed", "canonical", "new")
+
+
+def test_mojibake_repair_handles_punctuation_and_hebrew() -> None:
+    assert repair_mojibake("AIâ€”Verified Intelligence") == "AI—Verified Intelligence"
+    assert repair_mojibake("×—×¤×©×©") == "חפשש"
+    assert repair_mojibake("normal café × 3") == "normal café × 3"
