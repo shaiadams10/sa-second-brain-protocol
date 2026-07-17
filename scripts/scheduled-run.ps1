@@ -11,7 +11,20 @@ Push-Location $protocol
 try {
     $command = if ($Canary) { "health" } else { "scheduled" }
     & uv run --locked sb $command *>&1 | Tee-Object -FilePath $log
-    exit $LASTEXITCODE
+    $pipelineExit = $LASTEXITCODE
+    $finalExit = $pipelineExit
+    if (-not $Canary) {
+        & uv run --locked sb dashboard build *>&1 | Tee-Object -FilePath $log -Append
+        if ($LASTEXITCODE -ne 0) {
+            "Dashboard refresh failed; the pipeline result is preserved." | Tee-Object -FilePath $log -Append
+        }
+        & uv run --locked sb protocol publish --if-changed *>&1 | Tee-Object -FilePath $log -Append
+        if ($LASTEXITCODE -ne 0) {
+            "Public protocol draft sync failed; it will retry on the next scheduled run." | Tee-Object -FilePath $log -Append
+            if ($finalExit -eq 0) { $finalExit = 1 }
+        }
+    }
+    exit $finalExit
 }
 finally {
     Pop-Location

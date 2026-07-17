@@ -114,8 +114,38 @@ def configure_project(paths: RuntimePaths, index_root: Path) -> None:
         raise RuntimeError(result.stderr or result.stdout)
 
 
-def reindex(paths: RuntimePaths, vault: Path) -> str:
-    mirror = build_index_mirror(paths, vault)
+def update_index_mirror(paths: RuntimePaths, vault: Path, relative_paths: list[str]) -> Path:
+    """Update only changed canonical notes in the existing runtime mirror."""
+
+    destination = paths.basic_memory / "vault-mirror"
+    if not destination.is_dir():
+        return build_index_mirror(paths, vault)
+    vault_root = vault.resolve()
+    mirror_root = destination.resolve()
+    for value in sorted(set(relative_paths)):
+        relative = Path(value)
+        label = relative.as_posix().lstrip("/")
+        if (
+            not relative.parts
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or relative.suffix.casefold() != ".md"
+            or any(label == item or label.startswith(item + "/") for item in MIRROR_EXCLUSIONS)
+        ):
+            raise ValueError("Invalid incremental index path")
+        source = (vault_root / relative).resolve()
+        target = (mirror_root / relative).resolve()
+        source.relative_to(vault_root)
+        target.relative_to(mirror_root)
+        if source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        elif target.is_file():
+            target.unlink()
+    return destination
+
+
+def _reindex_configured(paths: RuntimePaths, mirror: Path) -> str:
     configure_project(paths, mirror)
     result = _run(paths, "reindex", "--project", PROJECT_NAME, timeout=1800)
     if result.returncode != 0:
@@ -126,6 +156,14 @@ def reindex(paths: RuntimePaths, vault: Path) -> str:
     if status_result.returncode != 0:
         raise RuntimeError("Basic Memory indexing did not settle: " + (status_result.stderr or status_result.stdout))
     return status_result.stdout.strip()
+
+
+def reindex(paths: RuntimePaths, vault: Path) -> str:
+    return _reindex_configured(paths, build_index_mirror(paths, vault))
+
+
+def reindex_changed(paths: RuntimePaths, vault: Path, relative_paths: list[str]) -> str:
+    return _reindex_configured(paths, update_index_mirror(paths, vault, relative_paths))
 
 
 def search(paths: RuntimePaths, query: str, *, limit: int = 10) -> list[dict[str, Any]]:

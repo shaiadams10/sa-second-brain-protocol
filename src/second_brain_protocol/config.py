@@ -36,6 +36,7 @@ class RuntimePaths:
     graphify: Path
     protocol_publish: Path
     locks: Path
+    dashboard: Path
 
     @classmethod
     def from_root(cls, root: Path | None = None) -> "RuntimePaths":
@@ -51,6 +52,7 @@ class RuntimePaths:
             graphify=root / "graphify",
             protocol_publish=root / "protocol-publish",
             locks=root / "locks",
+            dashboard=root / "dashboard",
         )
 
 
@@ -156,6 +158,7 @@ def setup_runtime(paths: RuntimePaths | None = None, *, overwrite_config: bool =
         paths.graphify,
         paths.protocol_publish,
         paths.locks,
+        paths.dashboard,
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -184,6 +187,17 @@ def setup_runtime(paths: RuntimePaths | None = None, *, overwrite_config: bool =
         if candidate.is_file():
             candidate.unlink()
     harden_runtime_acl(paths)
+    return paths
+
+
+def dashboard_runtime(paths: RuntimePaths | None = None) -> RuntimePaths:
+    """Use the existing hardened runtime without repeating full automation setup."""
+
+    paths = paths or RuntimePaths.from_root()
+    if not paths.config.is_file() or not paths.state.is_file():
+        return setup_runtime(paths)
+    paths.dashboard.mkdir(parents=True, exist_ok=True)
+    paths.locks.mkdir(parents=True, exist_ok=True)
     return paths
 
 

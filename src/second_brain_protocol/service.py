@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,38 @@ from .basic_memory_integration import search as memory_search
 from .config import RuntimePaths
 from .graphify_integration import graph_summary, query_graph
 from .security import sanitize_text
+from .state import StateStore
+
+
+def _search_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return " ".join(_search_text(item) for item in value.values())
+    if isinstance(value, list):
+        return " ".join(_search_text(item) for item in value)
+    return str(value) if isinstance(value, (str, int, float)) else ""
+
+
+def _normalized_search_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", _search_text(value)).strip().casefold()
+
+
+def _filter_pending_tombstones(store: StateStore, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if int(store.search_refresh_status().get("pending") or 0) == 0:
+        return results
+    tombstones = [
+        (str(item["id"]).casefold(), _normalized_search_text(item.get("claim") or ""))
+        for item in store.observations("rejected")
+        if item.get("claim")
+    ]
+    if not tombstones:
+        return results
+    filtered = []
+    for result in results:
+        text = _normalized_search_text(result)
+        if any(observation_id in text or (claim and claim in text) for observation_id, claim in tombstones):
+            continue
+        filtered.append(result)
+    return filtered
 
 
 def read_note(vault: Path, note: str) -> str:
@@ -20,7 +53,8 @@ def read_note(vault: Path, note: str) -> str:
 
 
 def search(paths: RuntimePaths, vault: Path, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
-    results = memory_search(paths, query, limit=limit)
+    store = StateStore(paths.state)
+    results = _filter_pending_tombstones(store, memory_search(paths, query, limit=limit))
     if results:
         return results
     lowered = query.casefold()

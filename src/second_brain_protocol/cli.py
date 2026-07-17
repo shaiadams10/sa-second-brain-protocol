@@ -6,8 +6,10 @@ import sys
 from pathlib import Path
 
 from .basic_memory_integration import reindex
-from .config import RuntimePaths, load_defaults, load_runtime_config, setup_runtime, vault_root
-from .gitops import publish_protocol_draft
+from .config import RuntimePaths, dashboard_runtime, load_defaults, load_runtime_config, setup_runtime, vault_root
+from .dashboard import build_dashboard, install_dashboard_shortcut, open_dashboard
+from .dashboard_server import serve_dashboard
+from .gitops import sync_protocol_draft
 from .health import report as health_report, write_report
 from .installer import install_standalone_codex, login_dedicated_account
 from .model_runner import ModelRole, build_evidence_packet, canary, run_model
@@ -97,7 +99,16 @@ def _parser() -> argparse.ArgumentParser:
     models = sub.add_parser("models")
     models.add_subparsers(dest="action", required=True).add_parser("check")
     protocol = sub.add_parser("protocol")
-    protocol.add_subparsers(dest="action", required=True).add_parser("publish")
+    protocol_publish = protocol.add_subparsers(dest="action", required=True).add_parser("publish")
+    protocol_publish.add_argument("--if-changed", action="store_true")
+    dashboard = sub.add_parser("dashboard")
+    dashboard_sub = dashboard.add_subparsers(dest="action")
+    dashboard_sub.add_parser("build")
+    dashboard_sub.add_parser("open")
+    dashboard_sub.add_parser("install")
+    dashboard_serve = dashboard_sub.add_parser("serve")
+    dashboard_serve.add_argument("--no-browser", action="store_true")
+    dashboard.set_defaults(action="open")
     return parser
 
 
@@ -249,7 +260,28 @@ def main(argv: list[str] | None = None) -> int:
             paths, config, _defaults, store = _common()
             if store.bootstrap_state()["state"] != "completed":
                 raise RuntimeError("Protocol publishing is gated until bootstrap approval.")
-            _json({"draft_pr": publish_protocol_draft(vault_root(), paths, config["public_repository"])})
+            _json(
+                sync_protocol_draft(
+                    vault_root(),
+                    paths,
+                    config["public_repository"],
+                    store,
+                    if_changed=args.if_changed,
+                )
+            )
+        elif args.command == "dashboard":
+            paths = dashboard_runtime()
+            if args.action == "build":
+                path = build_dashboard(paths, vault_root())
+                _json({"status": "built", "dashboard": str(path)})
+            elif args.action == "install":
+                shortcut = install_dashboard_shortcut(paths, vault_root())
+                _json({"status": "installed", "shortcut": str(shortcut)})
+            elif args.action == "serve":
+                serve_dashboard(paths, vault_root(), open_browser=not args.no_browser)
+            else:
+                url = open_dashboard(paths, vault_root())
+                _json({"status": "opened", "dashboard": url})
         return 0
     except Exception as error:
         print(f"error: {error}", file=sys.stderr)

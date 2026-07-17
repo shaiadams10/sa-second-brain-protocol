@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import html
+import json
+import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
 def task_xml(*, task_name: str, script_path: Path, username: str) -> str:
@@ -43,6 +46,40 @@ def task_status(task_name: str) -> str:
         check=False,
     )
     return result.stdout.strip() if result.returncode == 0 else "not installed"
+
+
+def task_details(task_name: str) -> dict[str, Any]:
+    """Return display-safe scheduler metadata without machine identities or commands."""
+
+    if os.name != "nt":
+        return {"installed": False, "state": "unsupported", "last_run": None, "next_run": None}
+    escaped = task_name.replace("'", "''")
+    script = f"""
+$task = Get-ScheduledTask -TaskName '{escaped}' -ErrorAction Stop
+$info = Get-ScheduledTaskInfo -TaskName '{escaped}' -ErrorAction Stop
+[pscustomobject]@{{
+  installed = $true
+  state = [string]$task.State
+  last_run = if ($info.LastRunTime.Year -lt 2000) {{ $null }} else {{ $info.LastRunTime.ToString('o') }}
+  next_run = if ($info.NextRunTime.Year -lt 2000) {{ $null }} else {{ $info.NextRunTime.ToString('o') }}
+  last_result = [int64]$info.LastTaskResult
+  missed_runs = [int]$info.NumberOfMissedRuns
+}} | ConvertTo-Json -Compress
+"""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        return {"installed": False, "state": "not installed", "last_run": None, "next_run": None}
+    try:
+        return dict(json.loads(result.stdout))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {"installed": False, "state": "unavailable", "last_run": None, "next_run": None}
 
 
 def run_canary(script_path: Path) -> str:

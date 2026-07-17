@@ -33,3 +33,19 @@ def test_bootstrap_refresh_is_an_explicit_preapproval_action() -> None:
     args = _parser().parse_args(["bootstrap", "--refresh-evidence"])
     assert args.refresh_evidence is True
     assert args.approve is False
+
+
+def test_dashboard_is_natural_language_friendly_but_has_internal_actions() -> None:
+    default = _parser().parse_args(["dashboard"])
+    build = _parser().parse_args(["dashboard", "build"])
+
+    assert default.action == "open"
+    assert build.action == "build"
+
+
+def test_protocol_publish_supports_scheduled_change_detection() -> None:
+    manual = _parser().parse_args(["protocol", "publish"])
+    scheduled = _parser().parse_args(["protocol", "publish", "--if-changed"])
+
+    assert manual.if_changed is False
+    assert scheduled.if_changed is True
