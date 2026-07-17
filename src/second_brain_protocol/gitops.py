@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -10,9 +11,11 @@ from typing import Any, Iterable
 
 from .config import RuntimePaths, load_runtime_config
 from .security import Finding, scan_text, scan_tree
+from .state import StateStore
 
 
 PUBLIC_BRANCH = "automation/protocol-publish"
+PUBLIC_PROTOCOL_FINGERPRINT_KEY = "public_protocol_fingerprint"
 GITHUB_ED25519_KNOWN_HOST = (
     "github.com ssh-ed25519 "
     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
@@ -157,9 +160,9 @@ def _ensure_account(expected: str) -> None:
         raise GitPolicyError(f"GitHub CLI account is {active}, expected {expected}; refusing to switch accounts.")
 
 
-def _ensure_ssh_identity(paths: RuntimePaths, repository: str) -> Path:
+def _ensure_ssh_identity(paths: RuntimePaths, repository: str, key_name: str) -> Path:
     config = load_runtime_config(paths)
-    key = paths.root / "ssh" / "personal-second-brain-ed25519"
+    key = paths.root / "ssh" / key_name
     key.parent.mkdir(parents=True, exist_ok=True)
     if not key.exists():
         _run(paths.root, "ssh-keygen", "-t", "ed25519", "-N", "", "-C", config["git_email"], "-f", str(key))
@@ -193,6 +196,23 @@ def _ensure_ssh_identity(paths: RuntimePaths, repository: str) -> Path:
     return key
 
 
+def _configure_ssh_remote(checkout: Path, key: Path, known_hosts: Path, repository: str) -> None:
+    remote = f"git@github.com:{repository}.git"
+    existing = _run(checkout, "git", "remote", "get-url", "origin", check=False)
+    if existing.returncode == 0:
+        _run(checkout, "git", "remote", "set-url", "origin", remote)
+    else:
+        _run(checkout, "git", "remote", "add", "origin", remote)
+    _run(
+        checkout,
+        "git",
+        "config",
+        "core.sshCommand",
+        f"ssh -i {key.as_posix()} -o IdentitiesOnly=yes "
+        f"-o UserKnownHostsFile={known_hosts.as_posix()} -o StrictHostKeyChecking=yes",
+    )
+
+
 def _ensure_github_known_hosts(paths: RuntimePaths) -> Path:
     known_hosts = paths.root / "ssh" / "github-known-hosts"
     known_hosts.parent.mkdir(parents=True, exist_ok=True)
@@ -207,24 +227,9 @@ def ensure_private_remote(vault: Path, paths: RuntimePaths, repository: str) -> 
     exists = _run(vault, "gh", "repo", "view", repository, "--json", "name", check=False)
     if exists.returncode != 0:
         _run(vault, "gh", "repo", "create", repository, "--private", "--description", "Private evidence-backed personal second brain")
-    key = _ensure_ssh_identity(paths, repository)
+    key = _ensure_ssh_identity(paths, repository, "personal-second-brain-ed25519")
     known_hosts = _ensure_github_known_hosts(paths)
-    remote = f"git@github.com:{repository}.git"
-    existing = _run(vault, "git", "remote", "get-url", "origin", check=False)
-    if existing.returncode == 0:
-        _run(vault, "git", "remote", "set-url", "origin", remote)
-    else:
-        _run(vault, "git", "remote", "add", "origin", remote)
-    key_arg = key.as_posix()
-    known_hosts_arg = known_hosts.as_posix()
-    _run(
-        vault,
-        "git",
-        "config",
-        "core.sshCommand",
-        f"ssh -i {key_arg} -o IdentitiesOnly=yes "
-        f"-o UserKnownHostsFile={known_hosts_arg} -o StrictHostKeyChecking=yes",
-    )
+    _configure_ssh_remote(vault, key, known_hosts, repository)
 
 
 def safe_push_private(vault: Path) -> None:
@@ -348,6 +353,39 @@ def export_public_protocol(protocol: Path, destination: Path) -> None:
         raise GitPolicyError(f"Public export failed privacy policy: {violations}; findings={findings[:5]}")
 
 
+def _tree_fingerprint(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        content = path.read_bytes()
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def sanitized_protocol_fingerprint(vault: Path, paths: RuntimePaths) -> str:
+    destination = paths.root / "protocol-export-fingerprint"
+    export_public_protocol(vault / "Protocol", destination)
+    return _tree_fingerprint(destination)
+
+
+def _run_protocol_tests(vault: Path) -> None:
+    result = _run(
+        vault,
+        "uv",
+        "run",
+        "--project",
+        str(vault / "Protocol"),
+        "pytest",
+        timeout=900,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise GitPolicyError("Protocol tests failed before public publishing: " + (result.stdout + result.stderr)[-4000:])
+
+
 def _protocol_commit_message() -> str:
     message = os.environ.get("SB_PROTOCOL_COMMIT_MESSAGE", "Publish sanitized protocol update").strip()
     if not message or "\n" in message or "\r" in message or len(message) > 120:
@@ -409,3 +447,20 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
         "Generated from the private canonical Protocol/ tree. Privacy checks and protocol tests must pass before manual merge.",
     )
     return result.stdout.strip()
+
+
+def sync_protocol_draft(
+    vault: Path,
+    paths: RuntimePaths,
+    repository: str,
+    store: StateStore,
+    *,
+    if_changed: bool,
+) -> dict[str, str]:
+    fingerprint = sanitized_protocol_fingerprint(vault, paths)
+    if if_changed and store.get_meta(PUBLIC_PROTOCOL_FINGERPRINT_KEY) == fingerprint:
+        return {"status": "unchanged"}
+    _run_protocol_tests(vault)
+    draft_pr = publish_protocol_draft(vault, paths, repository)
+    store.set_meta(PUBLIC_PROTOCOL_FINGERPRINT_KEY, fingerprint)
+    return {"status": "published", "draft_pr": draft_pr}

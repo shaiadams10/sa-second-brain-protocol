@@ -27,7 +27,9 @@ dev = ["pytest==8.4.1", "pytest-cov==6.2.1"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/second_brain_protocol"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"assets/dashboard/index.html" = "second_brain_protocol/assets/dashboard/index.html"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-

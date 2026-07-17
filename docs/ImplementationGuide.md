@@ -109,7 +109,21 @@ The Windows task runs once each day at the configured local time:
 
 Daily output focuses on activity, implementations, decisions, blockers, candidate skills, and sanitized voice samples. Weekly output connects trajectories, wins, lessons, repeated work patterns, stale claims, contradictions, and next-focus suggestions.
 
-## 8. Configure Git safely
+## 8. Use the natural-language interface and local dashboard
+
+Users do not need to remember the commands in this guide. When an agent is opened in the vault workspace, a plain request such as “create a resume for this job,” “what changed this week,” or “open my dashboard” routes to the matching internal operation. Commands remain available for maintainers, tests, automation, and recovery.
+
+The local dashboard has two modes. Its generated HTML file is a read-only fallback. Normal use starts a loopback-only server bound to `127.0.0.1`, which rebuilds the same private view on request and enables only three allowlisted Knowledge Deck actions: confirm, retract, and undo. Its populated output lives under the machine-local runtime and is never committed. The dashboard contains canonical knowledge, safe counts, and aggregate run metadata only.
+
+The Knowledge Deck shows promoted canonical observations, never pending claim text. No action or Skip leaves knowledge unchanged. Confirm records explicit owner approval. Retract removes only matching lines inside valid `sb:generated` sections and tombstones the observation while preserving evidence, provenance, and all manual prose. Undo restores the most recent retraction and its previous confirmation state. Publication failures roll the action back; semantic-search refresh is derived work queued durably after the decision, performed in the background for changed notes only, and retried without reversing the owner's choice.
+
+The deck opens on **About the person**, not on a mixed chronological feed. Layer tabs separate personal identity, professional evidence, operating preferences, and project knowledge. Kind-based deterministic classification reorganizes existing observations immediately; daily and weekly prompts maintain the same boundary for future observations. Narrow technical instructions remain useful operating or project context without being presented as personality.
+
+Install the optional Windows launcher once through the dashboard install action. It deterministically generates a local `.ico`, creates Desktop and current-user Start-menu shortcuts, and points both at the root BAT. The Start-menu entry can then be right-clicked and pinned normally. The BAT uses ASCII-only source so Windows command-shell code pages cannot reinterpret decorative characters as commands. A vault may copy `templates/entrypoints/start-dashboard.bat` to its root and personalize the banner. Normal daily use is then a shortcut or BAT file, not a remembered terminal command.
+
+The launcher is deliberately on-demand; this protocol does not add a Windows-logon startup task. It first checks the loopback health endpoint. If the server is already running, it opens the browser immediately and exits. Otherwise the dashboard command reuses the existing hardened runtime and avoids repeating isolated-account configuration and Windows ACL setup before serving.
+
+## 9. Configure Git safely
 
 Use a repo-local identity for generated commits. Prefer a repo-scoped SSH deploy key for private unattended pushes so normal GitHub CLI account switching cannot redirect automation.
 
@@ -126,11 +140,16 @@ Public publication must:
 - export only the allowlisted protocol tree;
 - genericize private configuration;
 - scan personal names, paths, secrets, and private project identifiers;
+- fingerprint the sanitized export and skip all GitHub access when it is unchanged;
+- run the protocol test suite before publishing a changed tree;
 - push an automation branch;
 - open or update a draft pull request;
+- retain the previous fingerprint and retry after test, privacy, authentication, network, or push failures;
 - require a human to merge it.
 
-## 9. Verify the installation
+The Windows scheduled pipeline performs this change-detected public sync after its normal second-brain processing and dashboard refresh. This keeps the example repository current without exposing private vault content or publishing directly to `main`.
+
+## 10. Verify the installation
 
 ```powershell
 uv run --locked pytest
@@ -149,7 +168,7 @@ Also verify:
 - scheduled task is enabled, interactive, single-instance, and start-when-available;
 - private pushes use the intended repository-specific SSH identity.
 
-## 10. Operate the brain
+## 11. Operate the brain
 
 Useful recurring commands:
 
