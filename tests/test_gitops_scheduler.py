@@ -89,6 +89,14 @@ def test_scheduler_is_interactive_missed_run_safe_and_single_instance() -> None:
     assert "22:30:00" in xml
 
 
+def test_scheduled_script_refreshes_dashboard_and_syncs_changed_public_protocol() -> None:
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "scheduled-run.ps1").read_text(encoding="utf-8")
+    assert "sb dashboard build" in script
+    assert "sb protocol publish --if-changed" in script
+    assert "will retry on the next scheduled run" in script
+    assert "exit $finalExit" in script
+
+
 def test_automatic_private_commit_excludes_obsidian_ui_state(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     (tmp_path / "Journal").mkdir()

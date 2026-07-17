@@ -91,6 +91,32 @@ CREATE TABLE IF NOT EXISTS observations (
 
 CREATE INDEX IF NOT EXISTS observations_status_idx ON observations(status);
 
+CREATE TABLE IF NOT EXISTS knowledge_feedback (
+  observation_id TEXT PRIMARY KEY REFERENCES observations(id) ON DELETE CASCADE,
+  decision TEXT NOT NULL CHECK(decision IN ('liked','disliked')),
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_feedback_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  observation_id TEXT NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK(action IN ('like','dislike','undo')),
+  previous_decision TEXT,
+  occurrences_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  undone_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_feedback_events_action_idx
+ON knowledge_feedback_events(action,undone_at,created_at);
+
+CREATE TABLE IF NOT EXISTS search_refresh_queue (
+  path TEXT PRIMARY KEY,
+  queued_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT
+);
+
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   logical_name TEXT NOT NULL,
@@ -293,6 +319,92 @@ class StateStore:
         with self.connect() as connection:
             row = connection.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return row["value"] if row else None
+
+    @staticmethod
+    def enqueue_search_refresh(
+        connection: sqlite3.Connection, relative_paths: list[str] | set[str]
+    ) -> None:
+        now = utc_now()
+        for relative_path in sorted(set(relative_paths)):
+            normalized = Path(relative_path).as_posix().lstrip("/")
+            if not normalized or normalized.startswith("../") or not normalized.endswith(".md"):
+                raise ValueError("Search refresh paths must be relative Markdown files")
+            connection.execute(
+                """INSERT INTO search_refresh_queue(path,queued_at,attempts,last_error)
+                VALUES(?,?,0,NULL) ON CONFLICT(path) DO UPDATE SET
+                queued_at=excluded.queued_at,attempts=0,last_error=NULL""",
+                (normalized, now),
+            )
+        connection.execute(
+            """INSERT INTO meta(key,value) VALUES('search_refresh_state',?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+            (json.dumps({"state": "pending", "updated_at": now}),),
+        )
+
+    def search_refresh_batch(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT path,queued_at,attempts,last_error FROM search_refresh_queue ORDER BY queued_at,path"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_search_refresh_state(self, state: str, *, error: str | None = None) -> None:
+        if state not in {"ready", "pending", "indexing", "failed"}:
+            raise ValueError("Invalid search refresh state")
+        self.set_meta(
+            "search_refresh_state",
+            json.dumps({"state": state, "error": error, "updated_at": utc_now()}),
+        )
+
+    def complete_search_refresh(self, batch: list[dict[str, Any]]) -> None:
+        with self.transaction() as connection:
+            for item in batch:
+                connection.execute(
+                    "DELETE FROM search_refresh_queue WHERE path=? AND queued_at=?",
+                    (item["path"], item["queued_at"]),
+                )
+            pending = connection.execute("SELECT COUNT(*) FROM search_refresh_queue").fetchone()[0]
+            state = "pending" if pending else "ready"
+            connection.execute(
+                """INSERT INTO meta(key,value) VALUES('search_refresh_state',?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                (json.dumps({"state": state, "updated_at": utc_now()}),),
+            )
+
+    def fail_search_refresh(self, batch: list[dict[str, Any]], error: str) -> None:
+        safe_error = str(error)[:1000]
+        with self.transaction() as connection:
+            for item in batch:
+                connection.execute(
+                    """UPDATE search_refresh_queue SET attempts=attempts+1,last_error=?
+                    WHERE path=? AND queued_at=?""",
+                    (safe_error, item["path"], item["queued_at"]),
+                )
+            connection.execute(
+                """INSERT INTO meta(key,value) VALUES('search_refresh_state',?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                (
+                    json.dumps(
+                        {"state": "failed", "error": safe_error, "updated_at": utc_now()}
+                    ),
+                ),
+            )
+
+    def search_refresh_status(self) -> dict[str, Any]:
+        with self.connect() as connection:
+            pending = int(connection.execute("SELECT COUNT(*) FROM search_refresh_queue").fetchone()[0])
+            row = connection.execute(
+                "SELECT value FROM meta WHERE key='search_refresh_state'"
+            ).fetchone()
+        if row:
+            try:
+                payload = dict(json.loads(row["value"]))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                payload = {"state": "unknown"}
+        else:
+            payload = {"state": "ready" if pending == 0 else "pending"}
+        payload["pending"] = pending
+        return payload
 
     def add_evidence(
         self,
@@ -867,6 +979,28 @@ class StateStore:
             item["payload"] = json.loads(item.pop("payload_json"))
             result.append(item)
         return result
+
+    def knowledge_feedback(self) -> dict[str, dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT observation_id,decision,updated_at FROM knowledge_feedback
+                ORDER BY updated_at,observation_id"""
+            ).fetchall()
+        return {str(row["observation_id"]): dict(row) for row in rows}
+
+    def last_knowledge_dislike(self) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT id,observation_id,previous_decision,occurrences_json,created_at
+                FROM knowledge_feedback_events
+                WHERE action='dislike' AND undone_at IS NULL
+                ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["occurrences"] = json.loads(item.pop("occurrences_json"))
+        return item
 
     def decide_observation(self, observation_id: str, status: str, reason: str | None = None) -> None:
         if status not in {"approved", "rejected", "promoted", "resolved"}:

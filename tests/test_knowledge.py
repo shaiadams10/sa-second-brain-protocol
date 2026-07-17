@@ -1,0 +1,248 @@
+import json
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+from second_brain_protocol import dashboard_server
+from second_brain_protocol.config import RuntimePaths
+from second_brain_protocol.dashboard_server import create_dashboard_server
+from second_brain_protocol.knowledge import dislike_knowledge, like_knowledge, undo_last_dislike
+from second_brain_protocol.state import StateStore
+
+
+def _promoted_observation(store: StateStore, vault: Path) -> tuple[str, Path, dict]:
+    evidence_id, _ = store.add_evidence(
+        source_type="test",
+        source_ref="safe-source",
+        kind="explicit_profile_answer",
+        occurred_at="2026-07-16T12:00:00+00:00",
+        payload={"answer": "Prefers evidence-backed outcomes."},
+    )
+    record = {
+        "kind": "work_style",
+        "subject": "Outcome ownership",
+        "claim": "Prefers evidence-backed outcomes.",
+        "evidence_refs": [evidence_id],
+        "confidence": 0.95,
+        "source_count": 3,
+        "project_count": 2,
+        "sensitivity": "normal",
+        "promotion_tier": "automatic",
+        "status": "promoted",
+    }
+    observation_id = store.add_observation(record)
+    note = vault / "Identity" / "WorkStyle.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        "# Work style\n\n"
+        "<!-- sb:generated canonical:start -->\n"
+        f"- Prefers evidence-backed outcomes. ^{observation_id}\n"
+        "<!-- sb:generated canonical:end -->\n\n"
+        "## Manual notes\n\nManual prose is always preserved.\n",
+        encoding="utf-8",
+    )
+    return observation_id, note, record
+
+
+def test_knowledge_like_dislike_and_undo_are_durable_and_safe(tmp_path: Path) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    observation_id, note, record = _promoted_observation(store, vault)
+    assert like_knowledge(store, observation_id)["decision"] == "liked"
+    assert store.knowledge_feedback()[observation_id]["decision"] == "liked"
+
+    result = dislike_knowledge(paths, vault, store, observation_id)
+    text = note.read_text(encoding="utf-8")
+    assert result["removed_occurrences"] == 1
+    assert f"^{observation_id}" not in text
+    assert "Manual prose is always preserved." in text
+    assert store.observation(observation_id)["status"] == "rejected"
+    assert store.knowledge_feedback()[observation_id]["decision"] == "disliked"
+    assert result["search_refresh_queued"] == 1
+    assert [item["path"] for item in store.search_refresh_batch()] == ["Identity/WorkStyle.md"]
+
+    # Re-ingesting the exact same model output cannot reopen the tombstone.
+    assert store.add_observation(record) == observation_id
+    assert store.observation(observation_id)["status"] == "rejected"
+
+    restored = undo_last_dislike(paths, vault, store)
+    text = note.read_text(encoding="utf-8")
+    assert restored == {
+        "id": observation_id,
+        "decision": "liked",
+        "restored": True,
+        "search_refresh_queued": 1,
+    }
+    assert f"^{observation_id}" in text
+    assert "Manual prose is always preserved." in text
+    assert store.observation(observation_id)["status"] == "promoted"
+    assert store.knowledge_feedback()[observation_id]["decision"] == "liked"
+    assert store.search_refresh_status()["pending"] == 1
+
+
+def test_failed_background_search_refresh_keeps_authoritative_retraction(tmp_path: Path) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    observation_id, note, _record = _promoted_observation(store, vault)
+    dislike_knowledge(paths, vault, store, observation_id)
+    batch = store.search_refresh_batch()
+    store.fail_search_refresh(batch, "index unavailable")
+
+    assert f"^{observation_id}" not in note.read_text(encoding="utf-8")
+    assert store.observation(observation_id)["status"] == "rejected"
+    assert store.knowledge_feedback()[observation_id]["decision"] == "disliked"
+    assert store.search_refresh_status()["state"] == "failed"
+    assert store.search_refresh_status()["pending"] == 1
+
+
+def test_loopback_api_rejects_missing_token_and_accepts_same_origin_like(
+    tmp_path: Path,
+) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    observation_id, _note, _record = _promoted_observation(store, vault)
+    server = create_dashboard_server(paths, vault, port=0, reindexer=lambda _p, _v, _r: "ok")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    endpoint = f"http://127.0.0.1:{port}/api/knowledge/{observation_id}/like"
+    try:
+        unauthorized = urllib.request.Request(
+            endpoint,
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as denied:
+            urllib.request.urlopen(unauthorized, timeout=3)
+        assert denied.value.code == 403
+
+        authorized = urllib.request.Request(
+            endpoint,
+            data=b"{}",
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Origin": f"http://127.0.0.1:{port}",
+                "X-SB-Token": server.csrf_token,
+            },
+        )
+        with urllib.request.urlopen(authorized, timeout=3) as response:
+            payload = json.loads(response.read())
+        assert payload == {"ok": True, "id": observation_id, "decision": "liked"}
+        assert StateStore(paths.state).knowledge_feedback()[observation_id]["decision"] == "liked"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_background_worker_batches_durable_refresh_paths(tmp_path: Path) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    calls: list[list[str]] = []
+    with store.transaction() as connection:
+        store.enqueue_search_refresh(
+            connection, {"Identity/WorkStyle.md", "Memory/Lessons.md"}
+        )
+
+    server = create_dashboard_server(
+        paths,
+        vault,
+        port=0,
+        reindexer=lambda _paths, _vault, relative: calls.append(relative) or "ok",
+    )
+    try:
+        deadline = time.monotonic() + 4
+        while store.search_refresh_status()["pending"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert calls == [["Identity/WorkStyle.md", "Memory/Lessons.md"]]
+        assert store.search_refresh_status()["pending"] == 0
+        assert store.search_refresh_status()["state"] == "ready"
+    finally:
+        server.server_close()
+
+
+def test_background_worker_retries_failed_refresh(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    attempts = []
+    with store.transaction() as connection:
+        store.enqueue_search_refresh(connection, ["Memory/Lessons.md"])
+
+    def flaky_refresh(_paths, _vault, relative):
+        attempts.append(relative)
+        if len(attempts) == 1:
+            raise RuntimeError("temporary failure")
+        return "ok"
+
+    monkeypatch.setattr(dashboard_server, "SEARCH_REFRESH_RETRY_SECONDS", 0.05)
+    server = create_dashboard_server(paths, vault, port=0, reindexer=flaky_refresh)
+    try:
+        deadline = time.monotonic() + 4
+        while store.search_refresh_status()["pending"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert attempts == [["Memory/Lessons.md"], ["Memory/Lessons.md"]]
+        assert store.search_refresh_status()["pending"] == 0
+        assert store.search_refresh_status()["state"] == "ready"
+    finally:
+        server.server_close()
+
+
+def test_remove_api_returns_before_slow_background_refresh(tmp_path: Path) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "vault"
+    observation_id, note, _record = _promoted_observation(store, vault)
+    refresh_started = threading.Event()
+
+    def slow_refresh(_paths, _vault, _relative):
+        refresh_started.set()
+        time.sleep(0.5)
+        return "ok"
+
+    server = create_dashboard_server(paths, vault, port=0, reindexer=slow_refresh)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    endpoint = f"http://127.0.0.1:{port}/api/knowledge/{observation_id}/dislike"
+    request = urllib.request.Request(
+        endpoint,
+        data=b"{}",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": f"http://127.0.0.1:{port}",
+            "X-SB-Token": server.csrf_token,
+        },
+    )
+    try:
+        started = time.monotonic()
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read())
+        elapsed = time.monotonic() - started
+
+        assert payload["ok"] is True
+        assert elapsed < 0.5
+        assert f"^{observation_id}" not in note.read_text(encoding="utf-8")
+        assert store.search_refresh_status()["pending"] == 1
+        assert refresh_started.wait(timeout=3)
+        deadline = time.monotonic() + 3
+        while store.search_refresh_status()["pending"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert store.search_refresh_status()["pending"] == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)

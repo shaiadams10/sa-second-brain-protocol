@@ -37,6 +37,8 @@ It is deliberately **not** a monorepo, project controller, or exporter installed
 | 🗓️ Weekly synthesis | Connect wins, trajectories, repeated preferences, lessons, skills, and unresolved questions across projects. |
 | 🧾 Evidence-backed knowledge | Every generated claim keeps stable provenance, confidence, dates, and promotion status. |
 | 👀 Human review | Ambiguous, sensitive, contradictory, and public-facing claims remain reviewable instead of silently becoming truth. |
+| 🖥️ Local daily dashboard | Open a private paper-and-pixel briefing with project momentum, learning, review, runs, health, and a swipeable Knowledge Deck. |
+| 🃏 Knowledge Deck | Confirm promoted knowledge, skip it without changing anything, or safely retract generated claims with tombstones and undo. |
 | ✍️ Useful personal context | Search the vault, build bounded context, draft in your voice, and create career material from verified facts. |
 | 🔒 Strong privacy boundaries | Raw chats, credentials, local paths, runtime state, and private evidence never enter the public protocol repository. |
 | 🔌 Future-ready service layer | A disabled read-only MCP boundary is reserved for opt-in project queries later. |
@@ -68,7 +70,7 @@ The model never writes the vault directly. It receives only a sanitized evidence
 | Machine-local runtime | Operational state outside Git | Credentials, SQLite checkpoints, raw evidence, staging, logs, indexes, code graphs |
 | Public protocol | Reusable implementation | Generic code, schemas, prompts, templates, tests, docs, and runbooks |
 
-See [Architecture](docs/Architecture.md) for the trust boundaries and [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior.
+See [Architecture](docs/Architecture.md) for the trust boundaries, [Natural-language interface](docs/NaturalLanguageInterface.md) for agent routing, [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior, and the [Roadmap](docs/Roadmap.md) for the dashboard and read-only MCP phases.
 
 ## 🔁 How it stays current
 
@@ -172,7 +174,12 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb career <request>` | Draft review-required career material |
 | `sb reindex` | Rebuild local search from canonical Markdown |
 | `sb health` | Check dependencies, state, Git, and scheduling |
-| `sb protocol publish` | Update the sanitized public draft PR |
+| `sb dashboard` | Start or reuse the loopback-only dashboard and open it |
+| `sb dashboard serve` | Keep the private interactive dashboard server in the foreground |
+| `sb dashboard install` | Generate the local icon and install Desktop plus Start-menu shortcuts |
+| `sb protocol publish` | Test, sanitize, and update the public draft PR |
+
+The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers.
 
 ## 🛡️ Safety by design
 
@@ -183,6 +190,7 @@ Public-facing career claims always require review. Stable personality or work-st
 - Generated content is confined to `sb:generated` markers; manual prose is preserved.
 - Model, graph, privacy, Git, or notification failure stops the run and preserves unprocessed evidence.
 - Public export uses a strict allowlist, deterministic redaction, secret scanning, and a draft PR that requires manual review.
+- Scheduled runs fingerprint the sanitized export locally. A changed tree must pass the protocol tests and privacy policy before the automation branch and draft PR are updated; an unchanged tree makes no GitHub call.
 - Completed bootstrap cannot be casually rerun; incremental commands take over afterward.
 
 Read the binding [Operating Contract](OperatingContract.md), [Privacy runbook](runbooks/Privacy.md), and [Recovery runbook](runbooks/Recovery.md).
@@ -194,7 +202,7 @@ The reusable templates provide thin entrypoints for:
 - **Codex** — `AGENTS.md` plus task-specific skills.
 - **Antigravity** — shared rules, skills, and workflows.
 
-All real behavior remains in the common `sb` package so wrappers cannot drift into separate protocols. This repository intentionally contains no Claude-native files, hooks, commands, SDKs, or workflows.
+All real behavior remains in the common `sb` package so wrappers cannot drift into separate protocols. Natural language is the normal human interface; agents choose these internal operations without requiring users to remember commands or skill names. This repository intentionally contains no Claude-native files, hooks, commands, SDKs, or workflows.
 
 ## 🔌 Read-only MCP future
 
@@ -208,7 +216,7 @@ The transport is disabled in v1, but the service boundary reserves these safe op
 - `get_project_neighbors`
 - `trace_project_path`
 
-Future consumers may receive canonical notes and sanitized graph results only—never raw evidence, local paths, ingestion state, or write/delete access.
+Future consumers may receive canonical notes and sanitized graph results only—never raw evidence, local paths, ingestion state, or write/delete access. The implementation and security gates are tracked in the [Roadmap](docs/Roadmap.md).
 
 ## ✅ Production-readiness checklist
 

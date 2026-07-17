@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Second Brain Dashboard</title>
+  <style>
+    :root {
+      --paper: #f3f0ed;
+      --paper-bright: #fffdf7;
+      --paper-muted: #e7e1e5;
+      --ink: #17151d;
+      --muted: #69626f;
+      --purple: #7465b6;
+      --purple-soft: #d8d0f2;
+      --purple-deep: #322b5b;
+      --pink: #ed3f91;
+      --pink-soft: #f8c6dc;
+      --yellow: #f0c75e;
+      --green: #2c866c;
+      --red: #ba3159;
+      --border: 2px solid var(--ink);
+      --shadow: 8px 8px 0 var(--ink);
+      --shadow-small: 4px 4px 0 var(--ink);
+      --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      background-color: var(--paper);
+      background-image:
+        radial-gradient(rgba(23, 21, 29, 0.07) 0.65px, transparent 0.65px),
+        linear-gradient(115deg, rgba(116, 101, 182, 0.045), transparent 44%, rgba(237, 63, 145, 0.035));
+      background-size: 5px 5px, 100% 100%;
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; }
+    button:focus-visible, a:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
+    .skip-link { position: fixed; left: 16px; top: -70px; z-index: 100; padding: 10px 14px; background: var(--ink); color: white; }
+    .skip-link:focus { top: 16px; }
+
+    .page-frame {
+      width: min(1520px, calc(100% - 40px));
+      margin: 28px auto 44px;
+      border: 3px solid var(--ink);
+      background: rgba(255, 253, 247, 0.72);
+      box-shadow: 13px 13px 0 var(--ink);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+      min-height: 300px;
+      border-bottom: 2px dashed var(--muted);
+    }
+    .hero-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(30px, 4.8vw, 72px); border-right: 2px dashed var(--muted); }
+    .protocol-label, .eyebrow, .panel-label, .mini-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+    .protocol-label { color: var(--purple-deep); }
+    .hero-title {
+      max-width: 760px;
+      margin: 13px 0 18px;
+      font-family: var(--mono);
+      font-size: clamp(38px, 5.2vw, 72px);
+      font-weight: 900;
+      letter-spacing: -0.075em;
+      line-height: 0.96;
+      text-transform: uppercase;
+    }
+    .hero-title span { display: block; }
+    .privacy-badge {
+      align-self: flex-start;
+      padding: 9px 14px 8px;
+      border: var(--border);
+      background: var(--pink);
+      color: white;
+      box-shadow: var(--shadow-small);
+      font-family: var(--mono);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .signal-code { margin-top: 24px; color: var(--purple); font-family: var(--mono); font-size: 18px; letter-spacing: 0.35em; }
+
+    .hero-system { position: relative; display: grid; place-items: center; overflow: hidden; padding: 36px; }
+    .hero-system::before, .hero-system::after {
+      content: "";
+      position: absolute;
+      border: 2px dashed var(--purple);
+      opacity: 0.55;
+    }
+    .hero-system::before { width: 64%; height: 1px; left: 9%; top: 35%; }
+    .hero-system::after { width: 1px; height: 45%; right: 21%; bottom: 12%; }
+    .brain-console {
+      position: relative;
+      z-index: 1;
+      width: min(620px, 100%);
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      gap: 20px;
+      align-items: center;
+      padding: 24px;
+      border: var(--border);
+      background: var(--paper-bright);
+      box-shadow: var(--shadow);
+    }
+    .brain-icon {
+      display: grid;
+      place-items: center;
+      width: 118px;
+      height: 118px;
+      border: var(--border);
+      background: var(--purple-soft);
+      box-shadow: 5px 5px 0 var(--purple-deep);
+      font-size: 64px;
+      filter: saturate(0.8);
+    }
+    .system-title { margin: 3px 0 8px; font-family: var(--mono); font-size: clamp(20px, 2.3vw, 31px); line-height: 1.1; }
+    .system-copy { margin: 0; color: var(--muted); }
+    .system-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+    .chip { padding: 5px 8px; border: 1.5px solid var(--ink); background: white; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+    .chip.good { background: #cceadc; }
+    .chip.attention { background: #f6dfae; }
+    .chip.danger { background: var(--pink-soft); }
+
+    .nav-strip {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      padding: 8px 18px;
+      border-bottom: var(--border);
+      background: rgba(243, 240, 237, 0.95);
+      backdrop-filter: blur(12px);
+    }
+    .nav-stamp { margin-right: 9px; padding: 5px 8px; background: var(--ink); color: white; font-family: var(--mono); font-weight: 900; }
+    .nav-strip a { padding: 7px 10px; border: 1.5px solid transparent; font-family: var(--mono); font-size: 12px; font-weight: 750; text-transform: uppercase; }
+    .nav-strip a:hover { border-color: var(--ink); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .nav-spacer { flex: 1; }
+    .updated { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+    .dashboard { padding: clamp(20px, 3.2vw, 48px); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 28px; border: var(--border); box-shadow: var(--shadow-small); }
+    .metric { min-width: 0; padding: 18px 20px; background: var(--paper-bright); }
+    .metric + .metric { border-left: 1.5px dashed var(--muted); }
+    .metric-value { font-family: var(--mono); font-size: clamp(25px, 3vw, 40px); font-weight: 900; line-height: 1; }
+    .metric-label { margin-top: 5px; font-family: var(--mono); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .metric-detail { color: var(--muted); font-size: 12px; }
+
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
+    .panel { position: relative; min-width: 0; padding: 24px; border: var(--border); background: rgba(255, 253, 247, 0.92); box-shadow: var(--shadow-small); }
+    .panel::before { content: attr(data-index); position: absolute; top: -13px; left: 18px; padding: 3px 8px; border: 1.5px solid var(--ink); background: var(--purple-soft); font-family: var(--mono); font-size: 10px; font-weight: 900; }
+    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+    .panel-title { margin: 4px 0 0; font-family: var(--mono); font-size: clamp(20px, 2.1vw, 28px); line-height: 1.08; letter-spacing: -0.045em; }
+    .panel-link { flex: 0 0 auto; padding: 5px 7px; border-bottom: 2px solid var(--pink); color: var(--purple-deep); font-family: var(--mono); font-size: 11px; font-weight: 800; }
+    .panel-link:hover { background: var(--pink-soft); }
+    .empty { padding: 26px 18px; border: 1.5px dashed var(--muted); color: var(--muted); text-align: center; }
+
+    .knowledge-panel { grid-column: span 8; min-height: 620px; padding: 28px; background: linear-gradient(145deg, rgba(216, 208, 242, 0.5), rgba(255, 253, 247, 0.96) 46%); }
+    .deck-layers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .deck-layer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 2px 8px;
+      min-width: 0;
+      padding: 10px;
+      border: 1.5px solid var(--ink);
+      background: var(--paper-bright);
+      cursor: pointer;
+      text-align: left;
+    }
+    .deck-layer:hover { background: var(--pink-soft); }
+    .deck-layer.active { transform: translate(-2px, -2px); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .layer-seq { grid-column: 1 / -1; color: var(--purple); font-family: var(--mono); font-size: 9px; font-weight: 900; }
+    .layer-name { min-width: 0; overflow: hidden; font-family: var(--mono); font-size: 10px; font-weight: 900; line-height: 1.15; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+    .layer-count { display: grid; place-items: center; min-width: 22px; height: 22px; padding-inline: 4px; border: 1.5px solid var(--ink); background: white; font-family: var(--mono); font-size: 9px; font-weight: 900; }
+    .layer-description { min-height: 38px; margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+    .deck-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
+    .deck-tab, .undo-button {
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1.5px solid var(--ink);
+      background: var(--paper-bright);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .deck-tab.active { transform: translate(-2px, -2px); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .undo-button { margin-left: auto; color: var(--red); }
+    .undo-button:disabled { cursor: not-allowed; color: var(--muted); opacity: 0.45; }
+    .deck-stage { position: relative; display: grid; place-items: center; min-height: 400px; padding: 14px 14px 20px; }
+    .deck-stage::before, .deck-stage::after { content: ""; position: absolute; width: min(590px, calc(100% - 60px)); height: 330px; border: var(--border); background: var(--paper-muted); }
+    .deck-stage::before { transform: translate(15px, 15px) rotate(1.5deg); background: var(--pink-soft); }
+    .deck-stage::after { transform: translate(8px, 8px) rotate(-1deg); background: var(--purple-soft); }
+    .knowledge-card {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      width: min(620px, 100%);
+      min-height: 350px;
+      padding: clamp(22px, 3vw, 34px);
+      border: 3px solid var(--ink);
+      background: var(--paper-bright);
+      box-shadow: 7px 7px 0 var(--purple-deep);
+      touch-action: pan-y;
+      transition: transform 180ms ease, opacity 180ms ease;
+      user-select: none;
+    }
+    .knowledge-card.swipe-left { transform: translateX(-125%) rotate(-10deg); opacity: 0; }
+    .knowledge-card.swipe-right { transform: translateX(125%) rotate(10deg); opacity: 0; }
+    .knowledge-card[data-layer="professional_profile"] { box-shadow: 7px 7px 0 #9b7a25; }
+    .knowledge-card[data-layer="operating_preferences"] { box-shadow: 7px 7px 0 var(--pink); }
+    .knowledge-card[data-layer="project_knowledge"] { box-shadow: 7px 7px 0 var(--green); }
+    .card-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .knowledge-kind { padding: 5px 8px; border: 1.5px solid var(--ink); background: var(--pink); color: white; font-family: var(--mono); font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+    .knowledge-position { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .knowledge-subject { margin: 25px 0 8px; color: var(--purple-deep); font-family: var(--mono); font-size: 13px; font-weight: 900; text-transform: uppercase; }
+    .knowledge-claim { margin: 0; font-family: var(--mono); font-size: clamp(19px, 2.2vw, 27px); font-weight: 760; line-height: 1.28; letter-spacing: -0.035em; }
+    .knowledge-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: auto; padding-top: 24px; border-top: 1.5px dashed var(--muted); color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .knowledge-source { margin-left: auto; color: var(--purple-deep); font-weight: 850; }
+    .knowledge-source:hover { color: var(--pink); }
+    .deck-actions { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; width: min(620px, 100%); margin: 0 auto; }
+    .deck-action { min-height: 50px; border: 2px solid var(--ink); background: var(--paper-bright); cursor: pointer; font-family: var(--mono); font-size: 12px; font-weight: 900; text-transform: uppercase; transition: transform 120ms ease, box-shadow 120ms ease; }
+    .deck-action:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+    .deck-action:disabled { cursor: not-allowed; opacity: 0.48; }
+    .deck-action.dislike { color: var(--red); }
+    .deck-action.skip { padding-inline: 18px; color: var(--muted); }
+    .deck-action.like { background: var(--purple-deep); color: white; }
+    .deck-caption { margin: 14px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
+    .deck-caption strong { color: var(--ink); }
+
+    .briefing-panel { grid-column: span 4; display: flex; flex-direction: column; min-height: 620px; background: var(--ink); color: var(--paper-bright); }
+    .briefing-panel::before { background: var(--pink); color: white; }
+    .briefing-panel .panel-label { color: var(--pink-soft); }
+    .briefing-title { margin: 8px 0 18px; font-family: var(--mono); font-size: clamp(29px, 3.3vw, 47px); line-height: 1.02; letter-spacing: -0.065em; }
+    .briefing-summary { color: #d5ced9; font-size: 16px; }
+    .briefing-list { display: grid; gap: 11px; margin: 20px 0 0; padding: 0; list-style: none; }
+    .briefing-list li { padding: 10px 0 10px 22px; border-top: 1px dashed #77707d; position: relative; }
+    .briefing-list li::before { content: "■"; position: absolute; left: 0; color: var(--pink); }
+    .briefing-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; font-family: var(--mono); font-size: 11px; }
+    .briefing-foot a { color: var(--pink-soft); border-bottom: 1px solid currentColor; }
+
+    .projects-panel { grid-column: span 7; }
+    .pulse-panel { grid-column: span 5; }
+    .project-list, .pattern-list, .run-list, .check-list { display: grid; gap: 10px; }
+    .project-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1.5px dashed #a49da7; }
+    .project-row:hover .project-name { color: var(--pink); }
+    .project-name { font-weight: 800; }
+    .project-meta, .project-count { color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
+    .project-track, .pattern-track { height: 10px; border: 1.5px solid var(--ink); background: var(--paper-muted); }
+    .project-fill, .pattern-fill { height: 100%; background: var(--purple); }
+
+    .next-run { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: end; padding: 16px; border: 1.5px solid var(--ink); background: var(--purple-soft); }
+    .next-run-time { margin-top: 4px; font-family: var(--mono); font-size: 30px; font-weight: 900; }
+    .next-run-detail { color: var(--muted); font-size: 12px; }
+    .weekly-badge { padding: 5px 7px; border: 1.5px solid var(--ink); background: white; font-family: var(--mono); font-size: 10px; font-weight: 800; }
+    .trend { display: grid; grid-template-columns: repeat(7, 1fr); align-items: end; gap: 7px; min-height: 155px; margin-top: 18px; padding-top: 12px; border-top: 1.5px dashed #a49da7; }
+    .trend-day { display: grid; justify-items: center; gap: 5px; }
+    .trend-value, .trend-label { font-family: var(--mono); font-size: 10px; }
+    .trend-bar { width: 100%; max-width: 30px; min-height: 5px; border: 1.5px solid var(--ink); background: var(--pink); box-shadow: 2px 2px 0 var(--ink); }
+
+    .patterns-panel, .review-panel, .health-panel { grid-column: span 4; }
+    .pattern { display: block; padding: 12px 0; border-top: 1.5px dashed #a49da7; }
+    .pattern-top { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .pattern-name { font-weight: 800; }
+    .pattern-score { font-family: var(--mono); font-size: 11px; font-weight: 900; }
+    .pattern-meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 7px; color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+
+    .review-number { font-family: var(--mono); font-size: clamp(54px, 6vw, 86px); font-weight: 900; line-height: 0.9; }
+    .review-copy { margin: 8px 0 18px; color: var(--muted); }
+    .review-legend { display: grid; gap: 8px; }
+    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding-top: 8px; border-top: 1px dashed #a49da7; }
+    .legend-dot { width: 10px; height: 10px; border: 1.5px solid var(--ink); background: var(--purple); }
+    .legend-row:nth-child(2) .legend-dot { background: var(--pink); }
+    .legend-row:nth-child(3) .legend-dot { background: var(--yellow); }
+    .legend-value { font-family: var(--mono); font-weight: 900; }
+
+    .check { display: grid; grid-template-columns: 12px 1fr; gap: 10px; padding: 10px 0; border-top: 1px dashed #a49da7; }
+    .check-dot { width: 11px; height: 11px; margin-top: 5px; border: 1.5px solid var(--ink); background: var(--green); }
+    .check.attention .check-dot { background: var(--yellow); }
+    .check.danger .check-dot { background: var(--pink); }
+    .check-name { font-weight: 800; }
+    .check-detail { color: var(--muted); font-size: 11px; }
+
+    .runs-panel { grid-column: span 6; }
+    .focus-panel { grid-column: span 6; background: var(--purple-deep); color: white; }
+    .focus-panel::before { background: var(--pink); }
+    .run { display: grid; grid-template-columns: minmax(130px, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px dashed #a49da7; }
+    .run-kind { font-weight: 800; }
+    .run-meta, .run-status { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+    .run-status.completed { color: var(--green); font-weight: 900; }
+    .run-status.failed { color: var(--red); font-weight: 900; }
+    .focus-title { margin: 7px 0 12px; font-family: var(--mono); font-size: clamp(27px, 3vw, 42px); line-height: 1.05; }
+    .focus-copy { color: #d9d1e6; }
+    .focus-links { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+    .focus-links a { padding: 8px 10px; border: 1.5px solid white; background: transparent; font-family: var(--mono); font-size: 11px; font-weight: 800; }
+    .focus-links a:hover { background: var(--pink); color: white; }
+
+    .footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px clamp(20px, 3.2vw, 48px); border-top: var(--border); color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
+    .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: 390px; padding: 13px 16px; border: var(--border); background: var(--ink); color: white; box-shadow: 5px 5px 0 var(--pink); font-family: var(--mono); font-size: 12px; transform: translateY(140%); opacity: 0; transition: 180ms ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    @media (max-width: 1100px) {
+      .hero { grid-template-columns: 1fr; }
+      .hero-copy { border-right: 0; border-bottom: 2px dashed var(--muted); }
+      .knowledge-panel, .briefing-panel, .projects-panel, .pulse-panel { grid-column: span 12; }
+      .patterns-panel, .review-panel, .health-panel { grid-column: span 6; }
+      .health-panel { grid-column: span 12; }
+    }
+    @media (max-width: 760px) {
+      .page-frame { width: calc(100% - 20px); margin: 10px auto 26px; box-shadow: 7px 7px 0 var(--ink); }
+      .hero-copy, .hero-system { padding: 28px 22px; }
+      .brain-console { grid-template-columns: 82px minmax(0, 1fr); padding: 16px; }
+      .brain-icon { width: 72px; height: 72px; font-size: 40px; }
+      .nav-strip { overflow-x: auto; }
+      .nav-strip a { white-space: nowrap; }
+      .updated, .nav-spacer { display: none; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric + .metric { border-left: 0; }
+      .metric:nth-child(even) { border-left: 1.5px dashed var(--muted); }
+      .metric:nth-child(n+3) { border-top: 1.5px dashed var(--muted); }
+      .knowledge-panel, .briefing-panel, .patterns-panel, .review-panel, .health-panel, .runs-panel, .focus-panel { grid-column: span 12; }
+      .knowledge-panel, .panel { padding: 20px; }
+      .knowledge-panel, .briefing-panel { min-height: auto; }
+      .deck-stage { min-height: 430px; padding-inline: 0; }
+      .deck-stage::before, .deck-stage::after { width: calc(100% - 24px); height: 360px; }
+      .knowledge-card { min-height: 380px; }
+      .deck-layers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .deck-actions { grid-template-columns: 1fr 0.75fr 1fr; gap: 7px; }
+      .project-row { grid-template-columns: 1fr auto; }
+      .project-track { grid-column: 1 / -1; }
+      .footer { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to dashboard</a>
+  <script id="dashboard-data" type="application/json">__DASHBOARD_DATA__</script>
+
+  <div class="page-frame">
+    <header class="hero" id="top">
+      <div class="hero-copy">
+        <div class="protocol-label">SA // Personal Intelligence System</div>
+        <h1 class="hero-title"><span id="hero-owner">Second Brain</span><span>Second Brain</span><span>Dashboard</span></h1>
+        <div class="privacy-badge">Privacy-first knowledge system</div>
+        <div class="signal-code" aria-hidden="true">▪ □ ■ ·· □ ▪ · ■ □ ··</div>
+      </div>
+      <div class="hero-system">
+        <div class="brain-console">
+          <div class="brain-icon" aria-hidden="true">🧠</div>
+          <div>
+            <div class="mini-label">System signal</div>
+            <h2 class="system-title" id="status-label">Checking your brain</h2>
+            <p class="system-copy" id="status-detail"></p>
+            <div class="system-meta">
+              <span class="chip" id="status-chip">Local</span>
+              <span class="chip" id="schedule-chip">Schedule</span>
+              <span class="chip">Obsidian linked</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="nav-strip" aria-label="Dashboard sections">
+      <span class="nav-stamp">SA:SB</span>
+      <a href="#today">Today</a>
+      <a href="#knowledge">Knowledge Deck</a>
+      <a href="#projects">Projects</a>
+      <a href="#review">Review</a>
+      <a href="#system">System</a>
+      <span class="nav-spacer"></span>
+      <span class="updated" id="updated-time"></span>
+      <a id="vault-link" href="#">Open Obsidian ↗</a>
+    </nav>
+
+    <main class="dashboard" id="main">
+      <section class="metrics" id="metrics" aria-label="Knowledge coverage"></section>
+
+      <div class="grid">
+        <section class="panel knowledge-panel" id="knowledge" data-index="01 // CURATE" aria-labelledby="knowledge-title">
+          <div class="panel-head">
+            <div>
+              <div class="panel-label">Knowledge Deck</div>
+              <h2 class="panel-title" id="knowledge-title">Know me, not just my projects.</h2>
+            </div>
+            <a class="panel-link" id="memory-link" href="#">Open layer note ↗</a>
+          </div>
+          <div class="deck-layers" role="tablist" aria-label="Knowledge layers">
+            <button class="deck-layer active" type="button" role="tab" aria-selected="true" data-layer="about_shai"><span class="layer-seq">01 // SELF</span><span class="layer-name">About me</span><span class="layer-count">0</span></button>
+            <button class="deck-layer" type="button" role="tab" aria-selected="false" data-layer="professional_profile"><span class="layer-seq">02 // WORK</span><span class="layer-name">Professional</span><span class="layer-count">0</span></button>
+            <button class="deck-layer" type="button" role="tab" aria-selected="false" data-layer="operating_preferences"><span class="layer-seq">03 // METHOD</span><span class="layer-name">How I work</span><span class="layer-count">0</span></button>
+            <button class="deck-layer" type="button" role="tab" aria-selected="false" data-layer="project_knowledge"><span class="layer-seq">04 // BUILD</span><span class="layer-name">Projects</span><span class="layer-count">0</span></button>
+          </div>
+          <p class="layer-description" id="layer-description">Identity, voice, work style, personality, values, and goals.</p>
+          <div class="deck-toolbar" role="tablist" aria-label="Knowledge filters">
+            <button class="deck-tab active" type="button" role="tab" data-filter="new">New <span id="new-count">0</span></button>
+            <button class="deck-tab" type="button" role="tab" data-filter="all">All <span id="all-count">0</span></button>
+            <button class="deck-tab" type="button" role="tab" data-filter="confirmed">Confirmed <span id="confirmed-count">0</span></button>
+            <button class="undo-button" id="undo-button" type="button">Undo last removal</button>
+          </div>
+          <div class="deck-stage" id="deck-stage">
+            <article class="knowledge-card" id="knowledge-card" tabindex="0" aria-live="polite">
+              <div class="card-topline">
+                <span class="knowledge-kind" id="knowledge-kind">Knowledge</span>
+                <span class="knowledge-position" id="knowledge-position">0 / 0</span>
+              </div>
+              <div class="knowledge-subject" id="knowledge-subject">Waiting for knowledge</div>
+              <p class="knowledge-claim" id="knowledge-claim">Promoted knowledge will appear here after a validated run.</p>
+              <div class="knowledge-meta">
+                <span id="knowledge-confidence"></span>
+                <span id="knowledge-evidence"></span>
+                <span id="knowledge-projects"></span>
+                <span id="knowledge-date"></span>
+                <a class="knowledge-source" id="knowledge-source" href="#">View in Obsidian ↗</a>
+              </div>
+            </article>
+          </div>
+          <div class="deck-actions">
+            <button class="deck-action dislike" id="dislike-button" type="button">← Remove</button>
+            <button class="deck-action skip" id="skip-button" type="button">Skip</button>
+            <button class="deck-action like" id="like-button" type="button">Confirm →</button>
+          </div>
+          <p class="deck-caption" id="deck-caption"><strong>No action means keep.</strong> Confirm records your approval; remove retracts generated knowledge and creates a tombstone.</p>
+        </section>
+
+        <section class="panel briefing-panel" id="today" data-index="02 // TODAY" aria-labelledby="briefing-title">
+          <div class="panel-label">Daily briefing</div>
+          <h2 class="briefing-title" id="briefing-title">Ready when you are.</h2>
+          <p class="briefing-summary" id="briefing-summary"></p>
+          <ul class="briefing-list" id="briefing-list"></ul>
+          <div class="briefing-foot">
+            <span id="briefing-source">Canonical activity</span>
+            <a id="daily-link" href="#">Open daily note ↗</a>
+          </div>
+        </section>
+
+        <section class="panel projects-panel" id="projects" data-index="03 // MOTION" aria-labelledby="projects-title">
+          <div class="panel-head">
+            <div><div class="panel-label">Momentum</div><h2 class="panel-title" id="projects-title">Projects in motion</h2></div>
+            <a class="panel-link" id="projects-link" href="#">All projects ↗</a>
+          </div>
+          <div class="project-list" id="project-list"></div>
+        </section>
+
+        <section class="panel pulse-panel" data-index="04 // RHYTHM" aria-labelledby="pulse-title">
+          <div class="panel-head">
+            <div><div class="panel-label">Seven-day pulse</div><h2 class="panel-title" id="pulse-title">Work rhythm</h2></div>
+            <a class="panel-link" id="weekly-link" href="#">Weekly note ↗</a>
+          </div>
+          <div class="next-run">
+            <div><div class="mini-label">Next automatic run</div><div class="next-run-time" id="next-run-time">10:30 PM</div><div class="next-run-detail" id="next-run-detail"></div></div>
+            <span class="weekly-badge" id="weekly-badge"></span>
+          </div>
+          <div class="trend" id="trend" aria-label="Agent sessions understood in the last seven days"></div>
+        </section>
+
+        <section class="panel patterns-panel" data-index="05 // PATTERNS" aria-labelledby="patterns-title">
+          <div class="panel-head"><div><div class="panel-label">Across your work</div><h2 class="panel-title" id="patterns-title">Patterns taking shape</h2></div><a class="panel-link" id="patterns-link" href="#">Open ↗</a></div>
+          <div class="pattern-list" id="pattern-list"></div>
+        </section>
+
+        <section class="panel review-panel" id="review" data-index="06 // JUDGMENT" aria-labelledby="review-title">
+          <div class="panel-head"><div><div class="panel-label">Human judgment</div><h2 class="panel-title" id="review-title">Review queue</h2></div><a class="panel-link" id="review-link" href="#">Review ↗</a></div>
+          <div class="review-number" id="review-number">0</div>
+          <p class="review-copy">Ambiguous knowledge remains quarantined until you decide. There is no need to review everything at once.</p>
+          <div class="review-legend" id="review-legend"></div>
+        </section>
+
+        <section class="panel health-panel" id="system" data-index="07 // HEALTH" aria-labelledby="health-title">
+          <div class="panel-head"><div><div class="panel-label">Quiet checks</div><h2 class="panel-title" id="health-title">System health</h2></div><a class="panel-link" id="roadmap-link" href="#">Roadmap ↗</a></div>
+          <div class="check-list" id="check-list"></div>
+        </section>
+
+        <section class="panel runs-panel" data-index="08 // RUNS" aria-labelledby="runs-title">
+          <div class="panel-head"><div><div class="panel-label">Automation</div><h2 class="panel-title" id="runs-title">Recent runs</h2></div></div>
+          <div class="run-list" id="run-list"></div>
+        </section>
+
+        <section class="panel focus-panel" data-index="09 // DIRECTION" aria-labelledby="focus-title">
+          <div class="panel-label">Current direction</div>
+          <h2 class="focus-title" id="focus-title">Your active focus</h2>
+          <p class="focus-copy" id="focus-copy"></p>
+          <div class="focus-links">
+            <a id="goals-link" href="#">Active goals ↗</a>
+            <a id="skills-link" href="#">Capabilities ↗</a>
+            <a id="home-link" href="#">Vault home ↗</a>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer"><span id="privacy-text">Canonical knowledge only.</span><span>Local loopback actions // raw evidence excluded</span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      "use strict";
+      const data = JSON.parse(document.getElementById("dashboard-data").textContent);
+      const byId = (id) => document.getElementById(id);
+      const setText = (id, value) => { const node = byId(id); if (node) node.textContent = value ?? ""; };
+      const setLink = (id, value) => { const node = byId(id); if (node && value) node.href = value; };
+      const make = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+      const parseDate = (value) => value ? new Date(value) : null;
+      const formatDate = (value, options) => { const date = parseDate(value); return date && !Number.isNaN(date.valueOf()) ? new Intl.DateTimeFormat(undefined, options).format(date) : "Not yet"; };
+      const formatTime = (value) => formatDate(value, { hour: "numeric", minute: "2-digit" });
+      const relativeTime = (value) => {
+        const date = parseDate(value);
+        if (!date || Number.isNaN(date.valueOf())) return "not yet";
+        const seconds = Math.round((date.valueOf() - Date.now()) / 1000);
+        const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+        for (const [unit, amount] of [["day", 86400], ["hour", 3600], ["minute", 60]]) {
+          if (Math.abs(seconds) >= amount || unit === "minute") return formatter.format(Math.round(seconds / amount), unit);
+        }
+        return "just now";
+      };
+      const formatDuration = (seconds) => {
+        if (seconds === null || seconds === undefined) return "";
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.round(seconds / 60);
+        return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+      };
+      let toastTimer;
+      const toast = (message) => {
+        const node = byId("toast");
+        node.textContent = message;
+        node.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => node.classList.remove("show"), 3600);
+      };
+
+      document.title = `${data.display_name} // Second Brain`;
+      setText("hero-owner", data.display_name);
+      setText("status-label", data.status.label);
+      setText("status-detail", data.status.detail);
+      byId("status-chip").classList.add(data.status.tone || "good");
+      setText("status-chip", data.status.tone === "good" ? "Brain online" : data.status.tone || "Local");
+      setText("schedule-chip", data.schedule.state || "Schedule");
+      setText("updated-time", `Updated ${relativeTime(data.generated_at)}`);
+
+      data.metrics.forEach((item) => {
+        const card = make("article", "metric");
+        card.append(make("div", "metric-value", String(item.value)), make("div", "metric-label", item.label), make("div", "metric-detail", item.detail));
+        byId("metrics").append(card);
+      });
+
+      const daily = data.briefing.daily;
+      if (daily.available) {
+        setText("briefing-title", "Here’s what moved.");
+        setText("briefing-summary", daily.summary);
+        setText("briefing-source", "Latest daily synthesis");
+        daily.highlights.forEach((item) => byId("briefing-list").append(make("li", "", item)));
+      } else {
+        const waiting = data.briefing.pending_evidence;
+        setText("briefing-title", waiting ? `${waiting} signals wait for tonight.` : "Everything is quiet.");
+        setText("briefing-summary", waiting
+          ? "New project and agent-session activity is safely queued for the next validated daily synthesis."
+          : "No new evidence is waiting. An empty daily check will not spend model usage.");
+        setText("briefing-source", "Awaiting next synthesis");
+      }
+
+      const nextRun = data.schedule.next_run;
+      setText("next-run-time", nextRun ? formatTime(nextRun) : data.schedule.daily_time);
+      setText("next-run-detail", nextRun ? formatDate(nextRun, { weekday: "long", month: "short", day: "numeric" }) : "Daily processing");
+      setText("weekly-badge", `Weekly // ${data.schedule.weekly_day}`);
+      const maxSessions = Math.max(1, ...data.activity.trend.map((item) => item.sessions));
+      data.activity.trend.forEach((item) => {
+        const day = make("div", "trend-day");
+        const bar = make("span", "trend-bar");
+        bar.style.height = `${Math.max(5, Math.round(item.sessions / maxSessions * 92))}px`;
+        day.title = `${item.sessions} deduplicated session${item.sessions === 1 ? "" : "s"}`;
+        day.append(make("span", "trend-value", String(item.sessions)), bar, make("span", "trend-label", formatDate(`${item.date}T12:00:00`, { weekday: "narrow" })));
+        byId("trend").append(day);
+      });
+
+      if (!data.activity.projects.length) {
+        byId("project-list").append(make("div", "empty", "No attributed project activity in the last seven days."));
+      } else {
+        data.activity.projects.forEach((project) => {
+          const row = make("a", "project-row"); row.href = project.url;
+          const identity = make("div", ""); identity.append(make("div", "project-name", project.name), make("div", "project-meta", project.classification));
+          const track = make("div", "project-track"); const fill = make("div", "project-fill"); fill.style.width = `${project.relative}%`; track.append(fill);
+          const parts = []; if (project.sessions) parts.push(`${project.sessions} sessions`); if (project.changes) parts.push(`${project.changes} changes`);
+          row.append(identity, track, make("div", "project-count", parts.join(" // ") || "activity"));
+          byId("project-list").append(row);
+        });
+      }
+
+      if (!data.patterns.length) {
+        byId("pattern-list").append(make("div", "empty", "No unconfirmed patterns are currently forming."));
+      } else {
+        data.patterns.forEach((pattern) => {
+          const row = make("a", "pattern"); row.href = pattern.url;
+          const top = make("div", "pattern-top"); top.append(make("span", "pattern-name", pattern.label), make("span", "pattern-score", `${pattern.progress}%`));
+          const track = make("div", "pattern-track"); const fill = make("div", "pattern-fill"); fill.style.width = `${pattern.progress}%`; track.append(fill);
+          const meta = make("div", "pattern-meta"); meta.append(make("span", "", `${pattern.sessions}/3 sessions`), make("span", "", `${pattern.dates}/2 dates`), make("span", "", `${pattern.projects}/2 projects`));
+          row.append(top, track, meta); byId("pattern-list").append(row);
+        });
+      }
+
+      setText("review-number", String(data.review.pending));
+      [{ label: "Questions", value: data.review.questions }, { label: "Public claims", value: data.review.public }, { label: "Private observations", value: data.review.private }].forEach((item) => {
+        const row = make("div", "legend-row"); row.append(make("span", "legend-dot"), make("span", "", item.label), make("span", "legend-value", String(item.value))); byId("review-legend").append(row);
+      });
+
+      data.health.checks.forEach((item) => {
+        const row = make("div", `check ${item.state || ""}`); const body = make("div", ""); body.append(make("div", "check-name", item.label), make("div", "check-detail", item.detail)); row.append(make("span", "check-dot"), body); byId("check-list").append(row);
+      });
+
+      if (!data.runs.length) {
+        byId("run-list").append(make("div", "empty", "No completed automation runs yet."));
+      } else {
+        data.runs.forEach((run) => {
+          const row = make("div", "run");
+          const kind = run.batch_count > 1 ? `${run.kind} ×${run.batch_count}` : run.kind;
+          const metaParts = [formatDate(run.started_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })];
+          if (run.duration_seconds !== null) metaParts.push(formatDuration(run.duration_seconds));
+          if (run.evidence_count) metaParts.push(`${run.evidence_count} evidence`);
+          row.append(make("div", "run-kind", kind), make("div", "run-meta", metaParts.join(" // ")), make("div", `run-status ${run.status}`, run.status)); byId("run-list").append(row);
+        });
+      }
+
+      setText("focus-title", data.focus.title || "Current direction");
+      setText("focus-copy", data.focus.summary || "Active goals will appear here as the brain learns your current direction.");
+      setText("privacy-text", data.privacy);
+      setLink("vault-link", data.links.home); setLink("memory-link", data.links.memory); setLink("daily-link", data.links.daily); setLink("weekly-link", data.links.weekly);
+      setLink("projects-link", data.links.projects); setLink("patterns-link", data.links.memory); setLink("review-link", data.review.url); setLink("roadmap-link", data.links.roadmap);
+      setLink("goals-link", data.links.goals); setLink("skills-link", data.links.skills); setLink("home-link", data.links.home);
+
+      const knowledge = data.knowledge || { cards: [], counts: { new: 0, all: 0, confirmed: 0, removed: 0 }, undo_available: false };
+      const legacyLayerFor = (kind) => {
+        if (["Personal fact", "Goal", "Personal pattern", "Voice", "Work style"].includes(kind)) return "about_shai";
+        if (["Capability", "Education", "Experience", "Military service"].includes(kind)) return "professional_profile";
+        if (kind === "Preference") return "operating_preferences";
+        return "project_knowledge";
+      };
+      let cards = knowledge.cards.map((card) => ({ ...card, layer: card.layer || legacyLayerFor(card.kind) }));
+      const fallbackLayers = [
+        { key: "about_shai", label: `About ${data.first_name}`, short_label: `About ${data.first_name}`, description: "Identity, voice, work style, personality, values, and goals.", url: data.links.home },
+        { key: "professional_profile", label: "Professional profile", short_label: "Professional", description: "Capabilities, skills, experience, education, service, and verified technical range.", url: data.links.skills },
+        { key: "operating_preferences", label: "Operating preferences", short_label: "How I work", description: "Agent behavior, preferred formats, validation rules, design taste, and reusable protocols.", url: data.links.memory },
+        { key: "project_knowledge", label: "Project knowledge", short_label: "Projects", description: "Project-specific facts, architecture, decisions, implementations, and lessons.", url: data.links.projects },
+      ];
+      const layers = knowledge.layers && knowledge.layers.length ? knowledge.layers : fallbackLayers;
+      const layerMap = Object.fromEntries(layers.map((item) => [item.key, item]));
+      let layer = knowledge.default_layer || "about_shai";
+      let filter = "new";
+      let deckIndex = 0;
+      let busy = false;
+      let currentCard = null;
+      const actionEnabled = Boolean(data.actions && data.actions.enabled);
+      const layerCards = () => cards.filter((card) => card.layer === layer);
+      const filteredCards = () => layerCards().filter((card) => filter === "all" || (filter === "new" ? card.feedback !== "liked" : card.feedback === "liked"));
+      const renderLayerContext = () => {
+        const info = layerMap[layer] || { label: "Knowledge", short_label: "Knowledge", description: "Evidence-backed canonical knowledge.", url: data.links.memory };
+        setText("layer-description", info.description);
+        setLink("memory-link", info.url || data.links.memory);
+        document.querySelectorAll(".deck-layer").forEach((button) => {
+          const active = button.dataset.layer === layer;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-selected", String(active));
+          const configured = layerMap[button.dataset.layer];
+          if (configured) button.querySelector(".layer-name").textContent = configured.short_label;
+        });
+      };
+      const updateCounts = () => {
+        const scoped = layerCards();
+        const confirmed = scoped.filter((card) => card.feedback === "liked").length;
+        setText("new-count", String(scoped.length - confirmed)); setText("all-count", String(scoped.length)); setText("confirmed-count", String(confirmed));
+        document.querySelectorAll(".deck-layer").forEach((button) => {
+          const count = cards.filter((card) => card.layer === button.dataset.layer).length;
+          button.querySelector(".layer-count").textContent = String(count);
+        });
+      };
+      const renderCard = () => {
+        const visible = filteredCards();
+        if (deckIndex >= visible.length) deckIndex = 0;
+        currentCard = visible[deckIndex] || null;
+        const node = byId("knowledge-card"); node.classList.remove("swipe-left", "swipe-right"); node.style.transform = "";
+        const empty = !currentCard;
+        const layerInfo = layerMap[layer] || { label: "this layer" };
+        node.dataset.layer = currentCard ? currentCard.layer : layer;
+        setText("knowledge-kind", empty ? "Deck clear" : currentCard.kind);
+        setText("knowledge-position", empty ? `0 / 0` : `${deckIndex + 1} / ${visible.length}`);
+        setText("knowledge-subject", empty ? (filter === "new" ? `Nothing new in ${layerInfo.label}` : `Nothing in ${layerInfo.label}`) : currentCard.subject);
+        setText("knowledge-claim", empty ? "New promoted knowledge will be classified into this layer automatically. You do not need to do anything." : currentCard.claim);
+        setText("knowledge-confidence", empty ? "" : `${currentCard.confidence}% confidence`);
+        setText("knowledge-evidence", empty ? "" : `${currentCard.source_count} evidence source${currentCard.source_count === 1 ? "" : "s"}`);
+        setText("knowledge-projects", empty ? "" : `${currentCard.project_count} project${currentCard.project_count === 1 ? "" : "s"}`);
+        setText("knowledge-date", empty ? "" : `verified ${formatDate(currentCard.updated_at, { month: "short", day: "numeric", year: "numeric" })}`);
+        byId("knowledge-source").style.visibility = empty ? "hidden" : "visible";
+        if (!empty) byId("knowledge-source").href = currentCard.url;
+        byId("skip-button").disabled = empty || busy;
+        byId("like-button").disabled = empty || busy || !actionEnabled;
+        byId("dislike-button").disabled = empty || busy || !actionEnabled;
+      };
+      const setBusy = (value) => { busy = value; renderCard(); };
+      const postAction = async (path) => {
+        if (!actionEnabled) throw new Error("Open the dashboard with the root BAT launcher to use knowledge actions.");
+        const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-SB-Token": data.actions.csrf_token }, body: "{}" });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) throw new Error(payload.error || "The action could not be completed.");
+        return payload;
+      };
+      const animate = (direction) => new Promise((resolve) => { byId("knowledge-card").classList.add(direction === "left" ? "swipe-left" : "swipe-right"); setTimeout(resolve, 190); });
+      const likeCurrent = async () => {
+        if (!currentCard || busy) return;
+        setBusy(true); toast("Confirming this knowledge…");
+        try {
+          await postAction(`/api/knowledge/${encodeURIComponent(currentCard.id)}/like`);
+          const id = currentCard.id; await animate("right");
+          cards = cards.map((card) => card.id === id ? { ...card, feedback: "liked" } : card);
+          updateCounts(); renderCard(); toast("Confirmed. The knowledge stays in your brain.");
+        } catch (error) { toast(error.message); }
+        finally { busy = false; renderCard(); }
+      };
+      const dislikeCurrent = async () => {
+        if (!currentCard || busy) return;
+        setBusy(true); toast("Removing generated knowledge…");
+        try {
+          await postAction(`/api/knowledge/${encodeURIComponent(currentCard.id)}/dislike`);
+          const id = currentCard.id; await animate("left");
+          cards = cards.filter((card) => card.id !== id);
+          knowledge.undo_available = true; byId("undo-button").disabled = false;
+          updateCounts(); renderCard(); toast("Removed. Provenance remains; search is refreshing quietly in the background.");
+        } catch (error) { toast(error.message); }
+        finally { busy = false; renderCard(); }
+      };
+      const skipCurrent = () => { const visible = filteredCards(); if (!visible.length || busy) return; deckIndex = (deckIndex + 1) % visible.length; renderCard(); };
+      document.querySelectorAll(".deck-layer").forEach((button) => button.addEventListener("click", () => {
+        if (busy) return;
+        layer = button.dataset.layer; deckIndex = 0; renderLayerContext(); updateCounts(); renderCard();
+      }));
+      document.querySelectorAll(".deck-tab").forEach((button) => button.addEventListener("click", () => {
+        filter = button.dataset.filter; deckIndex = 0; document.querySelectorAll(".deck-tab").forEach((item) => item.classList.toggle("active", item === button)); renderCard();
+      }));
+      byId("like-button").addEventListener("click", likeCurrent); byId("dislike-button").addEventListener("click", dislikeCurrent); byId("skip-button").addEventListener("click", skipCurrent);
+      byId("undo-button").disabled = !actionEnabled || !knowledge.undo_available;
+      byId("undo-button").addEventListener("click", async () => {
+        if (busy) return; busy = true; byId("undo-button").disabled = true; toast("Restoring the last removed knowledge item…");
+        try { await postAction("/api/knowledge/undo"); toast("Restored. Reloading the updated deck…"); setTimeout(() => window.location.reload(), 450); }
+        catch (error) { toast(error.message); busy = false; byId("undo-button").disabled = !knowledge.undo_available; }
+      });
+      let pointerStart = null;
+      byId("knowledge-card").addEventListener("pointerdown", (event) => { if (!currentCard || busy) return; pointerStart = event.clientX; byId("knowledge-card").setPointerCapture(event.pointerId); });
+      byId("knowledge-card").addEventListener("pointermove", (event) => { if (pointerStart === null || busy) return; const delta = event.clientX - pointerStart; byId("knowledge-card").style.transform = `translateX(${Math.max(-120, Math.min(120, delta))}px) rotate(${delta / 22}deg)`; });
+      byId("knowledge-card").addEventListener("pointerup", (event) => { if (pointerStart === null) return; const delta = event.clientX - pointerStart; pointerStart = null; byId("knowledge-card").style.transform = ""; if (delta > 90) likeCurrent(); else if (delta < -90) dislikeCurrent(); });
+      document.addEventListener("keydown", (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (event.key === "ArrowRight") { event.preventDefault(); likeCurrent(); }
+        else if (event.key === "ArrowLeft") { event.preventDefault(); dislikeCurrent(); }
+        else if (event.key === "ArrowDown" || event.key === " ") { event.preventDefault(); skipCurrent(); }
+      });
+      if (!actionEnabled) setText("deck-caption", "This static fallback is read-only. Open the root BAT launcher for Confirm, Remove, Undo, keyboard, and swipe actions.");
+      renderLayerContext(); updateCounts(); renderCard();
+    })();
+  </script>
+</body>
+</html>
