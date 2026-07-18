@@ -62,6 +62,45 @@ OBJECTIVE_FOLLOWUP_TERMS = (
     "session",
 )
 
+AGENT_RESOLVABLE_REVIEW_TERMS = (
+    "canonical project id",
+    "canonical repository name",
+    "repository names",
+    "folder project boundaries",
+    "source directory",
+    "src project",
+    "what user request initiated",
+    "system-prompt size",
+    "system prompt size",
+    "exact count",
+    "exact duration",
+    "session timeline",
+)
+
+BROAD_REVIEW_QUESTION_TERMS = (
+    "for each major project",
+    "for every project",
+    "which repositories are confirmed first-party",
+)
+
+
+def should_create_review_question(item: dict[str, Any]) -> bool:
+    """Reject low-value or machine-resolvable questions before they enter review."""
+
+    question = str(item.get("question") or "").strip()
+    text = " ".join(
+        str(value)
+        for value in (item.get("subject"), item.get("description"), question)
+        if value
+    ).casefold()
+    if not question:
+        return False
+    if any(term in text for term in AGENT_RESOLVABLE_REVIEW_TERMS):
+        return False
+    if any(term in text for term in BROAD_REVIEW_QUESTION_TERMS):
+        return False
+    return True
+
 
 def is_auto_resolvable_question(item: dict[str, Any]) -> bool:
     """Return true only for objective questions future machine evidence can settle."""

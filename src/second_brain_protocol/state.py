@@ -171,6 +171,18 @@ CREATE TABLE IF NOT EXISTS runs (
   error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS run_usage (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  usage_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS summary_runs (
+  kind TEXT NOT NULL,
+  period TEXT NOT NULL,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  PRIMARY KEY(kind,period,run_id)
+);
+
 CREATE TABLE IF NOT EXISTS bootstrap (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   state TEXT NOT NULL,
@@ -861,12 +873,19 @@ class StateStore:
         evidence_count: int = 0,
         receipt_path: str | None = None,
         error: str | None = None,
+        usage: dict[str, Any] | None = None,
     ) -> None:
         with self.connect() as connection:
             connection.execute(
                 "UPDATE runs SET status=?,completed_at=?,evidence_count=?,receipt_path=?,error=? WHERE id=?",
                 (status, utc_now(), evidence_count, receipt_path, error, run_id),
             )
+            if usage is not None:
+                connection.execute(
+                    """INSERT INTO run_usage(run_id,usage_json) VALUES(?,?)
+                    ON CONFLICT(run_id) DO UPDATE SET usage_json=excluded.usage_json""",
+                    (run_id, json.dumps(usage, sort_keys=True)),
+                )
 
     def complete_validated_run(self, run_id: str) -> None:
         with self.connect() as connection:
@@ -881,6 +900,41 @@ class StateStore:
                 "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def replace_summary_runs(self, kind: str, period: str, run_ids: list[str]) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM summary_runs WHERE kind=? AND period=?", (kind, period)
+            )
+            connection.executemany(
+                "INSERT INTO summary_runs(kind,period,run_id) VALUES(?,?,?)",
+                [(kind, period, run_id) for run_id in run_ids],
+            )
+
+    def summary_run_ids(self, kind: str, period: str) -> list[str]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT run_id FROM summary_runs WHERE kind=? AND period=? ORDER BY run_id",
+                (kind, period),
+            ).fetchall()
+        return [str(row["run_id"]) for row in rows]
+
+    def usage_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        if not run_ids:
+            return []
+        result: list[dict[str, Any]] = []
+        for batch in _chunks(set(run_ids)):
+            placeholders = ",".join("?" for _ in batch)
+            with self.connect() as connection:
+                rows = connection.execute(
+                    f"SELECT run_id,usage_json FROM run_usage WHERE run_id IN ({placeholders})",
+                    batch,
+                ).fetchall()
+            for row in rows:
+                usage = json.loads(row["usage_json"])
+                usage["run_id"] = row["run_id"]
+                result.append(usage)
+        return sorted(result, key=lambda item: str(item["run_id"]))
 
     def add_observation(self, record: dict[str, Any]) -> str:
         evidence_refs = sorted(set(record["evidence_refs"]))
@@ -962,6 +1016,42 @@ class StateStore:
         item["evidence_refs"] = json.loads(item.pop("evidence_refs_json"))
         item["payload"] = json.loads(item.pop("payload_json"))
         return item
+
+    def set_observation_project_override(
+        self, observation_id: str, project_ids: list[str]
+    ) -> None:
+        """Persist an explicit owner correction over inferred evidence attribution."""
+
+        corrected_ids = sorted({str(project_id).strip() for project_id in project_ids if project_id})
+        if not corrected_ids:
+            raise ValueError("At least one project is required")
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM observations WHERE id=?", (observation_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(observation_id)
+            placeholders = ",".join("?" for _ in corrected_ids)
+            known_ids = {
+                str(item["id"])
+                for item in connection.execute(
+                    f"SELECT id FROM projects WHERE id IN ({placeholders})", corrected_ids
+                ).fetchall()
+            }
+            unknown_ids = sorted(set(corrected_ids) - known_ids)
+            if unknown_ids:
+                raise KeyError(f"Unknown project: {', '.join(unknown_ids)}")
+            payload = json.loads(row["payload_json"])
+            payload["project_ids_override"] = corrected_ids
+            payload["project_attribution_source"] = "explicit_owner_correction"
+            connection.execute(
+                "UPDATE observations SET payload_json=?,updated_at=? WHERE id=?",
+                (
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    utc_now(),
+                    observation_id,
+                ),
+            )
 
     def observations(self, status: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT * FROM observations"

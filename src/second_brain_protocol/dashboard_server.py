@@ -19,13 +19,14 @@ from .basic_memory_integration import reindex_changed
 from .config import RuntimePaths, protocol_root
 from .dashboard import build_snapshot, render_dashboard
 from .knowledge import dislike_knowledge, like_knowledge, undo_last_dislike
+from .question_actions import answer_question
 from .state import StateStore
 
 
 DASHBOARD_HOST = "127.0.0.1"
 DASHBOARD_PORT = 8765
 SERVICE_NAME = "second-brain-dashboard"
-MAX_REQUEST_BYTES = 4096
+MAX_REQUEST_BYTES = 8192
 SEARCH_REFRESH_RETRY_SECONDS = 30
 IndexRefresher = Callable[[RuntimePaths, Path, list[str]], str]
 
@@ -175,23 +176,42 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid request"})
             return
-        if payload not in ({}, None):
+        route = self.path.split("?", 1)[0]
+        parts = route.strip("/").split("/")
+        knowledge_route = route == "/api/knowledge/undo" or (
+            len(parts) == 4 and parts[:2] == ["api", "knowledge"]
+        )
+        question_route = len(parts) == 4 and parts[:2] == ["api", "questions"] and parts[3] == "answer"
+        if not knowledge_route and not question_route:
+            self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Not found"})
+            return
+        if knowledge_route and payload not in ({}, None):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Unexpected request data"})
             return
+        if question_route and (
+            not isinstance(payload, dict)
+            or set(payload) != {"answer"}
+            or not isinstance(payload.get("answer"), str)
+        ):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "A written answer is required"})
+            return
 
-        route = self.path.split("?", 1)[0]
         try:
             with self.server.action_lock:
-                if route == "/api/knowledge/undo":
+                if question_route:
+                    result = answer_question(
+                        self.server.vault,
+                        self.server.store,
+                        parts[2],
+                        payload["answer"],
+                    )
+                elif route == "/api/knowledge/undo":
                     result = undo_last_dislike(
                         self.server.paths,
                         self.server.vault,
                         self.server.store,
                     )
                 else:
-                    parts = route.strip("/").split("/")
-                    if len(parts) != 4 or parts[:2] != ["api", "knowledge"]:
-                        raise LookupError("Not found")
                     observation_id, action = parts[2], parts[3]
                     if action == "like":
                         result = like_knowledge(self.server.store, observation_id)
@@ -208,7 +228,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Not found"})
             return
         except (KeyError, ValueError):
-            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid knowledge item"})
+            error = "Invalid question or answer" if question_route else "Invalid knowledge item"
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": error})
             return
         except Exception:
             self._send_json(

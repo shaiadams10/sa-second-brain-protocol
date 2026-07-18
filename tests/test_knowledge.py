@@ -11,6 +11,7 @@ from second_brain_protocol import dashboard_server
 from second_brain_protocol.config import RuntimePaths
 from second_brain_protocol.dashboard_server import create_dashboard_server
 from second_brain_protocol.knowledge import dislike_knowledge, like_knowledge, undo_last_dislike
+from second_brain_protocol.question_actions import answer_question
 from second_brain_protocol.state import StateStore
 
 
@@ -246,3 +247,116 @@ def test_remove_api_returns_before_slow_background_refresh(tmp_path: Path) -> No
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+def test_dashboard_question_answer_records_explicit_evidence_and_resolves_item(tmp_path: Path) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    vault = tmp_path / "Example Person Second Brain"
+    evidence_id, _ = store.add_evidence(
+        source_type="test",
+        source_ref="question-source",
+        kind="project_fact",
+        payload={"status": "unclear"},
+        project_id="project-portfolio",
+    )
+    question_id = store.add_observation(
+        {
+            "kind": "clarification",
+            "subject": "Portfolio status",
+            "claim": "What is the current portfolio deployment status?",
+            "question": "Is the portfolio working locally, deployed, or still a prototype?",
+            "evidence_refs": [evidence_id],
+            "confidence": 0.5,
+            "source_count": 1,
+            "project_count": 1,
+            "sensitivity": "normal",
+            "promotion_tier": "clarification",
+            "status": "pending",
+        }
+    )
+
+    server = create_dashboard_server(paths, vault, port=0, reindexer=lambda _p, _v, _r: "ok")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/questions/{question_id}/answer",
+        data=json.dumps({"answer": "Deployed; the current public version went live in July 2026."}).encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Origin": f"http://127.0.0.1:{port}",
+            "X-SB-Token": server.csrf_token,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read())
+        resolved = StateStore(paths.state).observation(question_id)
+        saved_evidence = next(
+            item
+            for item in StateStore(paths.state).evidence()
+            if item["source_ref"] == f"review-resolution:{question_id}"
+        )
+        assert payload == {
+            "ok": True,
+            "id": question_id,
+            "status": "resolved",
+            "answer_saved": True,
+        }
+        assert resolved is not None and resolved["status"] == "resolved"
+        assert resolved["rejection_reason"].startswith("Deployed;")
+        assert saved_evidence["kind"] == "explicit_project_answer"
+        assert saved_evidence["project_id"] == "project-portfolio"
+        assert saved_evidence["payload"]["destination"] == "project_knowledge"
+        assert saved_evidence["payload"]["scope"] == "project"
+        review_files = list((vault / "Inbox" / "Review").glob("Review-*.md"))
+        assert review_files
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_question_answer_honors_explicit_project_attribution_override(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    vault = tmp_path / "Example Person Second Brain"
+    for project_id, name in (
+        ("project-agents", "AgentSkillsHub"),
+        ("project-portfolio", "Contrasting First Party Project"),
+    ):
+        store.upsert_project(
+            {"id": project_id, "name": name, "classification": "first-party"}
+        )
+    evidence_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="question-source",
+        kind="session_digest",
+        project_id="project-agents",
+        payload={"project_ids": ["project-agents"]},
+    )
+    question_id = store.add_observation(
+        {
+            "kind": "clarification",
+            "subject": "Agent-assisted demo status",
+            "claim": "Which demos are portfolio-ready?",
+            "question": "Which demos are portfolio-ready?",
+            "evidence_refs": [evidence_id],
+            "confidence": 0.8,
+            "status": "pending",
+        }
+    )
+    store.set_observation_project_override(question_id, ["project-portfolio"])
+
+    answer_question(vault, store, question_id, "The approved demos belong in the portfolio.")
+
+    saved = next(
+        item
+        for item in store.evidence()
+        if item["source_ref"] == f"review-resolution:{question_id}"
+    )
+    assert saved["project_id"] == "project-portfolio"
+    assert saved["payload"]["project_ids"] == ["project-portfolio"]

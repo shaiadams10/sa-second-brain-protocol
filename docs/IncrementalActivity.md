@@ -30,6 +30,12 @@ Every project keeps a latest deterministic scanner snapshot. A later scan emits 
 
 Paths in delta records are repository-relative. Absolute project locations remain machine-local and are removed from cloud packets.
 
+Project discovery walks nested Git repositories and also recognizes bounded non-Git project roots from root-level manifests or a README plus source entry points. This lets human grouping folders remain collections without hiding standalone local experiments inside them. Dependency, build, cache, virtual-environment, and vendored directories remain pruned.
+
+## Model usage receipts
+
+Daily and weekly model batches record machine-local usage metadata. New Codex runs preserve input, cached-input, output, reasoning-output, and total token counts from JSONL completion events. Cached synthesis results record zero model calls. Summary-to-run links associate the currently published daily or weekly note with only the batches that produced it; older receipts can recover an exact total even when the input/output split predates structured capture.
+
 ## Recurring patterns
 
 Daily and weekly reasoning may propose a normalized `pattern_signal` for preferences, work style, voice style, personality, or preferred operating protocols. The deterministic registry merges signals by a stable semantic key and retains evidence references, first and last observation, confidence, and counts across sessions, dates, and projects.

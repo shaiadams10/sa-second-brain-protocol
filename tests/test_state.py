@@ -81,6 +81,30 @@ def test_evidence_project_attribution_can_be_corrected(tmp_path: Path) -> None:
     assert store.evidence_by_ids([evidence_id])[0]["project_id"] is None
 
 
+def test_question_project_override_records_explicit_owner_correction(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.upsert_project(
+        {"id": "project-portfolio", "name": "Portfolio", "classification": "first-party"}
+    )
+    observation_id = store.add_observation(
+        {
+            "kind": "clarification",
+            "subject": "Portfolio status",
+            "claim": "What belongs in the portfolio?",
+            "evidence_refs": [],
+            "confidence": 0.8,
+        }
+    )
+
+    store.set_observation_project_override(observation_id, ["project-portfolio"])
+
+    payload = store.observation(observation_id)["payload"]
+    assert payload["project_ids_override"] == ["project-portfolio"]
+    assert payload["project_attribution_source"] == "explicit_owner_correction"
+    with pytest.raises(KeyError):
+        store.set_observation_project_override(observation_id, ["project-missing"])
+
+
 def test_checkpoint_publisher_selects_latest_validated_cursor_per_source(
     tmp_path: Path,
 ) -> None:

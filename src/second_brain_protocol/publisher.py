@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .markdown import GeneratedSectionError, replace_generated_section, slugify, update_generated_file
-from .question_followup import is_auto_resolvable_question
+from .feedback_learning import knowledge_feedback_profile, should_suppress_candidate
+from .question_followup import is_auto_resolvable_question, should_create_review_question
 from .review import GROUP_SPECS, build_review_groups, review_summary
 from .security import repair_mojibake, sanitize_text, scan_text
 from .state import StateStore, canonical_hash, utc_now
@@ -127,6 +128,8 @@ def _promotion_status(store: StateStore, observation: dict[str, Any]) -> tuple[s
     observation["source_count"] = source_count
     observation["project_count"] = project_count
     kind = observation["kind"]
+    scope = str(observation.get("scope") or "").casefold()
+    pattern_kind = kind in {"work_style", "voice_style", "personality", "preference"}
     if observation.get("public_claim"):
         return "pending", "public-facing claim requires review"
     existing = [
@@ -145,14 +148,21 @@ def _promotion_status(store: StateStore, observation: dict[str, Any]) -> tuple[s
         observation.get("explicit")
         and explicit_user_evidence
         and kind not in {"experience", "education", "military", "project_fact"}
+        and (not pattern_kind or scope == "global" or any(
+            row["source_type"] in {"interview", "linkedin"} for row in evidence_rows
+        ))
     ):
         return "promoted", "explicit non-conflicting user fact"
     if kind == "project_fact" and (observation.get("authoritative") or source_count >= 2):
         return "promoted", "authoritative or corroborated project fact"
-    if kind in {"work_style", "voice_style", "personality", "preference"}:
-        if observation.get("explicit") or (session_count >= 3 and date_count >= 2 and project_count >= 2):
+    if pattern_kind:
+        if (
+            observation.get("explicit")
+            and scope == "global"
+            and explicit_user_evidence
+        ) or (session_count >= 3 and date_count >= 2 and project_count >= 2):
             return "promoted", "stable multi-session pattern"
-        return "pending", "insufficient cross-session pattern evidence"
+        return "pending", "project-scoped or insufficient cross-session pattern evidence"
     if kind in {"experience", "education", "military"}:
         trusted = any(row["source_type"] in {"linkedin", "interview"} for row in evidence_rows)
         if trusted and observation.get("explicit"):
@@ -247,6 +257,9 @@ def _publish_pattern_signals(
             float(signal["confidence"]),
         )
         explicit = bool((existing or {}).get("explicit") or signal.get("explicit"))
+        existing_scope = str(((existing or {}).get("payload") or {}).get("scope") or "")
+        signal_scope = str(signal.get("scope") or "")
+        scope = "global" if "global" in {existing_scope, signal_scope} else (signal_scope or existing_scope or "project")
         source_count, project_count, date_count, session_count = _evidence_dimensions(
             store, merged_refs
         )
@@ -275,7 +288,7 @@ def _publish_pattern_signals(
             )
             observation_id = clarification_id
             stats["pending"] += 1
-        elif explicit or (
+        elif (explicit and scope == "global") or (
             session_count >= 3 and date_count >= 2 and project_count >= 2
         ):
             observation = {
@@ -285,6 +298,7 @@ def _publish_pattern_signals(
                 "evidence_refs": merged_refs[:30],
                 "confidence": confidence,
                 "explicit": explicit,
+                "scope": scope,
                 "public_claim": False,
                 "authoritative": False,
             }
@@ -329,6 +343,7 @@ def _publish_pattern_signals(
             "evidence_refs": merged_refs,
             "confidence": confidence,
             "explicit": explicit,
+            "scope": scope,
             "source_count": source_count,
             "project_count": project_count,
             "date_count": date_count,
@@ -897,7 +912,10 @@ def publish_model_output(
     )
     promoted += pattern_stats["promoted"]
     pending += pattern_stats["pending"]
+    feedback_profile = knowledge_feedback_profile(store)
     for item in output.get("review_items", []):
+        if not should_create_review_question(item):
+            continue
         unknown_refs = set(item["evidence_refs"]) - set(evidence_ids)
         if unknown_refs:
             raise ValueError(f"Model invented review evidence references: {sorted(unknown_refs)}")
@@ -925,7 +943,13 @@ def publish_model_output(
         unknown_refs = set(observation["evidence_refs"]) - set(evidence_ids)
         if unknown_refs:
             raise ValueError(f"Model invented evidence references: {sorted(unknown_refs)}")
-        status, reason = _promotion_status(store, observation)
+        if should_suppress_candidate(observation, feedback_profile):
+            status, reason = (
+                "rejected",
+                "suppressed by repeated owner removals of similar low-value knowledge",
+            )
+        else:
+            status, reason = _promotion_status(store, observation)
         record = dict(observation)
         record.update(
             {

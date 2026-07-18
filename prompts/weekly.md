@@ -22,3 +22,5 @@ Preserve the four knowledge roles during synthesis:
 - Project knowledge contains architecture, implementation facts, project decisions, and project-specific lessons.
 
 Cross-project repetition may strengthen a personal or operating pattern, but it does not automatically convert project technology into personal identity or a verified skill. Prefer the narrowest correct role and leave uncertain scope reviewable.
+
+Use an aggregate `feedback_profile`, when supplied, to rank the weekly summary and candidate knowledge toward what the user repeatedly confirms and away from categories he repeatedly removes. The profile is optimization guidance only; it is not evidence for a personal fact and must never be quoted or described as a reason the user holds a view.

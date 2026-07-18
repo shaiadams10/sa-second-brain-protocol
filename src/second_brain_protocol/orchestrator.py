@@ -24,7 +24,13 @@ from .gitops import (
 )
 from .graphify_integration import build_cross_project_graph, graph_summary, update_project_graph
 from .locking import single_instance
-from .model_runner import ModelRole, canary, run_model, select_evidence_for_packet
+from .model_runner import (
+    ModelRole,
+    canary,
+    run_model,
+    select_evidence_for_packet,
+    usage_from_receipt,
+)
 from .notifications import notify
 from .profile import create_interview, import_linkedin_export, interview_status
 from .question_followup import pending_question_context
@@ -40,6 +46,7 @@ from .publisher import (
 from .review import find_review_group
 from .scheduler import install_task, run_canary
 from .health import report as health_report
+from .feedback_learning import knowledge_feedback_profile
 from .source_integrity import capture as capture_integrity, compare as compare_integrity
 from .state import StateStore, canonical_hash, utc_now
 
@@ -356,6 +363,7 @@ def _synthesize(
         if kind == "weekly"
         else []
     )
+    feedback_profile = knowledge_feedback_profile(store)
     if not evidence:
         return {"status": "empty", "evidence_count": 0, "model_called": False}
     weekly_fingerprint = None
@@ -364,6 +372,7 @@ def _synthesize(
             {
                 "evidence": [item["id"] for item in evidence],
                 "questions": [item["id"] for item in pending_questions],
+                "feedback_profile": feedback_profile,
             }
         )
         if store.get_meta("weekly-evidence-fingerprint") == weekly_fingerprint:
@@ -379,6 +388,7 @@ def _synthesize(
             max_chars=int(defaults["limits"]["max_packet_chars"]),
             max_item_chars=int(defaults["limits"]["max_evidence_text_chars"]),
             pending_questions=pending_questions,
+            feedback_profile=feedback_profile,
         )
         if not selected:
             break
@@ -394,6 +404,7 @@ def _synthesize(
                 max_packet_chars=int(defaults["limits"]["max_packet_chars"]),
                 max_evidence_chars=int(defaults["limits"]["max_evidence_text_chars"]),
                 pending_questions=pending_questions,
+                feedback_profile=feedback_profile,
             )
             packet_ids = {item["id"] for item in selected}
             used_ids = set()
@@ -422,6 +433,7 @@ def _synthesize(
                 "validated",
                 evidence_count=len(selected),
                 receipt_path=str(receipt),
+                usage=usage_from_receipt(receipt),
             )
         except Exception as error:
             store.finish_run(run_id, "failed", evidence_count=len(selected), error=str(error))
@@ -457,6 +469,10 @@ def _synthesize(
                     existing["claim"] = item["claim"]
                     existing["confidence"] = item["confidence"]
                 existing["explicit"] = existing["explicit"] or item["explicit"]
+                if item.get("scope") == "global":
+                    existing["scope"] = "global"
+                elif not existing.get("scope") and item.get("scope"):
+                    existing["scope"] = item["scope"]
         for item in output["project_updates"]:
             existing = project_updates.get(item["project_id"])
             if not existing:
@@ -519,6 +535,12 @@ def _synthesize(
         evidence_ids=processed_ids,
         question_ids=[item["id"] for item in pending_questions],
     )
+    if kind in {"daily", "weekly"}:
+        store.replace_summary_runs(
+            kind,
+            Path(published["synthesis_path"]).stem,
+            run_ids,
+        )
     for run_id in run_ids:
         store.complete_validated_run(run_id)
     if weekly_fingerprint:

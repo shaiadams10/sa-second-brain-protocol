@@ -22,6 +22,7 @@ The user should never need to remember a command, skill name, workflow name, or 
 | Update the brain with today’s work | Daily | Run the incremental daily pipeline. |
 | Synthesize or update this week | Weekly | Run weekly synthesis after the daily evidence is current. |
 | Refresh what we know about a named project | Project refresh | Resolve the known project and scan it read-only. |
+| Forget or remove everything about a named project | Project forgetting | Preview exact matches, protect similarly named projects, back up active state, remove project-specific canonical/state/derived knowledge, and ignore the source path so it is not re-ingested. Source repositories remain untouched. |
 | Show or open the dashboard | Dashboard | Start or reuse the private loopback dashboard and open it. No knowledge changes occur without an explicit card action. |
 | What needs my approval? | Review | Start with the short grouped review dashboard, never the machine ledger. |
 | Correct or add a fact about me | Interview or reviewed note update | Capture the explicit fact without inventing missing details. |

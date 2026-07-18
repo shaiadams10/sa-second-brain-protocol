@@ -12,7 +12,7 @@ from .dashboard_server import serve_dashboard
 from .gitops import sync_protocol_draft
 from .health import report as health_report, write_report
 from .installer import install_standalone_codex, login_dedicated_account
-from .model_runner import ModelRole, build_evidence_packet, canary, run_model
+from .model_runner import ModelRole, build_evidence_packet, canary, run_model, usage_from_receipt
 from .orchestrator import (
     approve_bootstrap,
     bootstrap,
@@ -24,7 +24,9 @@ from .orchestrator import (
     scheduled,
 )
 from .profile import QUESTIONS, answer_interview, create_interview, interview_status
+from .project_forgetting import forget_projects
 from .publisher import write_bootstrap_review_artifacts, write_review_artifacts
+from .question_actions import attribute_question
 from .review import find_review_group, review_summary
 from .service import build_context, recent_activity, search
 from .state import StateStore
@@ -56,6 +58,11 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("scheduled")
     refresh = sub.add_parser("refresh-project")
     refresh.add_argument("project")
+    forget = sub.add_parser("forget-project")
+    forget.add_argument("project")
+    forget.add_argument("--include", action="append", default=[])
+    forget.add_argument("--protect", action="append", default=[])
+    forget.add_argument("--confirm", action="store_true")
     review = sub.add_parser("review")
     review_sub = review.add_subparsers(dest="action")
     review_list = review_sub.add_parser("list")
@@ -75,6 +82,9 @@ def _parser() -> argparse.ArgumentParser:
     review_answer.add_argument("group")
     review_answer.add_argument("item", type=int)
     review_answer.add_argument("--answer", required=True)
+    attribute = review_sub.add_parser("attribute-question")
+    attribute.add_argument("id")
+    attribute.add_argument("project_id")
     approve_group = review_sub.add_parser("approve-group")
     approve_group.add_argument("id")
     reject_group = review_sub.add_parser("reject-group")
@@ -159,7 +169,13 @@ def _draft(kind: str, request: str) -> dict:
             max_packet_chars=defaults["limits"]["max_packet_chars"],
             schema_name="text-output.schema.json",
         )
-        store.finish_run(run_id, "completed", evidence_count=len(evidence), receipt_path=str(receipt))
+        store.finish_run(
+            run_id,
+            "completed",
+            evidence_count=len(evidence),
+            receipt_path=str(receipt),
+            usage=usage_from_receipt(receipt),
+        )
         return result
     except Exception as error:
         store.finish_run(run_id, "failed", evidence_count=len(evidence), error=str(error))
@@ -191,6 +207,18 @@ def main(argv: list[str] | None = None) -> int:
             _json(scheduled())
         elif args.command == "refresh-project":
             _json(refresh_project(args.project))
+        elif args.command == "forget-project":
+            paths, _config, _defaults, store = _common()
+            _json(
+                forget_projects(
+                    paths,
+                    vault_root(),
+                    store,
+                    identifiers=[args.project, *args.include],
+                    protected_identifiers=args.protect,
+                    confirm=args.confirm,
+                )
+            )
         elif args.command == "review":
             paths, _config, _defaults, store = _common()
             pending = store.observations("pending")
@@ -221,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
                     raise IndexError(f"Question number must be between 1 and {group['count']}")
                 observation_id = group["items"][args.item - 1]["id"]
                 _json(decide_review(observation_id, "resolved", reason=args.answer))
+            elif args.action == "attribute-question":
+                _json(attribute_question(vault_root(), store, args.id, args.project_id))
             elif args.action == "approve-group":
                 _json(decide_review_group(args.id, "approved"))
             elif args.action == "reject-group":

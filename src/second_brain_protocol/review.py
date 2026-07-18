@@ -6,7 +6,7 @@ from typing import Any, Iterable
 from .state import canonical_hash
 
 
-GROUP_SPECS: dict[str, dict[str, str]] = {
+GROUP_SPECS: dict[str, dict[str, Any]] = {
     "questions-profile-privacy": {
         "title": "Profile, identity, and disclosure questions",
         "filename": "ProfileAndPrivacyQuestions.md",
@@ -14,6 +14,7 @@ GROUP_SPECS: dict[str, dict[str, str]] = {
         "mode": "answer",
         "description": "Questions about identity, career wording, military privacy, and what may be shared publicly.",
         "answer_template": "Answer with: private only / safe for career use / safe to share publicly, followed by any correction.",
+        "choices": ["Private only", "Safe for career use", "Safe to share publicly"],
     },
     "questions-attribution": {
         "title": "Project ownership and attribution questions",
@@ -22,6 +23,7 @@ GROUP_SPECS: dict[str, dict[str, str]] = {
         "mode": "answer",
         "description": "Questions that prevent the brain from crediting third-party, forked, or collaborative work incorrectly.",
         "answer_template": "Answer with: first-party / modified fork / third-party reference / collaboration, then name the parts you directed or implemented.",
+        "choices": ["First-party", "Modified fork", "Third-party reference", "Collaboration"],
     },
     "questions-project-state": {
         "title": "Project status and timeline questions",
@@ -30,6 +32,7 @@ GROUP_SPECS: dict[str, dict[str, str]] = {
         "mode": "answer",
         "description": "Questions about what is working, deployed, paused, archived, or still experimental.",
         "answer_template": "Answer with: working locally / deployed / prototype / paused / archived / unknown, plus an approximate date if useful.",
+        "choices": ["Working locally", "Deployed", "Prototype", "Paused", "Archived"],
     },
     "questions-technical": {
         "title": "Technical detail questions",
@@ -38,6 +41,7 @@ GROUP_SPECS: dict[str, dict[str, str]] = {
         "mode": "answer",
         "description": "Lower-priority technical ambiguities that may be answered gradually as the related work resumes.",
         "answer_template": "Answer with the correction you know, or say defer / unknown. A deferred question simply remains pending.",
+        "choices": [],
     },
     "public-profile": {
         "title": "Public profile facts",
@@ -207,6 +211,7 @@ def build_review_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "mode": spec["mode"],
                 "description": spec["description"],
                 "answer_template": spec["answer_template"],
+                "choices": list(spec.get("choices", [])),
                 "count": len(members),
                 "items": members,
             }

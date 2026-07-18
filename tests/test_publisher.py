@@ -432,6 +432,56 @@ def test_recurring_pattern_registry_accumulates_before_safe_promotion(
     assert "Deterministic activity ledger" in daily.read_text(encoding="utf-8")
 
 
+def test_explicit_project_instruction_does_not_become_a_global_preference(
+    tmp_path: Path,
+) -> None:
+    _note(tmp_path / "Identity" / "Preferences.md")
+    store = StateStore(tmp_path / "state.sqlite")
+    evidence_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:codex:one-project",
+        kind="session_digest",
+        project_id="project-demo",
+        payload={"session_id": "one-project", "project_ids": ["project-demo"]},
+    )
+    output = {
+        "summary": "One project instruction",
+        "observations": [],
+        "pattern_signals": [
+            {
+                "pattern_key": "network-preview",
+                "kind": "preference",
+                "label": "Network preview",
+                "claim": "the user requested a network-accessible preview for this demo.",
+                "evidence_refs": [evidence_id],
+                "confidence": 0.99,
+                "explicit": True,
+                "scope": "project",
+            }
+        ],
+        "project_updates": [],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+
+    result = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="daily",
+        evidence_ids=[evidence_id],
+    )
+
+    assert result["patterns_tracking"] == 1
+    assert result["patterns_promoted"] == 0
+    assert store.observations("promoted") == []
+    assert "network-accessible" not in (
+        tmp_path / "Identity" / "Preferences.md"
+    ).read_text(encoding="utf-8")
+
+
 def test_weekly_resolves_objective_question_from_authoritative_delta(
     tmp_path: Path,
 ) -> None:

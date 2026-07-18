@@ -29,6 +29,36 @@ def test_review_group_commands_are_explicit_and_snapshot_addressed() -> None:
     assert answer.answer == "defer"
 
 
+def test_question_attribution_command_requires_explicit_ids() -> None:
+    args = _parser().parse_args(
+        ["review", "attribute-question", "obs-question", "project-portfolio"]
+    )
+
+    assert args.action == "attribute-question"
+    assert args.id == "obs-question"
+    assert args.project_id == "project-portfolio"
+
+
+def test_forget_project_requires_explicit_confirmation_and_protection() -> None:
+    preview = _parser().parse_args(["forget-project", "Angel"])
+    confirmed = _parser().parse_args(
+        [
+            "forget-project",
+            "Angel",
+            "--include",
+            "AngelRefrence",
+            "--protect",
+            "First Party Project With Existing Brain",
+            "--confirm",
+        ]
+    )
+
+    assert preview.confirm is False
+    assert confirmed.confirm is True
+    assert confirmed.include == ["AngelRefrence"]
+    assert confirmed.protect == ["First Party Project With Existing Brain"]
+
+
 def test_bootstrap_refresh_is_an_explicit_preapproval_action() -> None:
     args = _parser().parse_args(["bootstrap", "--refresh-evidence"])
     assert args.refresh_evidence is True

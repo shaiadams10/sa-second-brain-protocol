@@ -3,7 +3,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from second_brain_protocol.scanner import ProjectScanner, discover_git_roots
+from second_brain_protocol.scanner import (
+    ProjectScanner,
+    discover_filesystem_roots,
+    discover_git_roots,
+)
 
 
 DEFAULTS = {
@@ -93,3 +97,43 @@ def test_explicit_local_project_exclusion(tmp_path: Path) -> None:
     names = {item["name"] for item in scanner.scan_all()}
     assert "Keep" in names
     assert "Ignored" not in names
+
+
+def test_nested_non_git_projects_are_discovered_inside_collection(tmp_path: Path) -> None:
+    projects = tmp_path / "Projects"
+    group = projects / "Video & Media Tools"
+    tts = group / "HiggsAudioV3"
+    converter = group / "AudioConverter"
+    tts.mkdir(parents=True)
+    converter.mkdir()
+    (tts / "requirements.txt").write_text("gradio\n", encoding="utf-8")
+    (tts / "app.py").write_text("print('tts')\n", encoding="utf-8")
+    (converter / "README.md").write_text("# Audio converter\n", encoding="utf-8")
+    (converter / "converter.py").write_text("print('convert')\n", encoding="utf-8")
+    (group / "Loose Files").mkdir()
+    environment = group / "ChatterVenv"
+    installed = environment / "Lib" / "site-packages" / "gradio"
+    installed.mkdir(parents=True)
+    (environment / "pyvenv.cfg").write_text("home = python\n", encoding="utf-8")
+    (installed / "pyproject.toml").write_text("[project]\nname='gradio'\n", encoding="utf-8")
+
+    roots = discover_filesystem_roots(projects)
+    assert roots == [converter, tts]
+
+    scanned = ProjectScanner(projects, DEFAULTS).scan_all()
+    by_name = {item["name"]: item for item in scanned}
+    assert by_name["Video & Media Tools"]["classification"] == "collection"
+    assert len(by_name["Video & Media Tools"]["child_project_ids"]) == 2
+    assert by_name["HiggsAudioV3"]["classification"] == "review"
+    assert "Python" in by_name["HiggsAudioV3"]["tech_stack"]
+
+
+def test_generic_source_directory_is_never_promoted_as_a_project(tmp_path: Path) -> None:
+    projects = tmp_path / "Projects"
+    source = projects / "src"
+    source.mkdir(parents=True)
+    (source / "package.json").write_text("{}\n", encoding="utf-8")
+    (source / "index.ts").write_text("export {}\n", encoding="utf-8")
+
+    assert source not in discover_filesystem_roots(projects)
+    assert "src" not in {item["name"].casefold() for item in ProjectScanner(projects, DEFAULTS).scan_all()}

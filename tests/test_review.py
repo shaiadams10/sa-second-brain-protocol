@@ -45,3 +45,10 @@ def test_summary_separates_questions_public_claims_and_private_review() -> None:
     assert summary["public_claims"] == 1
     assert summary["private_review"] == 1
     assert {group["mode"] for group in summary["groups"]} == {"answer", "review"}
+    question_group = build_review_groups([question])[0]
+    assert question_group["choices"] == [
+        "First-party",
+        "Modified fork",
+        "Third-party reference",
+        "Collaboration",
+    ]

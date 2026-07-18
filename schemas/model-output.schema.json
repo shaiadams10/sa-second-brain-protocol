@@ -44,7 +44,7 @@
   "$defs": {
     "observation": {
       "type": "object",
-      "required": ["kind", "subject", "claim", "evidence_refs", "confidence", "explicit", "public_claim", "authoritative"],
+      "required": ["kind", "subject", "claim", "evidence_refs", "confidence", "explicit", "scope", "public_claim", "authoritative"],
       "additionalProperties": false,
       "properties": {
         "kind": {"enum": ["explicit_fact", "project_fact", "decision", "lesson", "preference", "work_style", "voice_style", "personality", "experience", "education", "military", "goal"]},
@@ -53,13 +53,14 @@
         "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "explicit": {"type": "boolean"},
+        "scope": {"enum": ["global", "project"]},
         "public_claim": {"type": "boolean"},
         "authoritative": {"type": "boolean", "default": false}
       }
     },
     "patternSignal": {
       "type": "object",
-      "required": ["pattern_key", "kind", "label", "claim", "evidence_refs", "confidence", "explicit"],
+      "required": ["pattern_key", "kind", "label", "claim", "evidence_refs", "confidence", "explicit", "scope"],
       "additionalProperties": false,
       "properties": {
         "pattern_key": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"},
@@ -68,7 +69,8 @@
         "claim": {"type": "string", "maxLength": 2000},
         "evidence_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 30},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "explicit": {"type": "boolean"}
+        "explicit": {"type": "boolean"},
+        "scope": {"enum": ["global", "project"]}
       }
     },
     "projectUpdate": {
