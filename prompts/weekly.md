@@ -6,6 +6,10 @@ permalink: personal-vault/protocol/prompts/weekly
 
 # Weekly Synthesis
 
+Make the top-level `summary` a quick weekly activity recap. Use 3-8 short Markdown bullets, grouped mentally by project or trajectory but without extra headings. Lead with concrete shipped work, meaningful changes, decisions, blockers, and momentum; keep each bullet to roughly 22 words or fewer. Do not use the recap for ingestion mechanics, evidence counts, or generic statements that synthesis succeeded. Structured observations, patterns, project updates, and review items continue to improve durable knowledge separately.
+
+For `project_updates`, preserve the scanner-provided project ID and project name exactly. The deterministic catalog owns identity; never rename projects or emit dossiers for collection containers or content-free folders.
+
 Connect the week's approved and new evidence across projects. Use `project_delta`, `session_digest`, and `recurring_pattern` records to distinguish genuinely new activity from previously evaluated history. Identify major wins, trajectories, capability evidence, cross-project lessons, stable work patterns, stable voice patterns, stale claims, and suggested next focus areas without overstating skills, personality, or voice.
 
 Re-emit a normalized `pattern_signal` when the week supplies additional evidence for a recurring preference, work style, voice style, personality trait, or preferred protocol. Preserve the established kebab-case key from a `recurring_pattern` record when it represents the same behavior. Do not merge materially different behaviors merely to reach the promotion threshold.
@@ -22,5 +26,7 @@ Preserve the four knowledge roles during synthesis:
 - Project knowledge contains architecture, implementation facts, project decisions, and project-specific lessons.
 
 Cross-project repetition may strengthen a personal or operating pattern, but it does not automatically convert project technology into personal identity or a verified skill. Prefer the narrowest correct role and leave uncertain scope reviewable.
+
+Include attributable learning from sessions in forks, experiments, and third-party repositories. Describe only the tools the user used, systems he operated, changes he directed, or problems he demonstrably solved; keep upstream ownership and pre-existing implementation explicitly separate.
 
 Use an aggregate `feedback_profile`, when supplied, to rank the weekly summary and candidate knowledge toward what the user repeatedly confirms and away from categories he repeatedly removes. The profile is optimization guidance only; it is not evidence for a personal fact and must never be quoted or described as a reason the user holds a view.

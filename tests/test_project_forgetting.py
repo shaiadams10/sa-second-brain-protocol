@@ -67,6 +67,22 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
             "status": "promoted",
         }
     )
+    unrelated_evidence_id, _ = store.add_evidence(
+        source_type="interview",
+        source_ref="interview:unrelated",
+        kind="explicit_fact",
+        payload={"role": "user", "text": "Unrelated evidence"},
+    )
+    orphaned_question_id = store.add_observation(
+        {
+            "kind": "clarification",
+            "subject": "Legacy Angel status",
+            "claim": "Is Angel still an active project?",
+            "evidence_refs": [unrelated_evidence_id],
+            "confidence": 0.9,
+            "status": "pending",
+        }
+    )
     _generated_note(
         vault / "Projects" / "angel.md",
         "Angel",
@@ -107,6 +123,7 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
         protected_identifiers=["First Party Project With Existing Brain"],
     )
     assert preview["status"] == "preview"
+    assert preview["project_observations"] == 2
     assert store.observation(project_observation_id) is not None
 
     result = forget_projects(
@@ -124,6 +141,7 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
     assert result["source_projects_untouched"] is True
     assert Path(result["backup"]).is_dir()
     assert store.observation(project_observation_id) is None
+    assert store.observation(orphaned_question_id) is None
     assert store.observation(profile_observation_id) is not None
     retained = store.evidence_by_ids([evidence_id])[0]
     assert retained["project_id"] is None
@@ -131,7 +149,9 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
     assert {project["name"] for project in store.projects()} == {"First Party Project With Existing Brain"}
     assert not (vault / "Projects" / "angel.md").exists()
     assert (vault / "Projects" / "angel-version-2.md").exists()
-    assert "[[Projects/angel|Angel]]" not in (vault / "Projects" / "Index.md").read_text()
+    assert (
+        "[[Projects/angel|Angel]]" not in (vault / "Projects" / "Index.md").read_text()
+    )
     assert "First Party Project With Existing Brain" in (vault / "Projects" / "Index.md").read_text()
     assert not graph.exists()
     config = json.loads(paths.config.read_text(encoding="utf-8"))

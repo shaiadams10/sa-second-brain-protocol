@@ -2,9 +2,25 @@
 
 ## Unreleased
 
+- Documented the complete project/session lifecycle, including collection-versus-project boundaries, one-project question admission, ownership-versus-learning policy, safe forgetting, automatic incremental discovery, and the Antigravity IDE workspace-association limitation plus the explicit-Project workflow.
+- Added safe Antigravity recovery from exact project-facing tool paths plus previewed owner-confirmed session links for conversations Antigravity leaves outside a project.
+- Made missing project folders visible in health output while preserving the soft-missing versus explicitly-forgotten safety boundary.
+- Project forgetting now removes orphaned clarification questions that name the exact retired project while retaining durable cross-project skills and capabilities.
+
+- Recovered Antigravity session attribution from its aggregate workspace/Git metadata, added explicit owner-confirmed session mappings for conversations recorded outside a project, and deduplicated re-compacted session views by authoritative session identity.
+- Separated project ownership from technical learning: user-directed, successfully validated work in forks and third-party repositories may support narrow skill evidence without implying upstream authorship.
+- Fixed recent dashboard activity for valid non-Git projects whose stable IDs use the `folder-` prefix.
+- Added metadata-first Codex and Antigravity session reconciliation with current/historical path and unique Git-identity resolution, one-project-only attribution, pre-ingestion skipping for unrelated or ambiguous sessions, and model-free index inspection.
+- Added resumable one-project-at-a-time historical session analysis that publishes only the matching project dossier and audit note while deterministically blocking cross-project, personal-profile, skill, voice, and question output.
+- Rebuilt project ingestion around explicit collection paths, authoritative workspace attribution, path-stable project identity, and a backed-up project-only reset. Review-question admission now permits at most one precise owner decision per named leaf project and rejects multi-project, mixed-decision, broad, or unattributed questions.
+- Replaced append-only model-authored project indexing with a scanner-authoritative catalog that uses stable names, separates collection containers, labels content-free folders as non-projects, and checks runtime/index consistency in health and dashboard views.
+- Expanded project discovery so every direct child of a configured project root is represented, and every direct child of human collection folders such as `Utilities & Automation` is represented without requiring Git or language markers.
+- Added bounded `sb sessions latest` lookup with safe last-message previews, project/surface filters, Antigravity workspace enrichment, and one-transcript-per-session deduplication.
+- Split daily and weekly output into a terse activity recap plus explicit coverage details, and clarified dashboard labels for changed projects, reviewed sessions, linked sessions, and represented projects.
+- Added question dismissal and undo with aggregate feedback learning so repeatedly irrelevant question categories are suppressed without treating feedback as biographical evidence.
 - Added exact-match project forgetting with preview, successor protection, backup, source-ignore protection, canonical/state/evidence cleanup, derived-artifact removal, and search/dashboard rebuilds while leaving source repositories untouched.
 - Added implicit learning from Knowledge Deck confirmations/removals: aggregate feedback categories now guide daily, weekly, and bootstrap synthesis, and strongly repeated negative categories are deterministically suppressed without asking the owner for a reason.
-- Excluded generic source-folder names such as `src` from project discovery and attribution, and blocked machine-resolvable or omnibus review questions before they enter the owner queue.
+- Prevented generic nested source folders such as `src` from becoming accidental child projects, while allowing an explicitly top-level folder with that name to remain a project; machine-resolvable or omnibus review questions are blocked before they enter the owner queue.
 - Cut dashboard refresh latency by batching project/evidence reads and checking independent scheduler/account status concurrently; explicit owner project corrections now override noisy source-session attribution for both display and saved answers.
 - Made dashboard questions destination-aware: project answers now become project evidence, cards show project/profile scope, tailored editable answer starters support Tab completion, and low-value technical questions stay deferred.
 - Reduced Curate noise by excluding routine stacks, feature inventories, narrow asset choices, and one-off project instructions while restoring genuinely reusable preferences to How I Work.

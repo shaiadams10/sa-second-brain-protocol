@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["project_id", "summary", "evidence_refs"],
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 240,
+      "maxLength": 12000
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^ev-[a-z0-9]{24}$"},
+      "minItems": 1,
+      "maxItems": 80
+    }
+  }
+}

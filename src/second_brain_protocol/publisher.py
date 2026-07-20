@@ -2,14 +2,27 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from .markdown import GeneratedSectionError, replace_generated_section, slugify, update_generated_file
-from .feedback_learning import knowledge_feedback_profile, should_suppress_candidate
-from .question_followup import is_auto_resolvable_question, should_create_review_question
+from .markdown import (
+    GeneratedSectionError,
+    replace_generated_section,
+    slugify,
+    update_generated_file,
+)
+from .feedback_learning import (
+    knowledge_feedback_profile,
+    should_suppress_candidate,
+    should_suppress_review_question,
+)
+from .question_followup import (
+    is_auto_resolvable_question,
+    should_create_review_question,
+)
+from .project_catalog import catalog_groups, project_note_paths
 from .review import GROUP_SPECS, build_review_groups, review_summary
 from .security import repair_mojibake, sanitize_text, scan_text
 from .state import StateStore, canonical_hash, utc_now
@@ -73,6 +86,13 @@ def _write_synthesis_summary(
         note_id = f"daily-{today}"
         title = today
         note_type = "daily"
+    elif run_kind.startswith("project-history:"):
+        project_id = slugify(run_kind.split(":", 1)[1])
+        path = vault / "System" / "Audits" / "ProjectSessions" / f"{project_id}.md"
+        section = "project-history"
+        note_id = f"project-history-{project_id}"
+        title = f"Project session analysis — {project_id}"
+        note_type = "project-session-analysis"
     else:
         week = datetime.now().isocalendar()
         week_id = f"{week.year}-W{week.week:02d}"
@@ -99,15 +119,26 @@ def _write_synthesis_summary(
             encoding="utf-8",
         )
     generated = sanitize_text(summary)
-    if activity:
-        generated = activity.rstrip() + "\n\n### Evidence-backed synthesis\n\n" + generated
+    if activity and run_kind in {"daily", "weekly"}:
+        generated = "### Quick activity recap\n\n" + generated
+        generated += "\n\n" + activity.rstrip()
+    elif activity:
+        generated = (
+            activity.rstrip() + "\n\n### Evidence-backed synthesis\n\n" + generated
+        )
     update_generated_file(path, section, generated)
     return path
 
 
-def _evidence_dimensions(store: StateStore, refs: list[str]) -> tuple[int, int, int, int]:
+def _evidence_dimensions(
+    store: StateStore, refs: list[str]
+) -> tuple[int, int, int, int]:
     rows = store.evidence_by_ids(refs)
-    sources = {row["source_ref"].split(":", 1)[0] + ":" + row["source_ref"].split(":")[1] for row in rows if ":" in row["source_ref"]}
+    sources = {
+        row["source_ref"].split(":", 1)[0] + ":" + row["source_ref"].split(":")[1]
+        for row in rows
+        if ":" in row["source_ref"]
+    }
     projects = {row["project_id"] for row in rows if row.get("project_id")}
     for row in rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
@@ -121,7 +152,19 @@ def _evidence_dimensions(store: StateStore, refs: list[str]) -> tuple[int, int, 
     return len(sources), len(projects), len(dates), len(sessions)
 
 
-def _promotion_status(store: StateStore, observation: dict[str, Any]) -> tuple[str, str]:
+def _evidence_project_ids(store: StateStore, refs: list[str]) -> set[str]:
+    projects: set[str] = set()
+    for row in store.evidence_by_ids(refs):
+        if row.get("project_id"):
+            projects.add(str(row["project_id"]))
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        projects.update(str(item) for item in payload.get("project_ids", []) if item)
+    return projects
+
+
+def _promotion_status(
+    store: StateStore, observation: dict[str, Any]
+) -> tuple[str, str]:
     source_count, project_count, date_count, session_count = _evidence_dimensions(
         store, observation["evidence_refs"]
     )
@@ -133,38 +176,56 @@ def _promotion_status(store: StateStore, observation: dict[str, Any]) -> tuple[s
     if observation.get("public_claim"):
         return "pending", "public-facing claim requires review"
     existing = [
-        row for row in store.observations() if row["kind"] == kind and row["subject"] == observation["subject"]
+        row
+        for row in store.observations()
+        if row["kind"] == kind
+        and row["subject"] == observation["subject"]
         and row["status"] in {"approved", "promoted"}
     ]
-    if any(row["claim"].strip().casefold() != observation["claim"].strip().casefold() for row in existing):
+    if any(
+        row["claim"].strip().casefold() != observation["claim"].strip().casefold()
+        for row in existing
+    ):
         return "pending", "conflicts with an existing canonical claim"
     evidence_rows = store.evidence_by_ids(observation["evidence_refs"])
     explicit_user_evidence = any(
         row["source_type"] in {"interview", "linkedin"}
-        or (isinstance(row.get("payload"), dict) and row["payload"].get("role") == "user")
+        or (
+            isinstance(row.get("payload"), dict)
+            and row["payload"].get("role") == "user"
+        )
         for row in evidence_rows
     )
     if (
         observation.get("explicit")
         and explicit_user_evidence
         and kind not in {"experience", "education", "military", "project_fact"}
-        and (not pattern_kind or scope == "global" or any(
-            row["source_type"] in {"interview", "linkedin"} for row in evidence_rows
-        ))
+        and (
+            not pattern_kind
+            or scope == "global"
+            or any(
+                row["source_type"] in {"interview", "linkedin"} for row in evidence_rows
+            )
+        )
     ):
         return "promoted", "explicit non-conflicting user fact"
-    if kind == "project_fact" and (observation.get("authoritative") or source_count >= 2):
+    if kind == "project_fact" and (
+        observation.get("authoritative") or source_count >= 2
+    ):
         return "promoted", "authoritative or corroborated project fact"
     if pattern_kind:
         if (
-            observation.get("explicit")
-            and scope == "global"
-            and explicit_user_evidence
+            observation.get("explicit") and scope == "global" and explicit_user_evidence
         ) or (session_count >= 3 and date_count >= 2 and project_count >= 2):
             return "promoted", "stable multi-session pattern"
-        return "pending", "project-scoped or insufficient cross-session pattern evidence"
+        return (
+            "pending",
+            "project-scoped or insufficient cross-session pattern evidence",
+        )
     if kind in {"experience", "education", "military"}:
-        trusted = any(row["source_type"] in {"linkedin", "interview"} for row in evidence_rows)
+        trusted = any(
+            row["source_type"] in {"linkedin", "interview"} for row in evidence_rows
+        )
         if trusted and observation.get("explicit"):
             return "promoted", "explicit profile/interview evidence"
         return "pending", "career and service history requires explicit evidence"
@@ -190,10 +251,16 @@ def _observation_note(vault: Path, kind: str) -> Path:
 
 
 def _append_generated_bullet(path: Path, text: str) -> None:
+    if path.name == "Index.md" and path.parent.name == "Projects":
+        # The project catalog is rebuilt from scanner truth. Model-authored
+        # names must never append aliases or stale identities to it.
+        return
     current = path.read_text(encoding="utf-8")
     sections = re.findall(r"<!-- sb:generated ([a-z0-9-]+):start -->", current)
     if len(sections) != 1:
-        raise GeneratedSectionError(f"Expected one generated section in {path}; found {sections}")
+        raise GeneratedSectionError(
+            f"Expected one generated section in {path}; found {sections}"
+        )
     section = sections[0]
     start = f"<!-- sb:generated {section}:start -->"
     end = f"<!-- sb:generated {section}:end -->"
@@ -213,6 +280,30 @@ def _append_generated_bullet(path: Path, text: str) -> None:
     lines = [] if body in placeholders else body.splitlines()
     if text not in lines:
         lines.append(text)
+    update_generated_file(path, section, "\n".join(lines))
+
+
+def _upsert_generated_bullet(path: Path, text: str, *, match_token: str) -> None:
+    current = path.read_text(encoding="utf-8")
+    sections = re.findall(r"<!-- sb:generated ([a-z0-9-]+):start -->", current)
+    if len(sections) != 1:
+        raise GeneratedSectionError(
+            f"Expected one generated section in {path}; found {sections}"
+        )
+    section = sections[0]
+    start = f"<!-- sb:generated {section}:start -->"
+    end = f"<!-- sb:generated {section}:end -->"
+    if start not in current or end not in current:
+        raise GeneratedSectionError(f"Malformed generated markers in {path}")
+    body = current.split(start, 1)[1].split(end, 1)[0].strip()
+    placeholders = {
+        "",
+        "_No generated content yet._",
+        "Verified capabilities will appear here.",
+    }
+    lines = [] if body in placeholders else body.splitlines()
+    lines = [line for line in lines if match_token not in line]
+    lines.append(text)
     update_generated_file(path, section, "\n".join(lines))
 
 
@@ -259,7 +350,11 @@ def _publish_pattern_signals(
         explicit = bool((existing or {}).get("explicit") or signal.get("explicit"))
         existing_scope = str(((existing or {}).get("payload") or {}).get("scope") or "")
         signal_scope = str(signal.get("scope") or "")
-        scope = "global" if "global" in {existing_scope, signal_scope} else (signal_scope or existing_scope or "project")
+        scope = (
+            "global"
+            if "global" in {existing_scope, signal_scope}
+            else (signal_scope or existing_scope or "project")
+        )
         source_count, project_count, date_count, session_count = _evidence_dimensions(
             store, merged_refs
         )
@@ -384,7 +479,9 @@ def _upsert_generated_profile_bullet(path: Path, label: str, answer: str) -> Non
     current = path.read_text(encoding="utf-8")
     sections = re.findall(r"<!-- sb:generated ([a-z0-9-]+):start -->", current)
     if len(sections) != 1:
-        raise GeneratedSectionError(f"Expected one generated section in {path}; found {sections}")
+        raise GeneratedSectionError(
+            f"Expected one generated section in {path}; found {sections}"
+        )
     section = sections[0]
     start = f"<!-- sb:generated {section}:start -->"
     end = f"<!-- sb:generated {section}:end -->"
@@ -396,7 +493,9 @@ def _upsert_generated_profile_bullet(path: Path, label: str, answer: str) -> Non
         "Bootstrap has not ",
         "No suggestions yet.",
     )
-    lines = [] if not body or body.startswith(placeholder_prefixes) else body.splitlines()
+    lines = (
+        [] if not body or body.startswith(placeholder_prefixes) else body.splitlines()
+    )
     prefix = f"- **{label}:**"
     lines = [line for line in lines if not line.startswith(prefix)]
     lines.append(f"{prefix} {sanitize_text(answer, max_chars=12000)}")
@@ -468,9 +567,13 @@ def repair_generated_markdown(vault: Path) -> int:
                 start = f"<!-- sb:generated {section}:start -->"
                 end = f"<!-- sb:generated {section}:end -->"
                 if updated.count(start) != 1 or updated.count(end) != 1:
-                    raise GeneratedSectionError(f"Malformed generated markers in {path}")
+                    raise GeneratedSectionError(
+                        f"Malformed generated markers in {path}"
+                    )
                 body = updated.split(start, 1)[1].split(end, 1)[0].strip()
-                updated = replace_generated_section(updated, section, repair_mojibake(body))
+                updated = replace_generated_section(
+                    updated, section, repair_mojibake(body)
+                )
             if updated != current:
                 path.write_text(updated, encoding="utf-8")
                 repaired += 1
@@ -545,7 +648,9 @@ def write_bootstrap_review_artifacts(vault: Path, store: StateStore) -> dict[str
     }
 
 
-def _update_frontmatter(path: Path, *, evidence_refs: list[str], confidence: float) -> None:
+def _update_frontmatter(
+    path: Path, *, evidence_refs: list[str], confidence: float
+) -> None:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n") or "\n---\n" not in text[4:]:
         raise GeneratedSectionError(f"Missing frontmatter in {path}")
@@ -562,8 +667,15 @@ def _update_frontmatter(path: Path, *, evidence_refs: list[str], confidence: flo
     }
     lines = raw.splitlines()
     for key, value in fields.items():
-        rendered = json.dumps(value, ensure_ascii=False) if isinstance(value, list) else str(value)
-        match = next((index for index, line in enumerate(lines) if line.startswith(f"{key}:")), None)
+        rendered = (
+            json.dumps(value, ensure_ascii=False)
+            if isinstance(value, list)
+            else str(value)
+        )
+        match = next(
+            (index for index, line in enumerate(lines) if line.startswith(f"{key}:")),
+            None,
+        )
         if match is None:
             lines.append(f"{key}: {rendered}")
         else:
@@ -595,7 +707,7 @@ def _review_group_body(group: dict[str, Any]) -> str:
                 "After reading every item on this page, you may make one explicit batch decision:",
                 "",
                 f"- Approve all: `sb review approve-group {group['id']}`",
-                f"- Reject all: `sb review reject-group {group['id']} --reason \"...\"`",
+                f'- Reject all: `sb review reject-group {group["id"]} --reason "..."`',
                 "- Do nothing: the group stays pending.",
                 "",
                 "The token includes a snapshot of this group's membership. It becomes invalid if new items enter the group.",
@@ -617,7 +729,7 @@ def _review_group_body(group: dict[str, Any]) -> str:
                 [
                     f"**Question:** {sanitize_text(question, max_chars=3000)}",
                     "",
-                    f"Answer with: `sb review answer {group['id']} {index} --answer \"...\"`",
+                    f'Answer with: `sb review answer {group["id"]} {index} --answer "..."`',
                     "",
                 ]
             )
@@ -725,8 +837,14 @@ def write_review_artifacts(vault: Path, store: StateStore) -> dict[str, Any]:
         if any(group["key"] == key for group in groups):
             continue
         stale_path = group_root / spec["filename"]
-        if stale_path.exists() and "<!-- sb:generated review-group:start -->" in stale_path.read_text(encoding="utf-8"):
-            update_generated_file(stale_path, "review-group", "_No pending items in this group._")
+        if (
+            stale_path.exists()
+            and "<!-- sb:generated review-group:start -->"
+            in stale_path.read_text(encoding="utf-8")
+        ):
+            update_generated_file(
+                stale_path, "review-group", "_No pending items in this group._"
+            )
 
     ledger = _write_review_ledger(vault, pending)
     digest = root / f"Review-{date.today().isoformat()}.md"
@@ -756,11 +874,19 @@ def write_review_artifacts(vault: Path, store: StateStore) -> dict[str, Any]:
         section_groups = [group for group in groups if group["section"] == section]
         if not section_groups:
             continue
-        body.extend([f"## {section_titles[section]}", "", section_guidance[section], ""])
+        body.extend(
+            [f"## {section_titles[section]}", "", section_guidance[section], ""]
+        )
         for group in section_groups:
             link = f"Inbox/Review/Groups/{Path(group['filename']).stem}"
-            mode = "answer-only" if group["mode"] == "answer" else "snapshot-safe batch decision available"
-            body.append(f"- [[{link}|{group['title']}]] — {group['count']} items; {mode}.")
+            mode = (
+                "answer-only"
+                if group["mode"] == "answer"
+                else "snapshot-safe batch decision available"
+            )
+            body.append(
+                f"- [[{link}|{group['title']}]] — {group['count']} items; {mode}."
+            )
         body.append("")
     body.extend(
         [
@@ -801,13 +927,15 @@ def _verified_skill(store: StateStore, update: dict[str, Any]) -> bool:
         return False
     projects = {item["id"]: item for item in store.projects()}
     rows = store.evidence_by_ids(update["evidence_refs"])
-    authored = any(
+    first_party_context = any(
         row.get("project_id") in projects
         and projects[row["project_id"]].get("classification") == "first-party"
         for row in rows
     )
-    success_words = re.compile(r"(?i)\b(?:implemented|completed|working|verified|tests? passed|successful|shipped|fixed)\b")
-    successful = any(
+    success_words = re.compile(
+        r"(?i)\b(?:implemented|completed|working|verified|tests? passed|successful|shipped|fixed)\b"
+    )
+    legacy_success = any(
         row["kind"] == "artifact"
         or (
             isinstance(row.get("payload"), dict)
@@ -816,7 +944,74 @@ def _verified_skill(store: StateStore, update: dict[str, Any]) -> bool:
         )
         for row in rows
     )
-    return authored and successful
+    session_supported_success = False
+    for row in rows:
+        payload = row.get("payload") or {}
+        if row["kind"] != "session_digest" or not isinstance(payload, dict):
+            continue
+        user_messages = payload.get("user_messages")
+        outcomes = [
+            *list(payload.get("assistant_results") or []),
+            *list(payload.get("artifacts") or []),
+        ]
+        if user_messages and any(
+            success_words.search(str(item.get("text") or ""))
+            for item in outcomes
+            if isinstance(item, dict)
+        ):
+            session_supported_success = True
+            break
+    return session_supported_success or (first_party_context and legacy_success)
+
+
+def publish_skill_update(
+    vault: Path, store: StateStore, update: dict[str, Any]
+) -> dict[str, Any]:
+    """Publish one validated skill update through the canonical skill writer."""
+
+    unknown_refs = {str(item) for item in update["evidence_refs"]} - {
+        item["id"] for item in store.evidence_by_ids(update["evidence_refs"])
+    }
+    if unknown_refs:
+        raise ValueError(f"Unknown skill evidence references: {sorted(unknown_refs)}")
+    status = "verified" if _verified_skill(store, update) else "candidate"
+    path = vault / "Skills" / f"{slugify(update['name'])}.md"
+    _ensure_generated_note(
+        path,
+        note_id=f"skill-{update['skill_id']}",
+        note_type="skill",
+        title=update["name"],
+        confidence=float(update["confidence"]),
+        tags="skill, second-brain",
+    )
+    body = (
+        f"Status: {status}\n\n{sanitize_text(update['claim'])}\n\n"
+        f"Evidence: {', '.join(update['evidence_refs'])}\n\n"
+        f"Last verified: {date.today().isoformat()}"
+    )
+    update_generated_file(path, "canonical", body)
+    _update_frontmatter(
+        path,
+        evidence_refs=update["evidence_refs"],
+        confidence=float(update["confidence"]),
+    )
+    _upsert_generated_bullet(
+        vault / "Skills" / "Index.md",
+        f"- [[Skills/{path.stem}|{update['name']}]] — {status}",
+        match_token=f"[[Skills/{path.stem}|",
+    )
+    if status == "verified":
+        _upsert_generated_bullet(
+            vault / "Identity" / "Capabilities.md",
+            f"- {sanitize_text(update['claim'])} ^skill-{update['skill_id']}",
+            match_token=f"^skill-{update['skill_id']}",
+        )
+        _update_frontmatter(
+            vault / "Identity" / "Capabilities.md",
+            evidence_refs=update["evidence_refs"],
+            confidence=float(update["confidence"]),
+        )
+    return {"path": str(path), "status": status}
 
 
 AUTHORITATIVE_QUESTION_EVIDENCE = {
@@ -913,13 +1108,42 @@ def publish_model_output(
     promoted += pattern_stats["promoted"]
     pending += pattern_stats["pending"]
     feedback_profile = knowledge_feedback_profile(store)
-    for item in output.get("review_items", []):
-        if not should_create_review_question(item):
-            continue
+    known_projects = {project["id"]: project for project in store.present_projects()}
+    catalog_projects, _collections, _folders = catalog_groups(
+        list(known_projects.values())
+    )
+    question_project_names = {
+        str(project["id"]): str(project.get("name") or project["id"])
+        for project in catalog_projects
+    }
+    accepted_question_destinations: set[str] = set()
+    accepted_question_count = 0
+    ranked_review_items = sorted(
+        enumerate(output.get("review_items", [])),
+        key=lambda pair: (-float(pair[1].get("confidence", 0.0)), pair[0]),
+    )
+    for _index, item in ranked_review_items:
         unknown_refs = set(item["evidence_refs"]) - set(evidence_ids)
         if unknown_refs:
-            raise ValueError(f"Model invented review evidence references: {sorted(unknown_refs)}")
-        source_count, project_count, _date_count, _session_count = _evidence_dimensions(store, item["evidence_refs"])
+            raise ValueError(
+                f"Model invented review evidence references: {sorted(unknown_refs)}"
+            )
+        project_ids = _evidence_project_ids(store, item["evidence_refs"])
+        if not should_create_review_question(
+            item,
+            project_ids=project_ids,
+            project_names=question_project_names,
+        ) or should_suppress_review_question(item, feedback_profile):
+            continue
+        destination = next(iter(project_ids)) if project_ids else "profile"
+        if (
+            destination in accepted_question_destinations
+            or accepted_question_count >= 3
+        ):
+            continue
+        source_count, project_count, _date_count, _session_count = _evidence_dimensions(
+            store, item["evidence_refs"]
+        )
         clarification_id = store.add_observation(
             {
                 "kind": "clarification",
@@ -934,15 +1158,22 @@ def publish_model_output(
                 "status": "pending",
                 "review_reason": item["kind"],
                 "question": item["question"],
+                "scope": "project" if project_ids else "profile",
+                "project_id": next(iter(project_ids)) if project_ids else None,
+                "project_ids": sorted(project_ids),
             }
         )
         clarification = store.observation(clarification_id)
         if clarification and clarification["status"] == "pending":
             pending += 1
+            accepted_question_count += 1
+            accepted_question_destinations.add(destination)
     for observation in output["observations"]:
         unknown_refs = set(observation["evidence_refs"]) - set(evidence_ids)
         if unknown_refs:
-            raise ValueError(f"Model invented evidence references: {sorted(unknown_refs)}")
+            raise ValueError(
+                f"Model invented evidence references: {sorted(unknown_refs)}"
+            )
         if should_suppress_candidate(observation, feedback_profile):
             status, reason = (
                 "rejected",
@@ -954,7 +1185,9 @@ def publish_model_output(
         record.update(
             {
                 "status": status,
-                "sensitivity": "public" if observation.get("public_claim") else "normal",
+                "sensitivity": "public"
+                if observation.get("public_claim")
+                else "normal",
                 "promotion_tier": "automatic" if status == "promoted" else "review",
                 "review_reason": reason,
             }
@@ -979,7 +1212,10 @@ def publish_model_output(
             )
             if observation["kind"] in {"experience", "education", "military"}:
                 timeline = vault / "Experience" / "Timeline.md"
-                _append_generated_bullet(timeline, f"- {sanitize_text(observation['claim'])} ^{observation_id}")
+                _append_generated_bullet(
+                    timeline,
+                    f"- {sanitize_text(observation['claim'])} ^{observation_id}",
+                )
                 _update_frontmatter(
                     timeline,
                     evidence_refs=observation["evidence_refs"],
@@ -989,11 +1225,12 @@ def publish_model_output(
         else:
             pending += 1
 
-    known_project_ids = {project["id"] for project in store.projects()}
+    catalog_project_ids = {project["id"] for project in catalog_projects}
+    catalog_note_paths = project_note_paths(catalog_projects)
     for update in output["project_updates"]:
-        if update["project_id"] not in known_project_ids:
-            source_count, project_count, _date_count, _session_count = _evidence_dimensions(
-                store, update["evidence_refs"]
+        if update["project_id"] not in known_projects:
+            source_count, project_count, _date_count, _session_count = (
+                _evidence_dimensions(store, update["evidence_refs"])
             )
             clarification_id = store.add_observation(
                 {
@@ -1017,12 +1254,18 @@ def publish_model_output(
             if clarification and clarification["status"] == "pending":
                 pending += 1
             continue
-        path = vault / "Projects" / f"{slugify(update['name'])}.md"
+        if update["project_id"] not in catalog_project_ids:
+            # Collection containers, duplicate identities, and empty folders
+            # are scanner inventory concepts, not project dossiers.
+            continue
+        project = known_projects[update["project_id"]]
+        canonical_name = str(project.get("name") or update["name"])
+        path = vault / "Projects" / f"{catalog_note_paths[update['project_id']]}.md"
         _ensure_generated_note(
             path,
             note_id=f"project-{update['project_id']}",
             note_type="project",
-            title=update["name"],
+            title=canonical_name,
             tags="project, second-brain",
         )
         body = sanitize_text(update["summary"])
@@ -1036,45 +1279,14 @@ def publish_model_output(
         projects_written += 1
 
     for update in output["skill_updates"]:
-        status = "verified" if _verified_skill(store, update) else "candidate"
-        path = vault / "Skills" / f"{slugify(update['name'])}.md"
-        _ensure_generated_note(
-            path,
-            note_id=f"skill-{update['skill_id']}",
-            note_type="skill",
-            title=update["name"],
-            confidence=float(update["confidence"]),
-            tags="skill, second-brain",
-        )
-        body = (
-            f"Status: {status}\n\n{sanitize_text(update['claim'])}\n\n"
-            f"Evidence: {', '.join(update['evidence_refs'])}\n\n"
-            f"Last verified: {date.today().isoformat()}"
-        )
-        update_generated_file(path, "canonical", body)
-        _update_frontmatter(
-            path,
-            evidence_refs=update["evidence_refs"],
-            confidence=float(update["confidence"]),
-        )
-        _append_generated_bullet(
-            vault / "Skills" / "Index.md",
-            f"- [[Skills/{path.stem}|{update['name']}]] — {status}",
-        )
-        if status == "verified":
-            _append_generated_bullet(
-                vault / "Identity" / "Capabilities.md",
-                f"- {sanitize_text(update['claim'])} ^skill-{update['skill_id']}",
-            )
-            _update_frontmatter(
-                vault / "Identity" / "Capabilities.md",
-                evidence_refs=update["evidence_refs"],
-                confidence=float(update["confidence"]),
-            )
+        publish_skill_update(vault, store, update)
         skills_written += 1
 
     for sample in output["voice_samples"]:
-        if not sample["safe_for_private_git"] or sample["evidence_ref"] not in evidence_ids:
+        if (
+            not sample["safe_for_private_git"]
+            or sample["evidence_ref"] not in evidence_ids
+        ):
             continue
         excerpt = sanitize_text(sample["excerpt"], redact_email=True, max_chars=1200)
         if scan_text(excerpt, "voice-sample"):
@@ -1093,7 +1305,9 @@ def publish_model_output(
     synthesis_path = _write_synthesis_summary(
         vault, run_kind, output["summary"], activity=activity
     )
-    review_path = _write_review_note(vault, store) if pending or questions_resolved else None
+    review_path = (
+        _write_review_note(vault, store) if pending or questions_resolved else None
+    )
     published_evidence_ids = store.expand_derived_evidence(evidence_ids)
     store.mark_evidence(published_evidence_ids, "processed")
     store.publish_checkpoint_candidates(published_evidence_ids)
@@ -1112,23 +1326,39 @@ def publish_model_output(
     }
 
 
-def promote_approved_observation(vault: Path, store: StateStore, observation_id: str) -> None:
-    matches = [item for item in store.observations("approved") if item["id"] == observation_id]
+def promote_approved_observation(
+    vault: Path, store: StateStore, observation_id: str
+) -> None:
+    matches = [
+        item for item in store.observations("approved") if item["id"] == observation_id
+    ]
     if not matches:
         raise KeyError(f"Approved observation not found: {observation_id}")
     item = matches[0]
-    _append_generated_bullet(_observation_note(vault, item["kind"]), f"- {item['claim']} ^{item['id']}")
+    _append_generated_bullet(
+        _observation_note(vault, item["kind"]), f"- {item['claim']} ^{item['id']}"
+    )
     store.decide_observation(observation_id, "promoted")
 
 
-def promote_observation_group(vault: Path, store: StateStore, observation_ids: list[str]) -> None:
+def promote_observation_group(
+    vault: Path, store: StateStore, observation_ids: list[str]
+) -> None:
     ids = sorted(set(observation_ids))
-    pending = {item["id"]: item for item in store.observations("pending") if item["id"] in ids}
-    missing = [observation_id for observation_id in ids if observation_id not in pending]
+    pending = {
+        item["id"]: item for item in store.observations("pending") if item["id"] in ids
+    }
+    missing = [
+        observation_id for observation_id in ids if observation_id not in pending
+    ]
     if missing:
-        raise RuntimeError("Batch promotion requires pending observations: " + ", ".join(missing))
+        raise RuntimeError(
+            "Batch promotion requires pending observations: " + ", ".join(missing)
+        )
     if any(item["kind"] == "clarification" for item in pending.values()):
-        raise RuntimeError("Clarification questions cannot be approved or promoted as a group.")
+        raise RuntimeError(
+            "Clarification questions cannot be approved or promoted as a group."
+        )
 
     targets = {_observation_note(vault, item["kind"]) for item in pending.values()}
     backups = {path: path.read_text(encoding="utf-8") for path in targets}

@@ -19,7 +19,11 @@ from .basic_memory_integration import reindex_changed
 from .config import RuntimePaths, protocol_root
 from .dashboard import build_snapshot, render_dashboard
 from .knowledge import dislike_knowledge, like_knowledge, undo_last_dislike
-from .question_actions import answer_question
+from .question_actions import (
+    answer_question,
+    dismiss_question,
+    undo_last_question_dismissal,
+)
 from .state import StateStore
 
 
@@ -181,29 +185,56 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         knowledge_route = route == "/api/knowledge/undo" or (
             len(parts) == 4 and parts[:2] == ["api", "knowledge"]
         )
-        question_route = len(parts) == 4 and parts[:2] == ["api", "questions"] and parts[3] == "answer"
+        question_answer_route = (
+            len(parts) == 4
+            and parts[:2] == ["api", "questions"]
+            and parts[3] == "answer"
+        )
+        question_dismiss_route = (
+            len(parts) == 4
+            and parts[:2] == ["api", "questions"]
+            and parts[3] == "dismiss"
+        )
+        question_undo_route = route == "/api/questions/undo"
+        question_route = (
+            question_answer_route or question_dismiss_route or question_undo_route
+        )
         if not knowledge_route and not question_route:
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Not found"})
             return
         if knowledge_route and payload not in ({}, None):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Unexpected request data"})
             return
-        if question_route and (
+        if question_answer_route and (
             not isinstance(payload, dict)
             or set(payload) != {"answer"}
             or not isinstance(payload.get("answer"), str)
         ):
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "A written answer is required"})
             return
+        if (question_dismiss_route or question_undo_route) and payload not in ({}, None):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Unexpected request data"})
+            return
 
         try:
             with self.server.action_lock:
-                if question_route:
+                if question_answer_route:
                     result = answer_question(
                         self.server.vault,
                         self.server.store,
                         parts[2],
                         payload["answer"],
+                    )
+                elif question_dismiss_route:
+                    result = dismiss_question(
+                        self.server.vault,
+                        self.server.store,
+                        parts[2],
+                    )
+                elif question_undo_route:
+                    result = undo_last_question_dismissal(
+                        self.server.vault,
+                        self.server.store,
                     )
                 elif route == "/api/knowledge/undo":
                     result = undo_last_dislike(

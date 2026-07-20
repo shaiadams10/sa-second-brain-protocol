@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 import subprocess
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from .basic_memory_integration import reindex
-from .collector import collect_projects, collect_sessions, reconcile_existing_session_attribution
+from .collector import (
+    collect_projects,
+    collect_sessions,
+    reconcile_existing_session_attribution,
+)
 from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_root, setup_runtime, vault_root
 from .evidence_compaction import (
     SESSION_EVENT_KINDS,
@@ -25,6 +30,7 @@ from .gitops import (
 from .graphify_integration import build_cross_project_graph, graph_summary, update_project_graph
 from .locking import single_instance
 from .model_runner import (
+    ModelRunError,
     ModelRole,
     canary,
     run_model,
@@ -33,6 +39,8 @@ from .model_runner import (
 )
 from .notifications import notify
 from .profile import create_interview, import_linkedin_export, interview_status
+from .project_catalog import publish_project_catalog
+from .project_rebuild import rebuild_project_subsystem
 from .question_followup import pending_question_context
 from .publisher import (
     promote_approved_observation,
@@ -45,6 +53,11 @@ from .publisher import (
 )
 from .review import find_review_group
 from .scheduler import install_task, run_canary
+from .service import session_index_summary
+from .session_attribution import (
+    register_current_project_paths,
+    seed_project_paths_from_backups,
+)
 from .health import report as health_report
 from .feedback_learning import knowledge_feedback_profile
 from .source_integrity import capture as capture_integrity, compare as compare_integrity
@@ -208,8 +221,10 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
             ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
+            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
             classification_overrides=config.get("project_classification_overrides", {}),
         )
+        publish_project_catalog(vault_root(), project_result["projects"])
         _inventory_report(vault_root(), project_result["projects"])
         counts = collect_sessions(store, config)
         reconcile_existing_session_attribution(store)
@@ -288,8 +303,10 @@ def refresh_bootstrap_evidence() -> dict[str, Any]:
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
             ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
+            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
             classification_overrides=config.get("project_classification_overrides", {}),
         )
+        publish_project_catalog(vault_root(), project_result["projects"])
         session_counts = collect_sessions(store, config)
         attribution = reconcile_existing_session_attribution(store)
         graph_error: Exception | None = None
@@ -328,6 +345,353 @@ def refresh_bootstrap_evidence() -> dict[str, Any]:
         }
 
 
+def reconcile_project_sessions() -> dict[str, Any]:
+    """Index and ingest only sessions that resolve to one current leaf project."""
+
+    paths, config, _defaults, store = context()
+    if store.bootstrap_state()["state"] != "completed":
+        raise RuntimeError(
+            "Project-session reconciliation is available after bootstrap approval."
+        )
+    with single_instance(paths.locks / "pipeline.lock"):
+        projects = [
+            project
+            for project in store.present_projects()
+            if project.get("classification") not in {"collection", "duplicate"}
+            and project.get("local_path")
+        ]
+        register_current_project_paths(
+            store,
+            projects,
+            previous_projects=projects,
+        )
+        aliases = seed_project_paths_from_backups(
+            store,
+            paths.runs / "backups",
+            projects,
+        )
+        collection = collect_sessions(store, config)
+        compaction = compact_session_evidence(store)
+        attribution = reconcile_existing_session_attribution(store)
+        return {
+            "status": "completed",
+            "model_called": False,
+            "git_published": False,
+            "historical_aliases": aliases,
+            "collection": collection,
+            "compaction": compaction,
+            "attribution": attribution,
+            "index": session_index_summary(store),
+        }
+
+
+def _validated_project_history_update(
+    output: dict[str, Any],
+    *,
+    project: dict[str, Any],
+    allowed_evidence_ids: set[str],
+    session_evidence_ids: set[str],
+) -> dict[str, Any]:
+    if output.get("project_id") != project["id"]:
+        raise RuntimeError(
+            "Isolated project-history analysis attempted a cross-project update."
+        )
+    evidence_refs = {str(value) for value in output.get("evidence_refs", [])}
+    unknown = evidence_refs - allowed_evidence_ids
+    if unknown:
+        raise RuntimeError(
+            f"Project-history output referenced unknown evidence: {sorted(unknown)}"
+        )
+    if not (evidence_refs & session_evidence_ids):
+        raise RuntimeError(
+            "Project-history update must cite at least one indexed session digest."
+        )
+    summary = str(output.get("summary") or "").strip()
+    headings = re.findall(r"(?m)^## (.+)$", summary)
+    bullets = re.findall(r"(?m)^- \S", summary)
+    if len(headings) < 2 or len(bullets) < 3:
+        raise RuntimeError(
+            "Project-history summary must contain at least two sections and three bullets."
+        )
+    if not summary.startswith("## ") or re.search(
+        r"(?i)(?:indexed|session history).{0,60}(?:synthesi|analy)|"
+        r"(?:canonical|project) name (?:was )?unavailable",
+        summary,
+    ):
+        raise RuntimeError("Project-history summary contained synthesis boilerplate.")
+    if str(project["id"]).casefold() in summary.casefold():
+        raise RuntimeError("Project-history summary exposed a machine project ID.")
+    return {
+        "project_id": str(project["id"]),
+        "name": str(project["name"]),
+        "summary": summary,
+        "evidence_refs": sorted(evidence_refs),
+    }
+
+
+def _project_session_digest_groups(
+    store: StateStore,
+) -> dict[str, list[dict[str, Any]]]:
+    assignments = {
+        (str(row["surface"]), str(row["session_id"])): str(row["project_id"])
+        for row in store.session_project_index()
+        if row["status"] == "matched" and row.get("project_id")
+    }
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in store.evidence():
+        if (
+            row["source_type"] != "session-digest"
+            or row["kind"] != "session_digest"
+            or row.get("status") in {"superseded", "compacted"}
+        ):
+            continue
+        payload = row.get("payload") or {}
+        key = (str(payload.get("source") or ""), str(payload.get("session_id") or ""))
+        project_id = assignments.get(key)
+        if not project_id:
+            continue
+        if row.get("project_id") != project_id:
+            raise RuntimeError(
+                "Session digest attribution disagrees with the authoritative session index."
+            )
+        groups.setdefault(project_id, []).append(row)
+    return groups
+
+
+def _latest_project_inventory(
+    store: StateStore, project_id: str
+) -> dict[str, Any]:
+    matches = [
+        row
+        for row in store.evidence()
+        if row["kind"] == "project_inventory" and row.get("project_id") == project_id
+    ]
+    if not matches:
+        raise RuntimeError(f"No deterministic project inventory for {project_id}.")
+    return matches[-1]
+
+
+def _analyze_one_project_session_history(
+    *,
+    store: StateStore,
+    paths: RuntimePaths,
+    defaults: dict[str, Any],
+    project: dict[str, Any],
+    session_digests: list[dict[str, Any]],
+) -> dict[str, Any]:
+    project_id = str(project["id"])
+    analyzed = store.analyzed_project_session_evidence(project_id)
+    remaining = [row for row in session_digests if row["id"] not in analyzed]
+    if not remaining:
+        return {
+            "project_id": project_id,
+            "project": project["name"],
+            "status": "unchanged",
+            "session_digests": 0,
+            "model_calls": 0,
+        }
+    if any(row.get("project_id") != project_id for row in remaining):
+        raise RuntimeError("Project-history packet contained cross-project evidence.")
+
+    inventory = _latest_project_inventory(store, project_id)
+    inventory_context = {
+        **inventory,
+        "payload": {
+            "project_id": project_id,
+            "canonical_name": str(project["name"]),
+            "classification": str(project.get("classification") or ""),
+        },
+    }
+    role = _role(defaults, "daily")
+    max_calls = 8
+    run_ids: list[str] = []
+    run_evidence: list[tuple[str, list[str]]] = []
+    updates: list[dict[str, Any]] = []
+    processed: list[dict[str, Any]] = []
+    while remaining and len(run_ids) < max_calls:
+        selected = select_evidence_for_packet(
+            [inventory_context, *remaining],
+            max_chars=int(defaults["limits"]["max_packet_chars"]),
+            max_item_chars=int(defaults["limits"]["max_evidence_text_chars"]),
+            feedback_profile={},
+        )
+        selected_session = [row for row in selected if row["id"] != inventory["id"]]
+        if not selected_session:
+            raise RuntimeError("No session digest fit the isolated project packet.")
+        run_id = store.start_run("project-history", role.name, role.reasoning)
+        try:
+            output, receipt = run_model(
+                paths=paths,
+                role=role,
+                prompt_name="project-history.md",
+                evidence=selected,
+                run_id=run_id,
+                max_packet_chars=int(defaults["limits"]["max_packet_chars"]),
+                max_evidence_chars=int(
+                    defaults["limits"]["max_evidence_text_chars"]
+                ),
+                schema_name="project-history-output.schema.json",
+                feedback_profile={},
+            )
+            update = _validated_project_history_update(
+                output,
+                project=project,
+                allowed_evidence_ids={row["id"] for row in selected},
+                session_evidence_ids={row["id"] for row in selected_session},
+            )
+            store.finish_run(
+                run_id,
+                "validated",
+                evidence_count=len(selected),
+                receipt_path=str(receipt),
+                usage=usage_from_receipt(receipt),
+            )
+        except Exception as error:
+            store.finish_run(
+                run_id,
+                "failed",
+                evidence_count=len(selected),
+                error=str(error),
+            )
+            raise
+        run_ids.append(run_id)
+        selected_ids = {row["id"] for row in selected_session}
+        run_evidence.append((run_id, sorted(selected_ids)))
+        updates.append(update)
+        processed.extend(selected_session)
+        remaining = [row for row in remaining if row["id"] not in selected_ids]
+
+    if remaining:
+        raise RuntimeError(
+            f"Project history exceeded {max_calls} bounded model packets."
+        )
+    summaries = [update["summary"] for update in updates if update["summary"]]
+    evidence_refs = sorted({row["id"] for row in processed})
+    merged = {
+        "summary": (
+            f"- {project['name']}: synthesized {len(processed)} indexed session "
+            "digests in project isolation."
+        ),
+        "observations": [],
+        "pattern_signals": [],
+        "project_updates": [
+            {
+                "project_id": project_id,
+                "name": project["name"],
+                "summary": "\n\n".join(summaries)[:12000],
+                "evidence_refs": evidence_refs,
+            }
+        ],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+    published = publish_model_output(
+        vault=vault_root(),
+        store=store,
+        output=merged,
+        run_kind=f"project-history:{project_id}",
+        evidence_ids=[inventory["id"], *[row["id"] for row in processed]],
+    )
+    for run_id, evidence_ids in run_evidence:
+        store.mark_project_session_evidence_analyzed(
+            project_id,
+            evidence_ids,
+            run_id=run_id,
+        )
+        store.complete_validated_run(run_id)
+    return {
+        "project_id": project_id,
+        "project": project["name"],
+        "status": "completed",
+        "session_digests": len(processed),
+        "model_calls": len(run_ids),
+        "project_note_written": bool(published.get("projects_written")),
+        "analysis_path": published.get("synthesis_path"),
+    }
+
+
+def analyze_project_sessions(*, force: bool = False) -> dict[str, Any]:
+    """Backfill indexed session history one project at a time, locally."""
+
+    paths, config, defaults, store = context()
+    if store.bootstrap_state()["state"] != "completed":
+        raise RuntimeError(
+            "Project-session analysis is available after bootstrap approval."
+        )
+    with single_instance(paths.locks / "pipeline.lock"):
+        projects = {
+            str(project["id"]): project for project in store.present_projects()
+        }
+        register_current_project_paths(
+            store,
+            list(projects.values()),
+            previous_projects=list(projects.values()),
+        )
+        seed_project_paths_from_backups(
+            store,
+            paths.runs / "backups",
+            list(projects.values()),
+        )
+        collection = collect_sessions(store, config)
+        compaction = compact_session_evidence(store)
+        attribution = reconcile_existing_session_attribution(store)
+        groups = _project_session_digest_groups(store)
+        analysis_rows_reset = (
+            store.clear_project_session_analysis(set(groups)) if force else 0
+        )
+        results: list[dict[str, Any]] = []
+        failures: list[dict[str, str]] = []
+        model_runtime_failed = False
+        ordered = sorted(
+            groups.items(),
+            key=lambda item: (len(item[1]), str(projects[item[0]]["name"]).casefold()),
+        )
+        for project_id, digests in ordered:
+            project = projects.get(project_id)
+            if project is None:
+                continue
+            try:
+                results.append(
+                    _analyze_one_project_session_history(
+                        store=store,
+                        paths=paths,
+                        defaults=defaults,
+                        project=project,
+                        session_digests=digests,
+                    )
+                )
+            except Exception as error:
+                failures.append(
+                    {
+                        "project_id": project_id,
+                        "project": str(project["name"]),
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                )
+                if isinstance(error, ModelRunError) and str(error).startswith(
+                    "Codex model run failed"
+                ):
+                    model_runtime_failed = True
+                    break
+        if any(result["status"] == "completed" for result in results):
+            reindex(paths, vault_root())
+        return {
+            "status": "completed" if not failures else "partial",
+            "model_called": any(result["model_calls"] for result in results),
+            "git_published": False,
+            "personal_profile_touched": False,
+            "halted_after_model_runtime_failure": model_runtime_failed,
+            "analysis_rows_reset": analysis_rows_reset,
+            "collection": collection,
+            "compaction": compaction,
+            "attribution": attribution,
+            "projects": results,
+            "failures": failures,
+        }
+
+
 def _role(defaults: dict[str, Any], kind: str) -> ModelRole:
     values = defaults["models"][kind]
     return ModelRole(name=values["name"], reasoning=values["reasoning"])
@@ -358,6 +722,15 @@ def _synthesize(
         ]
     else:
         evidence = store.evidence(status="new")
+    evidence = [
+        item
+        for item in evidence
+        if not (
+            item["source_type"] == "session-digest"
+            and item["kind"] == "session_digest"
+            and not item.get("project_id")
+        )
+    ]
     pending_questions = (
         pending_question_context(store.observations("pending"))
         if kind == "weekly"
@@ -581,36 +954,124 @@ def _bootstrap_synthesis_step(
     }
 
 
-def incremental(kind: str) -> dict[str, Any]:
+def incremental(kind: str, *, trigger: str = "manual") -> dict[str, Any]:
     paths, config, defaults, store = context()
     if store.bootstrap_state()["state"] != "completed":
         raise RuntimeError("Complete and approve bootstrap before incremental runs.")
+    pipeline_run_id = store.start_pipeline_run(
+        kind, trigger=trigger, stage="waiting_for_lock"
+    )
+
+    def stage(name: str) -> None:
+        store.set_pipeline_stage(pipeline_run_id, name)
+
+    try:
+        with single_instance(paths.locks / "pipeline.lock"):
+            stage("snapshot_manual_notes")
+            snapshot_manual_markdown(vault_root())
+            stage("collect_projects")
+            project_result = collect_projects(
+                store,
+                projects_root=Path(config["projects_root"]),
+                defaults=defaults,
+                ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
+                collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
+                classification_overrides=config.get("project_classification_overrides", {}),
+            )
+            stage("publish_project_catalog")
+            publish_project_catalog(vault_root(), project_result["projects"])
+            stage("collect_sessions")
+            collect_sessions(store, config)
+            stage("update_code_graphs")
+            _update_graphs(
+                store,
+                paths,
+                project_result["projects"],
+                project_result["changed_project_ids"],
+                strict=False,
+            )
+            stage("synthesize")
+            result = _synthesize(kind, store=store, paths=paths, defaults=defaults)
+            if result["status"] == "empty":
+                stage("notify")
+                notify(
+                    "Second brain",
+                    f"{kind.title()} run: no new evidence",
+                    vault=vault_root(),
+                )
+                store.finish_pipeline_run(pipeline_run_id, "completed")
+                return result
+            stage("reindex")
+            reindex(paths, vault_root())
+            stage("commit")
+            commit_if_changed(
+                vault_root(), f"Second brain {kind} update {date.today().isoformat()}"
+            )
+            stage("push")
+            safe_push_private(vault_root())
+            review = Path(result["review_path"]) if result.get("review_path") else None
+            stage("notify")
+            notify(
+                "Second brain updated",
+                f"{result.get('promoted', 0)} promoted, {result.get('pending', 0)} need review",
+                vault=vault_root(),
+                note=review,
+            )
+            store.finish_pipeline_run(pipeline_run_id, "completed")
+            return result
+    except Exception as error:
+        store.finish_pipeline_run(
+            pipeline_run_id,
+            "failed",
+            error=f"{type(error).__name__}: {error}",
+        )
+        raise
+
+
+def sync_project_index() -> dict[str, Any]:
+    """Refresh scanner state and the canonical catalog without model or Git publication."""
+
+    paths, config, defaults, store = context()
+    if store.bootstrap_state()["state"] != "completed":
+        raise RuntimeError("Complete and approve bootstrap before refreshing the project catalog.")
     with single_instance(paths.locks / "pipeline.lock"):
-        snapshot_manual_markdown(vault_root())
         project_result = collect_projects(
             store,
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
             ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
+            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
             classification_overrides=config.get("project_classification_overrides", {}),
         )
-        collect_sessions(store, config)
-        _update_graphs(store, paths, project_result["projects"], project_result["changed_project_ids"], strict=False)
-        result = _synthesize(kind, store=store, paths=paths, defaults=defaults)
-        if result["status"] == "empty":
-            notify("Second brain", f"{kind.title()} run: no new evidence", vault=vault_root())
-            return result
+        catalog = publish_project_catalog(vault_root(), project_result["projects"])
         reindex(paths, vault_root())
-        commit_if_changed(vault_root(), f"Second brain {kind} update {date.today().isoformat()}")
-        safe_push_private(vault_root())
-        review = Path(result["review_path"]) if result.get("review_path") else None
-        notify(
-            "Second brain updated",
-            f"{result.get('promoted', 0)} promoted, {result.get('pending', 0)} need review",
-            vault=vault_root(),
-            note=review,
+        return {
+            "status": "completed",
+            "model_called": False,
+            "git_published": False,
+            "changed_project_ids": project_result["changed_project_ids"],
+            **catalog,
+        }
+
+
+def rebuild_projects(
+    *, collection_names: list[str] | None = None, confirm: bool = False
+) -> dict[str, Any]:
+    """Create a recoverable fresh baseline for only the project subsystem."""
+
+    paths, config, defaults, store = context()
+    if store.bootstrap_state()["state"] != "completed":
+        raise RuntimeError("Complete and approve bootstrap before rebuilding projects.")
+    with single_instance(paths.locks / "pipeline.lock"):
+        return rebuild_project_subsystem(
+            paths,
+            vault_root(),
+            store,
+            config=config,
+            defaults=defaults,
+            collection_names=collection_names,
+            confirm=confirm,
         )
-        return result
 
 
 def refresh_project(identifier: str) -> dict[str, Any]:
@@ -624,8 +1085,10 @@ def refresh_project(identifier: str) -> dict[str, Any]:
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
             ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
+            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
             classification_overrides=config.get("project_classification_overrides", {}),
         )
+        publish_project_catalog(vault_root(), project_result["projects"])
         matches = [
             item
             for item in project_result["projects"]
@@ -655,10 +1118,10 @@ def refresh_project(identifier: str) -> dict[str, Any]:
 
 def scheduled() -> dict[str, Any]:
     try:
-        daily_result = incremental("daily")
+        daily_result = incremental("daily", trigger="scheduled")
         result = {"daily": daily_result}
         if datetime.now().strftime("%A") == "Saturday":
-            result["weekly"] = incremental("weekly")
+            result["weekly"] = incremental("weekly", trigger="scheduled")
         return result
     except Exception as error:
         notify(
@@ -705,7 +1168,7 @@ def approve_bootstrap() -> dict[str, Any]:
         task_name=config["task_name"],
         script_path=scheduled_script,
     )
-    task_canary = run_canary(scheduled_script)
+    run_canary(scheduled_script)
     health = health_report(paths)
     required = {
         "vault_exists": health["vault_exists"],

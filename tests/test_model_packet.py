@@ -143,6 +143,16 @@ def test_model_output_may_reference_only_top_level_packet_evidence() -> None:
             evidence_ids={"ev-valid"},
             schema_name="model-output.schema.json",
         )
+    with pytest.raises(ModelRunError, match="unknown evidence"):
+        assert_known_evidence_references(
+            {
+                "project_id": "project-one",
+                "summary": "Detailed project history.",
+                "evidence_refs": ["ev-valid", "ev-invented"],
+            },
+            evidence_ids={"ev-valid"},
+            schema_name="project-history-output.schema.json",
+        )
 
 
 def test_oversized_evidence_is_bounded_instead_of_blocking_queue() -> None:

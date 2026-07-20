@@ -71,11 +71,16 @@ def _clean_project_ids(value: Any, target_ids: set[str]) -> Any:
     if isinstance(value, dict):
         cleaned: dict[str, Any] = {}
         for key, item in value.items():
-            if key in {"project_id", "canonical_project_id"} and str(item) in target_ids:
-                continue
-            if key in {"project_ids", "project_ids_override", "child_project_ids"} and isinstance(
-                item, list
+            if (
+                key in {"project_id", "canonical_project_id"}
+                and str(item) in target_ids
             ):
+                continue
+            if key in {
+                "project_ids",
+                "project_ids_override",
+                "child_project_ids",
+            } and isinstance(item, list):
                 cleaned[key] = [entry for entry in item if str(entry) not in target_ids]
             else:
                 cleaned[key] = _clean_project_ids(item, target_ids)
@@ -132,7 +137,9 @@ def _is_target_observation(
         text, target_names=target_names, protected_names=protected_names
     ):
         return False
-    protected_context = any(name.casefold() in text.casefold() for name in protected_names)
+    protected_context = any(
+        name.casefold() in text.casefold() for name in protected_names
+    )
     relationship_only = any(
         term in text.casefold()
         for term in ("relationship", "boundaries", "same project", "separate project")
@@ -155,7 +162,9 @@ def _remove_observation_lines(text: str, observation_ids: set[str]) -> str:
             current_section = None
             output.append(line)
             continue
-        if current_section and any(f"^{observation_id}" in line for observation_id in observation_ids):
+        if current_section and any(
+            f"^{observation_id}" in line for observation_id in observation_ids
+        ):
             continue
         output.append(line)
     return "".join(output)
@@ -236,14 +245,18 @@ def _runtime_artifact_cleanup(
         removed += int(_safe_rmtree(graph_root / "cross-project", paths.root))
 
     tokens = sorted(target_ids | target_evidence_ids)
-    pattern = re.compile("|".join(re.escape(token) for token in tokens)) if tokens else None
+    pattern = (
+        re.compile("|".join(re.escape(token) for token in tokens)) if tokens else None
+    )
     for stage in paths.staging.iterdir() if paths.staging.exists() else []:
         if not stage.is_dir() or pattern is None:
             continue
         matched = False
         for candidate in stage.rglob("*.json"):
             try:
-                if pattern.search(candidate.read_text(encoding="utf-8", errors="ignore")):
+                if pattern.search(
+                    candidate.read_text(encoding="utf-8", errors="ignore")
+                ):
                     matched = True
                     break
             except OSError:
@@ -313,7 +326,9 @@ def forget_projects(
     target_names = [str(item.get("name") or item["id"]) for item in targets]
     protected_names = [str(item.get("name") or item["id"]) for item in protected]
     all_evidence = store.evidence()
-    target_evidence = [item for item in all_evidence if item.get("project_id") in target_ids]
+    target_evidence = [
+        item for item in all_evidence if item.get("project_id") in target_ids
+    ]
     target_evidence_ids = {str(item["id"]) for item in target_evidence}
     shared_evidence = [
         item
@@ -330,12 +345,22 @@ def forget_projects(
         item
         for item in observations
         if (
-            target_evidence_ids & set(item.get("evidence_refs") or [])
-            or target_ids
-            & {
-                str(project_id)
-                for project_id in (item.get("payload") or {}).get("project_ids", [])
-            }
+            (
+                target_evidence_ids & set(item.get("evidence_refs") or [])
+                or target_ids
+                & {
+                    str(project_id)
+                    for project_id in (item.get("payload") or {}).get("project_ids", [])
+                }
+            )
+            or (
+                str(item.get("kind") or "") == "clarification"
+                and _mentions_target(
+                    _observation_text(item),
+                    target_names=target_names,
+                    protected_names=protected_names,
+                )
+            )
         )
         and _is_target_observation(
             item, target_names=target_names, protected_names=protected_names
@@ -382,13 +407,17 @@ def forget_projects(
         for path in vault.rglob("*.md")
         if not any(part in {".git", ".agents", "Protocol"} for part in path.parts)
     ]
-    affected_files = set(review_files) | {path for path in target_notes | voice_files if path.exists()}
+    affected_files = set(review_files) | {
+        path for path in target_notes | voice_files if path.exists()
+    }
     for path in private_markdown:
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if any(f"^{observation_id}" in text for observation_id in target_observation_ids):
+        if any(
+            f"^{observation_id}" in text for observation_id in target_observation_ids
+        ):
             affected_files.add(path)
         relative_parts = path.relative_to(vault).parts
         if relative_parts[:3] == ("System", "Audits", "Bootstrap"):
@@ -422,7 +451,10 @@ def forget_projects(
                 continue
             text = path.read_text(encoding="utf-8")
             updated = _remove_observation_lines(text, target_observation_ids)
-            if path == vault / "System" / "Audits" / "Bootstrap" / "ProjectInventory.md":
+            if (
+                path
+                == vault / "System" / "Audits" / "Bootstrap" / "ProjectInventory.md"
+            ):
                 updated = _remove_inventory_blocks(
                     updated,
                     target_names=target_names,
@@ -498,7 +530,9 @@ def forget_projects(
                     )
                     if project_id
                 }
-                if not (item_refs & target_evidence_ids or item_payload_ids & target_ids):
+                if not (
+                    item_refs & target_evidence_ids or item_payload_ids & target_ids
+                ):
                     continue
                 payload = _clean_project_ids(item.get("payload") or {}, target_ids)
                 observed_target_ids = set(item_payload_ids & target_ids)
@@ -531,7 +565,9 @@ def forget_projects(
                     ),
                 )
             for observation_id in target_observation_ids:
-                connection.execute("DELETE FROM observations WHERE id=?", (observation_id,))
+                connection.execute(
+                    "DELETE FROM observations WHERE id=?", (observation_id,)
+                )
             for item in patterns:
                 if item["pattern_key"] in target_pattern_keys:
                     connection.execute(
@@ -611,7 +647,9 @@ def forget_projects(
             for evidence_id in delete_evidence_ids:
                 connection.execute("DELETE FROM evidence WHERE id=?", (evidence_id,))
             for project_id in target_ids:
-                connection.execute("DELETE FROM project_presence WHERE project_id=?", (project_id,))
+                connection.execute(
+                    "DELETE FROM project_presence WHERE project_id=?", (project_id,)
+                )
                 connection.execute("DELETE FROM projects WHERE id=?", (project_id,))
             path_tokens = [
                 str(item.get("local_path") or "").casefold()
@@ -620,7 +658,9 @@ def forget_projects(
             ]
             for table in ("checkpoints", "collection_receipts"):
                 key_column = "source_key"
-                for row in connection.execute(f"SELECT {key_column} FROM {table}").fetchall():
+                for row in connection.execute(
+                    f"SELECT {key_column} FROM {table}"
+                ).fetchall():
                     key = str(row[key_column])
                     folded = key.casefold()
                     if any(project_id in key for project_id in target_ids) or any(

@@ -107,3 +107,31 @@ def test_project_classification_override_persists_explicit_user_answer(
     assert updated["projects"][0]["classification_reasons"] == [
         "Explicit user confirmation."
     ]
+
+
+def test_remote_migration_keeps_project_identity_at_same_source_directory(
+    tmp_path: Path,
+) -> None:
+    projects_root = tmp_path / "Projects"
+    repo = _repo(projects_root / "First Party Project With Existing Brain")
+    store = StateStore(tmp_path / "state.sqlite")
+    initial = collect_projects(store, projects_root=projects_root, defaults=DEFAULTS)
+    project_id = initial["projects"][0]["id"]
+    subprocess.run(["git", "remote", "remove", "origin"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/The-Angel-Way/angel-ai-mvp.git",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    migrated = collect_projects(store, projects_root=projects_root, defaults=DEFAULTS)
+
+    assert migrated["projects"][0]["id"] == project_id
+    assert migrated["projects"][0]["classification"] == "review"
+    assert len(store.projects()) == 1

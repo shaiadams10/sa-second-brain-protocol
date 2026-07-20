@@ -6,29 +6,50 @@ import sys
 from pathlib import Path
 
 from .basic_memory_integration import reindex
-from .config import RuntimePaths, dashboard_runtime, load_defaults, load_runtime_config, setup_runtime, vault_root
+from .config import (
+    RuntimePaths,
+    dashboard_runtime,
+    load_defaults,
+    load_runtime_config,
+    setup_runtime,
+    vault_root,
+)
 from .dashboard import build_dashboard, install_dashboard_shortcut, open_dashboard
 from .dashboard_server import serve_dashboard
 from .gitops import sync_protocol_draft
 from .health import report as health_report, write_report
 from .installer import install_standalone_codex, login_dedicated_account
-from .model_runner import ModelRole, build_evidence_packet, canary, run_model, usage_from_receipt
+from .model_runner import ModelRole, canary, run_model, usage_from_receipt
 from .orchestrator import (
+    analyze_project_sessions,
     approve_bootstrap,
     bootstrap,
     decide_review,
     decide_review_group,
     incremental,
+    reconcile_project_sessions,
     refresh_bootstrap_evidence,
     refresh_project,
+    rebuild_projects,
     scheduled,
+    sync_project_index,
 )
 from .profile import QUESTIONS, answer_interview, create_interview, interview_status
 from .project_forgetting import forget_projects
 from .publisher import write_bootstrap_review_artifacts, write_review_artifacts
-from .question_actions import attribute_question
+from .question_actions import (
+    attribute_question,
+    dismiss_question,
+    undo_last_question_dismissal,
+)
 from .review import find_review_group, review_summary
-from .service import build_context, recent_activity, search
+from .service import (
+    configure_session_project_link,
+    latest_sessions,
+    remember_explicit_skill,
+    search,
+    session_index_summary,
+)
 from .state import StateStore
 
 
@@ -44,13 +65,17 @@ def _common() -> tuple[RuntimePaths, dict, dict, StateStore]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="sb", description="Evidence-backed Personal Second Brain Protocol")
+    parser = argparse.ArgumentParser(
+        prog="sb", description="Evidence-backed Personal Second Brain Protocol"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("setup")
     auth = sub.add_parser("auth")
     auth.add_subparsers(dest="action", required=True).add_parser("login")
     boot = sub.add_parser("bootstrap")
-    boot.add_argument("--linkedin-export", "--linkedin-pdf", dest="linkedin_export", type=Path)
+    boot.add_argument(
+        "--linkedin-export", "--linkedin-pdf", dest="linkedin_export", type=Path
+    )
     boot.add_argument("--approve", action="store_true")
     boot.add_argument("--refresh-evidence", action="store_true")
     sub.add_parser("daily")
@@ -58,6 +83,10 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("scheduled")
     refresh = sub.add_parser("refresh-project")
     refresh.add_argument("project")
+    sub.add_parser("sync-project-index")
+    rebuild = sub.add_parser("rebuild-projects")
+    rebuild.add_argument("--collection", action="append", default=[])
+    rebuild.add_argument("--confirm", action="store_true")
     forget = sub.add_parser("forget-project")
     forget.add_argument("project")
     forget.add_argument("--include", action="append", default=[])
@@ -75,6 +104,9 @@ def _parser() -> argparse.ArgumentParser:
     reject = review_sub.add_parser("reject")
     reject.add_argument("id")
     reject.add_argument("--reason", required=True)
+    dismiss = review_sub.add_parser("dismiss")
+    dismiss.add_argument("id")
+    review_sub.add_parser("undo-dismiss")
     resolve = review_sub.add_parser("resolve")
     resolve.add_argument("id")
     resolve.add_argument("--answer", required=True)
@@ -100,6 +132,28 @@ def _parser() -> argparse.ArgumentParser:
     find = sub.add_parser("search")
     find.add_argument("query")
     find.add_argument("--limit", type=int, default=10)
+    sessions = sub.add_parser("sessions")
+    sessions_sub = sessions.add_subparsers(dest="action")
+    sessions_latest = sessions_sub.add_parser("latest")
+    sessions_latest.add_argument("--surface", choices=("codex", "antigravity"))
+    sessions_latest.add_argument("--project")
+    sessions_latest.add_argument("--limit", type=int, default=5)
+    sessions_sub.add_parser("index")
+    sessions_analyze = sessions_sub.add_parser("analyze")
+    sessions_analyze.add_argument("--force", action="store_true")
+    sessions_sub.add_parser("reconcile")
+    sessions_link = sessions_sub.add_parser("link")
+    sessions_link.add_argument("surface", choices=("codex", "antigravity"))
+    sessions_link.add_argument("session_id")
+    sessions_link.add_argument("project")
+    sessions_link.add_argument("--confirm", action="store_true")
+    sessions.set_defaults(action="latest")
+    remember_skill = sub.add_parser("remember-skill")
+    remember_skill.add_argument("skill_id")
+    remember_skill.add_argument("name")
+    remember_skill.add_argument("claim")
+    remember_skill.add_argument("--evidence", action="append", default=[])
+    remember_skill.add_argument("--successful-implementation", action="store_true")
     writer = sub.add_parser("write-as-me")
     writer.add_argument("request")
     career = sub.add_parser("career")
@@ -109,7 +163,9 @@ def _parser() -> argparse.ArgumentParser:
     models = sub.add_parser("models")
     models.add_subparsers(dest="action", required=True).add_parser("check")
     protocol = sub.add_parser("protocol")
-    protocol_publish = protocol.add_subparsers(dest="action", required=True).add_parser("publish")
+    protocol_publish = protocol.add_subparsers(dest="action", required=True).add_parser(
+        "publish"
+    )
     protocol_publish.add_argument("--if-changed", action="store_true")
     dashboard = sub.add_parser("dashboard")
     dashboard_sub = dashboard.add_subparsers(dest="action")
@@ -157,7 +213,10 @@ def _draft(kind: str, request: str) -> dict:
             }
         )
     if not evidence:
-        return {"content": "No verified canonical context was found for this request.", "evidence_refs": []}
+        return {
+            "content": "No verified canonical context was found for this request.",
+            "evidence_refs": [],
+        }
     run_id = store.start_run(kind, defaults["models"]["weekly"]["name"], "medium")
     try:
         result, receipt = run_model(
@@ -178,7 +237,9 @@ def _draft(kind: str, request: str) -> dict:
         )
         return result
     except Exception as error:
-        store.finish_run(run_id, "failed", evidence_count=len(evidence), error=str(error))
+        store.finish_run(
+            run_id, "failed", evidence_count=len(evidence), error=str(error)
+        )
         raise
 
 
@@ -188,13 +249,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "setup":
             paths = setup_runtime()
             executable = install_standalone_codex(paths)
-            _json({"runtime": str(paths.root), "codex": str(executable), "next": "sb auth login"})
+            _json(
+                {
+                    "runtime": str(paths.root),
+                    "codex": str(executable),
+                    "next": "sb auth login",
+                }
+            )
         elif args.command == "auth":
             paths = setup_runtime()
             return login_dedicated_account(paths)
         elif args.command == "bootstrap":
             if args.approve and args.refresh_evidence:
-                raise RuntimeError("Choose either --approve or --refresh-evidence, not both.")
+                raise RuntimeError(
+                    "Choose either --approve or --refresh-evidence, not both."
+                )
             if args.approve:
                 _json(approve_bootstrap())
             elif args.refresh_evidence:
@@ -207,6 +276,15 @@ def main(argv: list[str] | None = None) -> int:
             _json(scheduled())
         elif args.command == "refresh-project":
             _json(refresh_project(args.project))
+        elif args.command == "sync-project-index":
+            _json(sync_project_index())
+        elif args.command == "rebuild-projects":
+            _json(
+                rebuild_projects(
+                    collection_names=args.collection or None,
+                    confirm=args.confirm,
+                )
+            )
         elif args.command == "forget-project":
             paths, _config, _defaults, store = _common()
             _json(
@@ -219,11 +297,40 @@ def main(argv: list[str] | None = None) -> int:
                     confirm=args.confirm,
                 )
             )
+        elif args.command == "sessions" and args.action == "link":
+            paths, _config, _defaults, store = _common()
+            result = configure_session_project_link(
+                paths,
+                store,
+                surface=args.surface,
+                session_id=args.session_id,
+                project=args.project,
+                confirm=args.confirm,
+            )
+            if args.confirm:
+                result["reconciliation"] = reconcile_project_sessions()
+            _json(result)
+        elif args.command == "remember-skill":
+            paths, _config, _defaults, store = _common()
+            result = remember_explicit_skill(
+                vault_root(),
+                store,
+                skill_id=args.skill_id,
+                name=args.name,
+                claim=args.claim,
+                supporting_evidence=args.evidence,
+                successful_implementation=args.successful_implementation,
+            )
+            reindex(paths, vault_root())
+            build_dashboard(paths, vault_root())
+            _json(result)
         elif args.command == "review":
             paths, _config, _defaults, store = _common()
             pending = store.observations("pending")
             if args.action in {None, "list"}:
-                _json(pending if getattr(args, "raw", False) else review_summary(pending))
+                _json(
+                    pending if getattr(args, "raw", False) else review_summary(pending)
+                )
             elif args.action == "digest":
                 if store.bootstrap_state()["state"] == "awaiting_review":
                     _json(write_bootstrap_review_artifacts(vault_root(), store))
@@ -246,11 +353,17 @@ def main(argv: list[str] | None = None) -> int:
                 if group["mode"] != "answer":
                     raise RuntimeError("Only clarification groups accept answers.")
                 if args.item < 1 or args.item > group["count"]:
-                    raise IndexError(f"Question number must be between 1 and {group['count']}")
+                    raise IndexError(
+                        f"Question number must be between 1 and {group['count']}"
+                    )
                 observation_id = group["items"][args.item - 1]["id"]
                 _json(decide_review(observation_id, "resolved", reason=args.answer))
             elif args.action == "attribute-question":
                 _json(attribute_question(vault_root(), store, args.id, args.project_id))
+            elif args.action == "dismiss":
+                _json(dismiss_question(vault_root(), store, args.id))
+            elif args.action == "undo-dismiss":
+                _json(undo_last_question_dismissal(vault_root(), store))
             elif args.action == "approve-group":
                 _json(decide_review_group(args.id, "approved"))
             elif args.action == "reject-group":
@@ -265,15 +378,40 @@ def main(argv: list[str] | None = None) -> int:
             elif args.action == "next":
                 status_path = paths.root / "interview.json"
                 data = json.loads(status_path.read_text(encoding="utf-8"))
-                unanswered = [(key, question) for key, question in QUESTIONS if key not in data.get("answers", {})]
+                unanswered = [
+                    (key, question)
+                    for key, question in QUESTIONS
+                    if key not in data.get("answers", {})
+                ]
                 _json({"next": unanswered[0] if unanswered else None})
             else:
-                complete = answer_interview(store, paths.root, args.question_id, args.answer)
+                complete = answer_interview(
+                    store, paths.root, args.question_id, args.answer
+                )
                 create_interview(vault_root(), paths.root)
-                _json({"question": args.question_id, "saved": True, "complete": complete})
+                _json(
+                    {"question": args.question_id, "saved": True, "complete": complete}
+                )
         elif args.command == "search":
             paths, *_ = _common()
             _json(search(paths, vault_root(), args.query, limit=args.limit))
+        elif args.command == "sessions":
+            _paths, _config, _defaults, store = _common()
+            if args.action == "reconcile":
+                _json(reconcile_project_sessions())
+            elif args.action == "analyze":
+                _json(analyze_project_sessions(force=args.force))
+            elif args.action == "index":
+                _json(session_index_summary(store))
+            else:
+                _json(
+                    latest_sessions(
+                        store,
+                        surface=args.surface,
+                        project=args.project,
+                        limit=args.limit,
+                    )
+                )
         elif args.command in {"write-as-me", "career"}:
             _json(_draft(args.command, args.request))
         elif args.command == "reindex":
@@ -289,7 +427,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "protocol":
             paths, config, _defaults, store = _common()
             if store.bootstrap_state()["state"] != "completed":
-                raise RuntimeError("Protocol publishing is gated until bootstrap approval.")
+                raise RuntimeError(
+                    "Protocol publishing is gated until bootstrap approval."
+                )
             _json(
                 sync_protocol_draft(
                     vault_root(),

@@ -19,9 +19,14 @@ The user should never need to remember a command, skill name, workflow name, or 
 | Write a message, post, biography, or explanation in my voice | Write as me | Use verified voice and identity context; never send automatically. |
 | What do you know about me, a skill, or a project? | Search | Answer from canonical notes with provenance and acknowledge gaps. |
 | What changed recently or what did I work on? | Search and recent activity | Read existing daily, weekly, and project knowledge without starting ingestion. |
+| What was my latest Codex or Antigravity session or last message? | Recent sessions | Query the bounded local session view by surface, project, timestamp, and user role without publishing raw conversations. |
+| Reconcile agent sessions with the project index, including older moved folders | Project-session reconciliation | Read bounded session metadata first, match only one known leaf project by current path, historical path, or unique Git identity, ingest only matched sessions, and make no model call or publication. |
+| This Codex or Antigravity session belongs to a named project | Session attribution correction | Preview one exact session-to-project change, require confirmation, persist the stable project mapping in machine-local configuration, and reconcile without using conversational keyword guesses. |
+| Analyze the accepted historical sessions project by project | Project-session analysis | Send one known project's indexed digests per bounded model packet, publish only that project's dossier and audit note, and discard personal-profile, skill, voice, and question output. |
 | Update the brain with today’s work | Daily | Run the incremental daily pipeline. |
 | Synthesize or update this week | Weekly | Run weekly synthesis after the daily evidence is current. |
 | Refresh what we know about a named project | Project refresh | Resolve the known project and scan it read-only. |
+| Refresh, repair, or reconcile the project index | Project catalog sync | Re-scan configured project roots, rebuild the generated project index from scanner truth, and refresh local search without a model call or Git publication. |
 | Forget or remove everything about a named project | Project forgetting | Preview exact matches, protect similarly named projects, back up active state, remove project-specific canonical/state/derived knowledge, and ignore the source path so it is not re-ingested. Source repositories remain untouched. |
 | Show or open the dashboard | Dashboard | Start or reuse the private loopback dashboard and open it. No knowledge changes occur without an explicit card action. |
 | What needs my approval? | Review | Start with the short grouped review dashboard, never the machine ledger. |

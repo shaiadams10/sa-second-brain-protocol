@@ -189,23 +189,38 @@ def activity_markdown(
             for project_id in item.get("payload", {}).get("project_ids", [])
         }
     )
-    lines = ["### Deterministic activity ledger", ""]
+    attributed_sessions = [
+        item for item in sessions if item.get("payload", {}).get("project_ids")
+    ]
+    source_counts = Counter(
+        str(item.get("payload", {}).get("source") or "unknown").casefold()
+        for item in sessions
+    )
+    lines = ["### Coverage details", ""]
     lines.append(
-        f"- Project deltas: {len(deltas)}"
-        + (f" across {', '.join(project_names[:12])}" if project_names else "")
+        f"- Projects with detected changes: {len(deltas)}"
+        + (f" - {', '.join(project_names[:12])}" if project_names else "")
     )
     if change_counts:
         lines.append(
-            "- Change types: "
+            "- Change signals: "
             + ", ".join(f"{name} ({count})" for name, count in sorted(change_counts.items()))
         )
+    source_detail = ", ".join(
+        f"{name.title()} {count}"
+        for name, count in sorted(source_counts.items())
+        if count
+    )
+    unattributed = len(sessions) - len(attributed_sessions)
     lines.append(
-        f"- Agent sessions evaluated: {len(sessions)}"
-        + (f" across {len(session_projects)} attributed projects" if session_projects else "")
+        f"- Agent sessions reviewed: {len(sessions)} total - "
+        f"{len(attributed_sessions)} linked to {len(session_projects)} projects; "
+        f"{unattributed} not yet linked"
+        + (f"; {source_detail}" if source_detail else "")
     )
     stats = pattern_stats or {}
     lines.append(
-        "- Recurring patterns: "
+        "- Knowledge signals: "
         f"{stats.get('tracking', 0)} tracking, "
         f"{stats.get('promoted', 0)} promoted, "
         f"{stats.get('pending', 0)} awaiting review"

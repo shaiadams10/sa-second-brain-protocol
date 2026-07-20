@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from .markdown import slugify
-
-
 PRUNE_DIRS = {
     ".git",
     ".hg",
@@ -427,11 +424,17 @@ def _classification(remote: str, authors: list[dict[str, str]], defaults: dict[s
         reasons.append(f"confirmed remote owner: {owner}")
         return "first-party", reasons
 
+    matching_email = [item for item in authors if item["email"].lower() in confirmed_emails]
+    if owner and owner not in confirmed_owners and matching_email:
+        reasons.append(
+            f"unconfirmed organization remote with confirmed user authorship: {owner}"
+        )
+        return "review", reasons
+
     if owner and owner not in confirmed_owners:
         reasons.append(f"third-party remote owner: {owner}")
         return "third-party", reasons
 
-    matching_email = [item for item in authors if item["email"].lower() in confirmed_emails]
     if matching_email:
         reasons.append("confirmed author email in repository without third-party remote")
         return "first-party", reasons
@@ -475,6 +478,7 @@ class ProjectScanner:
     projects_root: Path
     defaults: dict[str, Any]
     ignored_paths: tuple[Path, ...] = ()
+    collection_paths: tuple[Path, ...] = ()
 
     def _is_ignored(self, path: Path) -> bool:
         try:
@@ -488,6 +492,29 @@ class ProjectScanner:
             except (OSError, ValueError):
                 continue
         return False
+
+    def _configured_collections(self) -> list[Path]:
+        """Return explicit organizational folders inside the configured root."""
+
+        result: list[Path] = []
+        root = self.projects_root.resolve()
+        for configured in self.collection_paths:
+            candidate = configured
+            if not candidate.is_absolute():
+                candidate = root / candidate
+            try:
+                resolved = candidate.resolve()
+                resolved.relative_to(root)
+            except (OSError, ValueError):
+                continue
+            if (
+                resolved != root
+                and resolved.is_dir()
+                and not self._is_ignored(resolved)
+                and resolved not in result
+            ):
+                result.append(resolved)
+        return sorted(result, key=lambda item: item.as_posix().casefold())
 
     def scan_repo(self, repo: Path) -> dict[str, Any]:
         tracked = _tracked_files(repo)
@@ -582,11 +609,20 @@ class ProjectScanner:
         }
 
     def scan_all(self) -> list[dict[str, Any]]:
+        collection_roots = self._configured_collections()
+
+        def inside_collection(path: Path) -> bool:
+            resolved = path.resolve()
+            return any(
+                resolved == collection or resolved.is_relative_to(collection)
+                for collection in collection_roots
+            )
+
         git_roots = discover_git_roots(self.projects_root)
         git_projects = [
             self.scan_repo(repo)
             for repo in git_roots
-            if not self._is_ignored(repo)
+            if not self._is_ignored(repo) and repo.resolve() not in collection_roots
         ]
         seen: dict[str, dict[str, Any]] = {}
         projects: list[dict[str, Any]] = []
@@ -610,11 +646,66 @@ class ProjectScanner:
         ]
         projects.extend(filesystem_projects)
         discovered_projects = git_projects + filesystem_projects
+
+        # Only explicit organizational folders are collections. This avoids
+        # treating a legitimate monorepo as a zero-count container merely
+        # because it contains nested code. Direct children of a configured
+        # collection are independently inventoried; the container itself is
+        # always excluded from project counts.
+        for collection in collection_roots:
+            for child in sorted(
+                (item for item in collection.iterdir() if item.is_dir()),
+                key=lambda item: item.name.casefold(),
+            ):
+                if (
+                    self._is_ignored(child)
+                    or child.name in PRUNE_DIRS
+                    or child.name.startswith(".worktree")
+                    or (child / "pyvenv.cfg").is_file()
+                ):
+                    continue
+                if any(
+                    Path(project["local_path"]).resolve() == child.resolve()
+                    for project in discovered_projects
+                ):
+                    continue
+                nested = []
+                for project in discovered_projects:
+                    try:
+                        relative = Path(project["local_path"]).resolve().relative_to(
+                            child.resolve()
+                        )
+                    except ValueError:
+                        continue
+                    if relative.parts:
+                        nested.append(project)
+                project = self.scan_non_git(child, child_projects=nested)
+                projects.append(project)
+                discovered_projects.append(project)
+
+            children = []
+            for project in discovered_projects:
+                try:
+                    relative = Path(project["local_path"]).resolve().relative_to(
+                        collection
+                    )
+                except ValueError:
+                    continue
+                if relative.parts:
+                    children.append(project)
+            projects = [
+                project
+                for project in projects
+                if Path(project["local_path"]).resolve() != collection
+            ]
+            projects.append(self.scan_non_git(collection, child_projects=children))
+            discovered_projects = list(projects)
+
         if self.projects_root.exists():
             for child in sorted((item for item in self.projects_root.iterdir() if item.is_dir()), key=lambda item: item.name.casefold()):
                 if self._is_ignored(child):
                     continue
-                if child.name.casefold() in GENERIC_CONTAINER_NAMES:
+                if child.resolve() in collection_roots or inside_collection(child):
                     continue
                 if any(
                     Path(project["local_path"]).resolve() == child.resolve()

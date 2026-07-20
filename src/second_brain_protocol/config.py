@@ -57,7 +57,9 @@ class RuntimePaths:
 
 
 def load_defaults() -> dict[str, Any]:
-    return json.loads((protocol_root() / "config" / "defaults.json").read_text(encoding="utf-8"))
+    return json.loads(
+        (protocol_root() / "config" / "defaults.json").read_text(encoding="utf-8")
+    )
 
 
 def default_runtime_config(paths: RuntimePaths | None = None) -> dict[str, Any]:
@@ -67,13 +69,19 @@ def default_runtime_config(paths: RuntimePaths | None = None) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "vault_root": str(vault_root()),
-        "projects_root": str(Path(os.environ.get("SB_PROJECTS_ROOT", str(projects_candidate)))),
+        "projects_root": str(
+            Path(os.environ.get("SB_PROJECTS_ROOT", str(projects_candidate)))
+        ),
+        "project_collection_paths": [],
         "ignored_project_paths": [],
         "project_classification_overrides": {},
+        "session_project_overrides": {},
         "codex_sessions": str(home / ".codex" / "sessions"),
         "codex_archived_sessions": str(home / ".codex" / "archived_sessions"),
         "antigravity_brain": str(home / ".gemini" / "antigravity" / "brain"),
-        "antigravity_conversations": str(home / ".gemini" / "antigravity" / "conversations"),
+        "antigravity_conversations": str(
+            home / ".gemini" / "antigravity" / "conversations"
+        ),
         "runtime_root": str(paths.root),
         "automation_account_label": "dedicated-second-brain-chatgpt",
         "git_name": "YOUR_NAME",
@@ -147,7 +155,9 @@ inherit = "none"
 '''
 
 
-def setup_runtime(paths: RuntimePaths | None = None, *, overwrite_config: bool = False) -> RuntimePaths:
+def setup_runtime(
+    paths: RuntimePaths | None = None, *, overwrite_config: bool = False
+) -> RuntimePaths:
     paths = paths or RuntimePaths.from_root()
     for directory in (
         paths.root,
@@ -162,15 +172,25 @@ def setup_runtime(paths: RuntimePaths | None = None, *, overwrite_config: bool =
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
-    config = load_runtime_config(paths) if paths.config.exists() else default_runtime_config(paths)
+    config = (
+        load_runtime_config(paths)
+        if paths.config.exists()
+        else default_runtime_config(paths)
+    )
     if overwrite_config or not paths.config.exists():
         paths.config.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
     codex_config = paths.codex_home / "config.toml"
     config_text = _codex_config(config)
-    for skill in sorted((paths.codex_home / "skills").rglob("SKILL.md")) if (paths.codex_home / "skills").exists() else []:
+    for skill in (
+        sorted((paths.codex_home / "skills").rglob("SKILL.md"))
+        if (paths.codex_home / "skills").exists()
+        else []
+    ):
         escaped_skill = str(skill).replace("\\", "\\\\")
-        config_text += f'\n[[skills.config]]\npath = "{escaped_skill}"\nenabled = false\n'
+        config_text += (
+            f'\n[[skills.config]]\npath = "{escaped_skill}"\nenabled = false\n'
+        )
     codex_config.write_text(config_text, encoding="utf-8")
     (paths.codex_home / "AGENTS.md").write_text(
         "# Evidence-only automation\n\n"
@@ -208,7 +228,13 @@ def harden_runtime_acl(paths: RuntimePaths) -> None:
     if not username:
         return
     subprocess.run(
-        ["icacls", str(paths.root), "/inheritance:r", "/grant:r", f"{username}:(OI)(CI)F"],
+        [
+            "icacls",
+            str(paths.root),
+            "/inheritance:r",
+            "/grant:r",
+            f"{username}:(OI)(CI)F",
+        ],
         capture_output=True,
         text=True,
         check=False,

@@ -131,11 +131,22 @@ def assert_usable_output(result: dict[str, Any], *, schema_name: str) -> None:
         )
         if not str(result.get("summary") or "").strip() and not any(collections):
             raise ModelRunError("Model returned an empty synthesis")
+    elif schema_name == "project-history-output.schema.json":
+        if not str(result.get("summary") or "").strip():
+            raise ModelRunError("Model returned an empty project history")
 
 
 def assert_known_evidence_references(
     result: dict[str, Any], *, evidence_ids: set[str], schema_name: str
 ) -> None:
+    if schema_name == "project-history-output.schema.json":
+        used = {str(ref) for ref in result.get("evidence_refs", [])}
+        unknown = used - evidence_ids
+        if unknown:
+            raise ModelRunError(
+                f"Model output referenced unknown evidence: {sorted(unknown)}"
+            )
+        return
     if schema_name != "model-output.schema.json":
         return
     used: set[str] = set()

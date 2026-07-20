@@ -8,6 +8,7 @@ from second_brain_protocol.scanner import (
     discover_filesystem_roots,
     discover_git_roots,
 )
+from second_brain_protocol.project_catalog import catalog_groups
 
 
 DEFAULTS = {
@@ -47,7 +48,9 @@ def test_discovery_and_authorship_exclusion(tmp_path: Path) -> None:
         remote="https://github.com/langgenius/dify.git",
     )
     assert discover_git_roots(projects) == sorted([first, dify], key=lambda item: item.as_posix().lower())
-    scanned = ProjectScanner(projects, DEFAULTS).scan_all()
+    scanned = ProjectScanner(
+        projects, DEFAULTS, collection_paths=(projects / "Playground",)
+    ).scan_all()
     by_name = {item["name"]: item for item in scanned}
     assert by_name["Portfolio"]["classification"] == "first-party"
     assert by_name["dify"]["classification"] == "third-party"
@@ -120,20 +123,87 @@ def test_nested_non_git_projects_are_discovered_inside_collection(tmp_path: Path
     roots = discover_filesystem_roots(projects)
     assert roots == [converter, tts]
 
-    scanned = ProjectScanner(projects, DEFAULTS).scan_all()
+    scanned = ProjectScanner(
+        projects, DEFAULTS, collection_paths=(group,)
+    ).scan_all()
     by_name = {item["name"]: item for item in scanned}
     assert by_name["Video & Media Tools"]["classification"] == "collection"
-    assert len(by_name["Video & Media Tools"]["child_project_ids"]) == 2
+    assert len(by_name["Video & Media Tools"]["child_project_ids"]) == 3
     assert by_name["HiggsAudioV3"]["classification"] == "review"
+    assert by_name["Loose Files"]["classification"] == "review"
     assert "Python" in by_name["HiggsAudioV3"]["tech_stack"]
 
 
-def test_generic_source_directory_is_never_promoted_as_a_project(tmp_path: Path) -> None:
+def test_every_top_level_folder_is_represented_without_exploding_internal_folders(
+    tmp_path: Path,
+) -> None:
     projects = tmp_path / "Projects"
     source = projects / "src"
     source.mkdir(parents=True)
     (source / "package.json").write_text("{}\n", encoding="utf-8")
     (source / "index.ts").write_text("export {}\n", encoding="utf-8")
+    internal = source / "components"
+    internal.mkdir()
+    (internal / "README.md").write_text("# Internal components\n", encoding="utf-8")
 
     assert source not in discover_filesystem_roots(projects)
-    assert "src" not in {item["name"].casefold() for item in ProjectScanner(projects, DEFAULTS).scan_all()}
+    names = {item["name"].casefold() for item in ProjectScanner(projects, DEFAULTS).scan_all()}
+    assert "src" in names
+    assert "components" not in names
+
+
+def test_collection_children_do_not_need_language_or_manifest_signatures(
+    tmp_path: Path,
+) -> None:
+    projects = tmp_path / "Projects"
+    collection = projects / "Utilities & Automation"
+    homedrop = collection / "HomeDrop"
+    homedrop.mkdir(parents=True)
+    (homedrop / "README.md").write_text("# HomeDrop\n", encoding="utf-8")
+    (homedrop / "setup.ps1").write_text("Write-Output 'ready'\n", encoding="utf-8")
+
+    scanned = ProjectScanner(
+        projects, DEFAULTS, collection_paths=(collection,)
+    ).scan_all()
+    by_name = {item["name"]: item for item in scanned}
+
+    assert by_name["Utilities & Automation"]["classification"] == "collection"
+    assert by_name["HomeDrop"]["classification"] == "review"
+    assert by_name["HomeDrop"]["id"] in by_name["Utilities & Automation"]["child_project_ids"]
+    actual, collections, _folders = catalog_groups(scanned)
+    assert {item["name"] for item in collections} == {"Utilities & Automation"}
+    assert {item["name"] for item in actual} == {"HomeDrop"}
+
+
+def test_nested_project_does_not_make_an_unconfigured_parent_a_collection(
+    tmp_path: Path,
+) -> None:
+    projects = tmp_path / "Projects"
+    monorepo = projects / "Product"
+    nested = monorepo / "examples" / "Demo"
+    monorepo.mkdir(parents=True)
+    nested.mkdir(parents=True)
+    (monorepo / "package.json").write_text("{}\n", encoding="utf-8")
+    (monorepo / "index.ts").write_text("export {}\n", encoding="utf-8")
+    (nested / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (nested / "demo.py").write_text("print('demo')\n", encoding="utf-8")
+
+    scanned = ProjectScanner(projects, DEFAULTS).scan_all()
+    product = next(item for item in scanned if item["name"] == "Product")
+
+    assert product["classification"] != "collection"
+
+
+def test_unconfirmed_organization_with_confirmed_user_commits_requires_review(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(
+        tmp_path / "OrganizationWork",
+        author="YOUR_NAME",
+        email="YOUR_GITHUB_ID+YOUR_GITHUB_USER@users.noreply.github.com",
+        remote="https://github.com/example-org/project.git",
+    )
+
+    scanned = ProjectScanner(tmp_path, DEFAULTS).scan_repo(repo)
+
+    assert scanned["classification"] == "review"

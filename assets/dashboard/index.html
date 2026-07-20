@@ -415,9 +415,11 @@
     .question-suggestion-hint strong { color: var(--pink); text-transform: uppercase; }
     .question-answer { width: 100%; min-height: 122px; resize: vertical; padding: 12px; border: 2px solid var(--ink); background: white; font: 14px/1.5 var(--sans); }
     .question-answer:focus { outline: 3px solid var(--pink-soft); outline-offset: 2px; }
-    .question-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; }
+    .question-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-top: 12px; }
     .question-action { min-height: 42px; padding: 8px 13px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .question-action.save { background: var(--purple-deep); color: white; }
+    .question-action.dismiss { background: var(--pink-soft); color: var(--red); }
+    .question-action.undo { border-style: dashed; color: var(--purple-deep); }
     .question-action:disabled { cursor: not-allowed; opacity: 0.45; }
     .question-caption { margin: 13px 0 0; color: var(--muted); font-size: 12px; }
 
@@ -471,6 +473,7 @@
     .run-meta, .run-status { color: var(--muted); font-family: var(--mono); font-size: 10px; }
     .run-status.completed { color: var(--green); font-weight: 900; }
     .run-status.failed { color: var(--red); font-weight: 900; }
+    .run-error { grid-column: 1 / -1; color: var(--red); font: 11px/1.45 var(--mono); }
     .focus-title { margin: 7px 0 12px; font-family: var(--mono); font-size: clamp(27px, 3vw, 42px); line-height: 1.05; }
     .focus-copy { color: #d9d1e6; }
     .focus-links { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
@@ -707,9 +710,11 @@
                 </div>
                 <div class="question-actions">
                   <button class="question-action" id="question-skip" type="button">Answer later</button>
+                  <button class="question-action dismiss" id="question-dismiss" type="button">Not relevant</button>
+                  <button class="question-action undo" id="question-undo" type="button">Undo dismissal</button>
                   <button class="question-action save" id="question-save" type="button">Save answer</button>
                 </div>
-                <p class="question-caption" id="question-caption">Your answer becomes explicit private evidence. Skipping leaves the question open.</p>
+                <p class="question-caption" id="question-caption">Answer later is neutral. Not relevant removes the question and teaches the relevance filter.</p>
               </div>
             </article>
           </div>
@@ -1180,11 +1185,13 @@
         setText("question-caption", !actionEnabled
           ? "This static fallback is read-only. Open the root BAT launcher to answer questions privately."
           : card.scope === "project"
-            ? "Your answer becomes explicit project evidence. It will not be saved as personality."
-            : "Your answer becomes explicit profile evidence. It will not be inferred as a personality trait.");
+            ? "Save creates explicit project evidence. Answer later is neutral; Not relevant teaches the question filter."
+            : "Save creates explicit profile evidence. Answer later is neutral; Not relevant teaches the question filter.");
         renderQuestionSuggestion();
         byId("question-save").disabled = !actionEnabled || questionBusy || !questionAnswer.value.trim();
         byId("question-skip").disabled = questionBusy || questionCards.length < 2;
+        byId("question-dismiss").disabled = !actionEnabled || questionBusy;
+        byId("question-undo").disabled = !actionEnabled || questionBusy || !Boolean(data.questions && data.questions.undo_available);
       };
       questionAnswer.addEventListener("input", () => {
         byId("question-save").disabled = !actionEnabled || questionBusy || !questionAnswer.value.trim();
@@ -1204,6 +1211,34 @@
         if (questionBusy || questionCards.length < 2) return;
         questionIndex = (questionIndex + 1) % questionCards.length; renderQuestion();
       });
+      byId("question-dismiss").addEventListener("click", async () => {
+        const card = questionCards[questionIndex];
+        if (!card || questionBusy || !actionEnabled) return;
+        questionBusy = true; renderQuestion();
+        toast("Dismissing this question and updating relevance learning…");
+        try {
+          await postAction(`/api/questions/${encodeURIComponent(card.id)}/dismiss`, {});
+          questionCards.splice(questionIndex, 1);
+          if (questionIndex >= questionCards.length) questionIndex = 0;
+          data.review.pending = Math.max(0, data.review.pending - 1);
+          data.review.questions = Math.max(0, data.review.questions - 1);
+          data.questions.undo_available = true;
+          setText("review-number", String(data.review.pending));
+          const legendValues = byId("review-legend").querySelectorAll(".legend-value");
+          if (legendValues[0]) legendValues[0].textContent = String(data.review.questions);
+          toast("Question dismissed. Similar low-value questions will be ranked down over time.");
+        } catch (error) { toast(error.message); }
+        finally { questionBusy = false; renderQuestion(); }
+      });
+      byId("question-undo").addEventListener("click", async () => {
+        if (questionBusy || !actionEnabled || !(data.questions && data.questions.undo_available)) return;
+        questionBusy = true; renderQuestion();
+        toast("Restoring the most recently dismissed question…");
+        try {
+          await postAction("/api/questions/undo", {});
+          window.location.reload();
+        } catch (error) { questionBusy = false; renderQuestion(); toast(error.message); }
+      });
       byId("question-save").addEventListener("click", async () => {
         const card = questionCards[questionIndex];
         const answer = questionAnswer.value.trim();
@@ -1212,6 +1247,8 @@
         questionAnswer.disabled = true;
         byId("question-save").disabled = true;
         byId("question-skip").disabled = true;
+        byId("question-dismiss").disabled = true;
+        byId("question-undo").disabled = true;
         let restoreAnswer = false;
         toast("Saving your answer as explicit private evidence…");
         try {
@@ -1245,7 +1282,10 @@
           const metaParts = [formatDate(run.started_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })];
           if (run.duration_seconds !== null) metaParts.push(formatDuration(run.duration_seconds));
           if (run.evidence_count) metaParts.push(`${run.evidence_count} evidence`);
-          row.append(make("div", "run-kind", kind), make("div", "run-meta", metaParts.join(" // ")), make("div", `run-status ${run.status}`, run.status)); byId("run-list").append(row);
+          if (run.stage) metaParts.push(run.stage);
+          row.append(make("div", "run-kind", kind), make("div", "run-meta", metaParts.join(" // ")), make("div", `run-status ${run.status}`, run.status));
+          if (run.error) row.append(make("div", "run-error", run.error));
+          byId("run-list").append(row);
         });
       }
 

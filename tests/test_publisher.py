@@ -5,6 +5,7 @@ import pytest
 
 from second_brain_protocol.markdown import update_generated_file
 from second_brain_protocol.publisher import (
+    _verified_skill,
     publish_interview_profile,
     publish_model_output,
     promote_observation_group,
@@ -19,6 +20,66 @@ def _note(path: Path) -> None:
         "---\nid: fixture\ntype: memory\naliases: []\nconfidence: 0\nprovenance: []\nfirst_seen: null\nlast_verified: null\ntags: [test]\n---\n\n"
         "# Note\n\n<!-- sb:generated canonical:start -->\n_No generated content yet._\n<!-- sb:generated canonical:end -->\n\nmanual\n",
         encoding="utf-8",
+    )
+
+
+def test_verified_skill_can_use_user_directed_third_party_session(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.upsert_project(
+        {
+            "id": "project-external",
+            "name": "External Tool",
+            "classification": "third-party",
+        }
+    )
+    evidence_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:antigravity:external",
+        kind="session_digest",
+        project_id="project-external",
+        payload={
+            "user_messages": [{"text": "Configure and validate the deployment"}],
+            "assistant_results": [{"text": "Implemented and tests passed"}],
+            "artifacts": [],
+        },
+    )
+
+    assert _verified_skill(
+        store,
+        {
+            "authorship_confirmed": True,
+            "successful_implementation": True,
+            "evidence_refs": [evidence_id],
+        },
+    )
+
+
+def test_third_party_inventory_alone_cannot_verify_a_skill(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.upsert_project(
+        {
+            "id": "project-external",
+            "name": "External Tool",
+            "classification": "third-party",
+        }
+    )
+    evidence_id, _ = store.add_evidence(
+        source_type="project-scan",
+        source_ref="project:external",
+        kind="project_inventory",
+        project_id="project-external",
+        payload={"tech_stack": ["Docker", "TypeScript"]},
+    )
+
+    assert not _verified_skill(
+        store,
+        {
+            "authorship_confirmed": True,
+            "successful_implementation": True,
+            "evidence_refs": [evidence_id],
+        },
     )
 
 
@@ -51,27 +112,69 @@ def test_explicit_fact_promotes_but_public_claim_waits(tmp_path: Path) -> None:
     for relative in ("Memory/LongTermMemory.md", "Identity/Persona.md"):
         _note(tmp_path / relative)
     store = StateStore(tmp_path / "state.sqlite")
-    ev1, _ = store.add_evidence(source_type="interview", source_ref="interview:a", kind="answer", payload={"session_id": "one"}, project_id="p1", occurred_at="2026-01-01")
-    ev2, _ = store.add_evidence(source_type="codex", source_ref="codex:b", kind="message", payload={"session_id": "two"}, project_id="p2", occurred_at="2026-01-02")
+    ev1, _ = store.add_evidence(
+        source_type="interview",
+        source_ref="interview:a",
+        kind="answer",
+        payload={"session_id": "one"},
+        project_id="p1",
+        occurred_at="2026-01-01",
+    )
+    ev2, _ = store.add_evidence(
+        source_type="codex",
+        source_ref="codex:b",
+        kind="message",
+        payload={"session_id": "two"},
+        project_id="p2",
+        occurred_at="2026-01-02",
+    )
     output = {
         "summary": "Summary",
         "observations": [
-            {"kind": "explicit_fact", "subject": "name", "claim": "the user prefers the user.", "evidence_refs": [ev1], "confidence": 1.0, "explicit": True, "public_claim": False},
-            {"kind": "personality", "subject": "career", "claim": "Public superlative", "evidence_refs": [ev1, ev2], "confidence": 0.8, "explicit": False, "public_claim": True},
+            {
+                "kind": "explicit_fact",
+                "subject": "name",
+                "claim": "the user prefers the user.",
+                "evidence_refs": [ev1],
+                "confidence": 1.0,
+                "explicit": True,
+                "public_claim": False,
+            },
+            {
+                "kind": "personality",
+                "subject": "career",
+                "claim": "Public superlative",
+                "evidence_refs": [ev1, ev2],
+                "confidence": 0.8,
+                "explicit": False,
+                "public_claim": True,
+            },
         ],
         "project_updates": [],
         "skill_updates": [],
         "voice_samples": [],
         "review_items": [],
     }
-    result = publish_model_output(vault=tmp_path, store=store, output=output, run_kind="daily", evidence_ids=[ev1, ev2])
+    result = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="daily",
+        evidence_ids=[ev1, ev2],
+    )
     assert result["promoted"] == 1 and result["pending"] == 1
-    assert "the user prefers the user" in (tmp_path / "Memory/LongTermMemory.md").read_text(encoding="utf-8")
-    assert "manual" in (tmp_path / "Memory/LongTermMemory.md").read_text(encoding="utf-8")
+    assert "the user prefers the user" in (tmp_path / "Memory/LongTermMemory.md").read_text(
+        encoding="utf-8"
+    )
+    assert "manual" in (tmp_path / "Memory/LongTermMemory.md").read_text(
+        encoding="utf-8"
+    )
     assert store.checkpoint("none") is None
 
 
-def test_human_review_digest_separates_group_pages_from_machine_ledger(tmp_path: Path) -> None:
+def test_human_review_digest_separates_group_pages_from_machine_ledger(
+    tmp_path: Path,
+) -> None:
     store = StateStore(tmp_path / "state.sqlite")
     evidence_id, _ = store.add_evidence(
         source_type="interview", source_ref="interview:one", kind="answer", payload={}
@@ -114,7 +217,9 @@ def test_human_review_digest_separates_group_pages_from_machine_ledger(tmp_path:
 
     digest = Path(result["digest"]).read_text(encoding="utf-8")
     ledger = Path(result["ledger"]).read_text(encoding="utf-8")
-    group_text = "\n".join(Path(path).read_text(encoding="utf-8") for path in result["group_paths"])
+    group_text = "\n".join(
+        Path(path).read_text(encoding="utf-8") for path in result["group_paths"]
+    )
     assert result["pending"] == 3
     assert all(observation_id not in digest for observation_id in observation_ids)
     assert evidence_id not in digest
@@ -150,23 +255,52 @@ def test_group_promotion_updates_notes_and_state_together(tmp_path: Path) -> Non
 
     promote_observation_group(tmp_path, store, ids)
 
-    assert {store.observation(observation_id)["status"] for observation_id in ids} == {"promoted"}
-    assert "A durable testing lesson." in (tmp_path / "Memory" / "Lessons.md").read_text(encoding="utf-8")
-    assert "A durable delivery goal." in (tmp_path / "Goals" / "ActiveGoals.md").read_text(encoding="utf-8")
+    assert {store.observation(observation_id)["status"] for observation_id in ids} == {
+        "promoted"
+    }
+    assert "A durable testing lesson." in (
+        tmp_path / "Memory" / "Lessons.md"
+    ).read_text(encoding="utf-8")
+    assert "A durable delivery goal." in (
+        tmp_path / "Goals" / "ActiveGoals.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_same_output_is_idempotent(tmp_path: Path) -> None:
     _note(tmp_path / "Memory/LongTermMemory.md")
     store = StateStore(tmp_path / "state.sqlite")
-    ev, _ = store.add_evidence(source_type="interview", source_ref="interview:a", kind="answer", payload={})
+    ev, _ = store.add_evidence(
+        source_type="interview", source_ref="interview:a", kind="answer", payload={}
+    )
     output = {
         "summary": "Summary",
-        "observations": [{"kind": "explicit_fact", "subject": "x", "claim": "One claim", "evidence_refs": [ev], "confidence": 1.0, "explicit": True, "public_claim": False}],
-        "project_updates": [], "skill_updates": [], "voice_samples": [], "review_items": [],
+        "observations": [
+            {
+                "kind": "explicit_fact",
+                "subject": "x",
+                "claim": "One claim",
+                "evidence_refs": [ev],
+                "confidence": 1.0,
+                "explicit": True,
+                "public_claim": False,
+            }
+        ],
+        "project_updates": [],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
     }
     for _ in range(2):
-        publish_model_output(vault=tmp_path, store=store, output=output, run_kind="daily", evidence_ids=[ev])
-    assert (tmp_path / "Memory/LongTermMemory.md").read_text(encoding="utf-8").count("One claim") == 1
+        publish_model_output(
+            vault=tmp_path,
+            store=store,
+            output=output,
+            run_kind="daily",
+            evidence_ids=[ev],
+        )
+    assert (tmp_path / "Memory/LongTermMemory.md").read_text(encoding="utf-8").count(
+        "One claim"
+    ) == 1
     assert len(store.observations()) == 1
 
 
@@ -210,7 +344,9 @@ def test_rejected_observation_is_a_tombstone(tmp_path: Path) -> None:
     assert store.observation(observation_id)["status"] == "rejected"
 
 
-def test_voice_style_promotes_only_after_stable_cross_session_evidence(tmp_path: Path) -> None:
+def test_voice_style_promotes_only_after_stable_cross_session_evidence(
+    tmp_path: Path,
+) -> None:
     _note(tmp_path / "Identity/Voice.md")
     store = StateStore(tmp_path / "state.sqlite")
     refs = []
@@ -294,7 +430,11 @@ def test_daily_synthesis_preserves_manual_notes_and_bootstrap_uses_audit_note(
     assert "Old summary." not in daily_text
 
     publish_model_output(
-        vault=tmp_path, store=store, output=output, run_kind="bootstrap", evidence_ids=[]
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="bootstrap",
+        evidence_ids=[],
     )
     assert daily.read_text(encoding="utf-8") == daily_text
     bootstrap_note = tmp_path / "System" / "Audits" / "Bootstrap" / "Synthesis.md"
@@ -360,6 +500,91 @@ def test_unknown_model_project_id_is_quarantined(tmp_path: Path) -> None:
     assert result["projects_written"] == 0
     assert result["pending"] == 1
     assert not (tmp_path / "Projects" / "invented-project.md").exists()
+
+
+def test_review_question_publisher_rejects_cross_project_and_compound_items(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    for project_id, name in (
+        ("project-angel", "First Party Project With Existing Brain"),
+        ("project-dify", "dify"),
+    ):
+        store.upsert_project(
+            {
+                "id": project_id,
+                "name": name,
+                "classification": "first-party",
+                "tracked_file_count": 1,
+            }
+        )
+    angel_evidence, _ = store.add_evidence(
+        source_type="codex",
+        source_ref="codex:angel",
+        kind="message",
+        payload={"project_ids": ["project-angel"]},
+        project_id="project-angel",
+    )
+    dify_evidence, _ = store.add_evidence(
+        source_type="codex",
+        source_ref="codex:dify",
+        kind="message",
+        payload={"project_ids": ["project-dify"]},
+        project_id="project-dify",
+    )
+    output = {
+        "summary": "Summary",
+        "observations": [],
+        "pattern_signals": [],
+        "project_updates": [],
+        "skill_updates": [],
+        "voice_samples": [],
+        "question_resolutions": [],
+        "review_items": [
+            {
+                "kind": "ambiguity",
+                "subject": "First Party Project With Existing Brain authorship",
+                "description": "Contribution scope needs owner judgment.",
+                "question": "Is First Party Project With Existing Brain first-party work directed by the user?",
+                "evidence_refs": [angel_evidence],
+                "confidence": 0.99,
+            },
+            {
+                "kind": "ambiguity",
+                "subject": "First Party Project With Existing Brain + dify timelines",
+                "description": "Several timelines are missing.",
+                "question": "What is the current status for each project?",
+                "evidence_refs": [angel_evidence, dify_evidence],
+                "confidence": 0.98,
+            },
+            {
+                "kind": "ambiguity",
+                "subject": "First Party Project With Existing Brain ownership and disclosure",
+                "description": "Two decisions are missing.",
+                "question": "Is First Party Project With Existing Brain first-party and approved for public attribution?",
+                "evidence_refs": [angel_evidence],
+                "confidence": 0.97,
+            },
+        ],
+    }
+
+    result = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="daily",
+        evidence_ids=[angel_evidence, dify_evidence],
+    )
+
+    questions = [
+        item
+        for item in store.observations("pending")
+        if item["kind"] == "clarification"
+    ]
+    assert result["pending"] == 1
+    assert len(questions) == 1
+    assert questions[0]["payload"]["project_ids"] == ["project-angel"]
+    assert questions[0]["payload"]["scope"] == "project"
 
 
 def test_recurring_pattern_registry_accumulates_before_safe_promotion(
@@ -429,7 +654,9 @@ def test_recurring_pattern_registry_accumulates_before_safe_promotion(
         tmp_path / "Identity" / "Preferences.md"
     ).read_text(encoding="utf-8")
     daily = tmp_path / "Journal" / "Daily" / f"{date.today().isoformat()}.md"
-    assert "Deterministic activity ledger" in daily.read_text(encoding="utf-8")
+    daily_text = daily.read_text(encoding="utf-8")
+    assert "Quick activity recap" in daily_text
+    assert "Coverage details" in daily_text
 
 
 def test_explicit_project_instruction_does_not_become_a_global_preference(
@@ -536,9 +763,7 @@ def test_weekly_resolves_objective_question_from_authoritative_delta(
     assert result["questions_resolved"] == 1
     assert resolved is not None and resolved["status"] == "resolved"
     assert resolved["rejection_reason"] == "The portfolio is deployed."
-    assert resolved["payload"]["automatic_resolution"]["evidence_refs"] == [
-        evidence_id
-    ]
+    assert resolved["payload"]["automatic_resolution"]["evidence_refs"] == [evidence_id]
 
 
 def test_weekly_cannot_resolve_human_disclosure_question(tmp_path: Path) -> None:

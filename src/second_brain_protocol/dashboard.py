@@ -16,13 +16,20 @@ from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_r
 from .markdown import slugify
 from .model_runner import TOKEN_USAGE_FIELDS, usage_from_receipt
 from .notifications import obsidian_uri
+from .project_catalog import catalog_groups, project_catalog_health
 from .review import build_review_groups, review_summary
 from .scheduler import task_details
 from .security import sanitize_text
 from .state import StateStore
 
 
-VISIBLE_PROJECT_CLASSES = {"first-party", "fork", "modified-fork", "experiment", "review"}
+VISIBLE_PROJECT_CLASSES = {
+    "first-party",
+    "fork",
+    "modified-fork",
+    "experiment",
+    "review",
+}
 MODEL_PRICING_USD_PER_MTOK = {
     "gpt-5.6-luna": {"input": 1.0, "cached_input": 0.10, "output": 6.0},
     "gpt-5.6-terra": {"input": 2.5, "cached_input": 0.25, "output": 15.0},
@@ -179,7 +186,9 @@ def _clean_markdown(text: str, *, max_chars: int = 520) -> str:
     text = sanitize_text(text, max_chars=max_chars * 3)
     text = re.sub(r"^---\s.*?\s---\s*", "", text, flags=re.DOTALL)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-    text = re.sub(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", lambda m: m.group(2) or m.group(1), text)
+    text = re.sub(
+        r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", lambda m: m.group(2) or m.group(1), text
+    )
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
     text = re.sub(r"\^(?:obs|ev)-[a-zA-Z0-9-]+", "", text)
     text = re.sub(r"[`*>#]", "", text)
@@ -205,7 +214,9 @@ def _generated_section(path: Path, section: str) -> str:
 
 
 def _latest_note(folder: Path, pattern: str) -> Path | None:
-    candidates = [path for path in folder.glob(pattern) if path.name.casefold() != "index.md"]
+    candidates = [
+        path for path in folder.glob(pattern) if path.name.casefold() != "index.md"
+    ]
     return max(candidates, key=lambda path: path.stem) if candidates else None
 
 
@@ -260,7 +271,9 @@ def _summary_sections(raw: str) -> list[dict[str, Any]]:
 
 
 CHANGE_LABELS = {
+    "added": "Project added",
     "classification_changed": "Classification",
+    "commits_added": "Commits",
     "files_changed": "Files",
     "head_changed": "Git head",
     "removed": "Removed",
@@ -276,14 +289,18 @@ def _count_chips(text: str) -> list[dict[str, Any]]:
             "label": CHANGE_LABELS.get(name.casefold(), name.replace("_", " ").title()),
             "value": int(value),
         }
-        for name, value in re.findall(r"([a-z][a-z0-9_]*)\s*\((\d+)\)", text, re.IGNORECASE)
+        for name, value in re.findall(
+            r"([a-z][a-z0-9_]*)\s*\((\d+)\)", text, re.IGNORECASE
+        )
     ]
 
 
 def _status_chips(text: str) -> list[dict[str, Any]]:
     chips = []
     for value, label in re.findall(r"(\d+)\s+([^,]+)", text):
-        chips.append({"label": label.strip().replace("_", " ").title(), "value": int(value)})
+        chips.append(
+            {"label": label.strip().replace("_", " ").title(), "value": int(value)}
+        )
     return chips
 
 
@@ -297,23 +314,34 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
         label, separator, detail = item.partition(":")
         normalized = label.strip().casefold()
         detail = detail.strip() if separator else item
-        if normalized == "project deltas":
-            match = re.match(r"(\d+)\s+across\s+(.+)", detail, re.IGNORECASE)
+        if normalized in {"project deltas", "projects with detected changes"}:
+            if normalized == "project deltas":
+                match = re.match(r"(\d+)\s+across\s+(.+)", detail, re.IGNORECASE)
+            else:
+                match = re.match(r"(\d+)(?:\s+-\s+(.+))?$", detail, re.IGNORECASE)
             if not match:
                 continue
             count = int(match.group(1))
-            names = [name.strip() for name in match.group(2).split(",") if name.strip()]
-            stats.append({"value": count, "label": "Project updates", "icon": "🚀", "tone": "pink"})
+            names_text = match.group(2) or ""
+            names = [name.strip() for name in names_text.split(",") if name.strip()]
+            stats.append(
+                {
+                    "value": count,
+                    "label": "Projects changed",
+                    "icon": "🚀",
+                    "tone": "pink",
+                }
+            )
             groups.append(
                 {
-                    "title": "Projects touched",
+                    "title": "Projects with detected changes",
                     "icon": "🗂️",
                     "tone": "pink",
-                    "description": f"{count} project deltas",
+                    "description": "Projects with new file, Git, stack, lifecycle, or working-tree changes in this run",
                     "chips": [{"label": name} for name in names],
                 }
             )
-        elif normalized == "change types":
+        elif normalized in {"change types", "change signals"}:
             chips = _count_chips(detail)
             if chips:
                 groups.append(
@@ -325,38 +353,102 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                         "chips": chips,
                     }
                 )
+        elif normalized == "agent sessions reviewed":
+            match = re.match(
+                r"(\d+)\s+total\s+-\s+(\d+)\s+linked\s+to\s+(\d+)\s+projects?;\s+(\d+)\s+not\s+yet\s+linked(?:;\s*(.*))?",
+                detail,
+                re.IGNORECASE,
+            )
+            if not match:
+                continue
+            sessions, linked, projects, unlinked = (
+                int(value) for value in match.groups()[:4]
+            )
+            stats.extend(
+                [
+                    {
+                        "value": sessions,
+                        "label": "Sessions reviewed",
+                        "icon": "🤖",
+                        "tone": "purple",
+                    },
+                    {
+                        "value": projects,
+                        "label": "Projects represented in sessions",
+                        "icon": "🔗",
+                        "tone": "green",
+                    },
+                ]
+            )
+            groups.append(
+                {
+                    "title": "Session-to-project coverage",
+                    "icon": "🤖",
+                    "tone": "green" if unlinked == 0 else "yellow",
+                    "description": "How many reviewed agent sessions could be connected to a known project",
+                    "chips": [
+                        {"label": "Reviewed sessions", "value": sessions},
+                        {"label": "Linked sessions", "value": linked},
+                        {"label": "Projects represented", "value": projects},
+                        {"label": "Not yet linked", "value": unlinked},
+                    ],
+                }
+            )
         elif normalized == "agent sessions evaluated":
-            match = re.match(r"(\d+)\s+across\s+(\d+)\s+attributed projects?", detail, re.IGNORECASE)
+            match = re.match(
+                r"(\d+)\s+across\s+(\d+)\s+attributed projects?", detail, re.IGNORECASE
+            )
             if not match:
                 continue
             sessions, projects = (int(value) for value in match.groups())
             stats.extend(
                 [
-                    {"value": sessions, "label": "Agent sessions", "icon": "🤖", "tone": "purple"},
-                    {"value": projects, "label": "Projects attributed", "icon": "🔗", "tone": "green"},
+                    {
+                        "value": sessions,
+                        "label": "Sessions reviewed",
+                        "icon": "🤖",
+                        "tone": "purple",
+                    },
+                    {
+                        "value": projects,
+                        "label": "Projects represented in sessions",
+                        "icon": "🔗",
+                        "tone": "green",
+                    },
                 ]
             )
             groups.append(
                 {
-                    "title": "Session coverage",
+                    "title": "Session-to-project coverage",
                     "icon": "🤖",
                     "tone": "green",
-                    "description": "Sessions matched to project context",
+                    "description": "How many reviewed agent sessions could be connected to a known project",
                     "chips": [
-                        {"label": "Sessions", "value": sessions},
-                        {"label": "Projects", "value": projects},
+                        {"label": "Reviewed sessions", "value": sessions},
+                        {"label": "Projects represented", "value": projects},
                     ],
                 }
             )
-        elif normalized == "recurring patterns":
+        elif normalized in {"recurring patterns", "knowledge signals"}:
             chips = _status_chips(detail)
             if not chips:
                 continue
             promoted = next(
-                (chip["value"] for chip in chips if chip["label"].casefold() == "promoted"),
+                (
+                    chip["value"]
+                    for chip in chips
+                    if chip["label"].casefold() == "promoted"
+                ),
                 0,
             )
-            stats.append({"value": promoted, "label": "Patterns promoted", "icon": "🔁", "tone": "yellow"})
+            stats.append(
+                {
+                    "value": promoted,
+                    "label": "Patterns promoted",
+                    "icon": "🔁",
+                    "tone": "yellow",
+                }
+            )
             groups.append(
                 {
                     "title": "Pattern status",
@@ -407,7 +499,9 @@ def _summary_cost(iterations: list[dict[str, Any]]) -> dict[str, Any]:
         scale = 1_000_000
         if iteration.get("details_available"):
             input_tokens = int(iteration.get("input_tokens") or 0)
-            cached_tokens = min(input_tokens, int(iteration.get("cached_input_tokens") or 0))
+            cached_tokens = min(
+                input_tokens, int(iteration.get("cached_input_tokens") or 0)
+            )
             uncached_tokens = max(0, input_tokens - cached_tokens)
             cache_write_tokens = int(iteration.get("cache_write_input_tokens") or 0)
             output_tokens = int(iteration.get("output_tokens") or 0)
@@ -457,7 +551,9 @@ def _summary_codex_impact(
         for item in usage.get("iterations") or []
         if item.get("completed_at")
     ]
-    completed = max((item for item in completed_values if item is not None), default=None)
+    completed = max(
+        (item for item in completed_values if item is not None), default=None
+    )
     starts_at = _parse_datetime(window.get("starts_at"))
     resets_at = _parse_datetime(window.get("resets_at"))
     if (
@@ -497,14 +593,13 @@ def _summary_usage(store: StateStore, kind: str, period: str) -> dict[str, Any]:
     stored = {item["run_id"]: item for item in store.usage_for_runs(run_ids)}
     iterations = []
     for run_id in sorted(run_ids):
-        usage = stored.get(run_id) or usage_from_receipt(runs.get(run_id, {}).get("receipt_path"))
+        usage = stored.get(run_id) or usage_from_receipt(
+            runs.get(run_id, {}).get("receipt_path")
+        )
         if usage is None:
             continue
         iterations.append(
-            {
-                field: int(usage.get(field) or 0)
-                for field in TOKEN_USAGE_FIELDS
-            }
+            {field: int(usage.get(field) or 0) for field in TOKEN_USAGE_FIELDS}
             | {
                 "model": runs.get(run_id, {}).get("model"),
                 "completed_at": runs.get(run_id, {}).get("completed_at"),
@@ -545,7 +640,10 @@ def _summary_entry(
         (
             section
             for section in sections
-            if any(word in section["title"].casefold() for word in ("synthesis", "learn", "reflection"))
+            if any(
+                word in section["title"].casefold()
+                for word in ("synthesis", "learn", "reflection")
+            )
         ),
         sections[-1],
     )
@@ -559,7 +657,9 @@ def _summary_entry(
     summary = summary_candidates[0] if summary_candidates else ""
     highlights = [item for section in sections for item in section["items"]]
     if not highlights:
-        highlights = [paragraph for section in sections for paragraph in section["paragraphs"]]
+        highlights = [
+            paragraph for section in sections for paragraph in section["paragraphs"]
+        ]
     period = path.stem
     label = "Daily" if kind == "daily" else "Weekly"
     return {
@@ -604,7 +704,9 @@ def _summary_history(
 def personalize_knowledge_text(text: str, first_name: str) -> str:
     """Use the vault owner's preferred name in cards without rewriting canonical notes."""
 
-    personalized = re.sub(r"\bthe user['’]s\b", f"{first_name}'s", text, flags=re.IGNORECASE)
+    personalized = re.sub(
+        r"\bthe user['’]s\b", f"{first_name}'s", text, flags=re.IGNORECASE
+    )
     return re.sub(r"\bthe user\b", first_name, personalized, flags=re.IGNORECASE)
 
 
@@ -656,10 +758,18 @@ def _observation_context(
     evidence_by_id: dict[str, dict[str, Any]] | None = None,
     projects_by_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    payload = observation.get("payload") if isinstance(observation.get("payload"), dict) else {}
+    payload = (
+        observation.get("payload")
+        if isinstance(observation.get("payload"), dict)
+        else {}
+    )
     evidence_refs = list(observation.get("evidence_refs") or [])
     evidence_rows = (
-        [evidence_by_id[evidence_id] for evidence_id in evidence_refs if evidence_id in evidence_by_id]
+        [
+            evidence_by_id[evidence_id]
+            for evidence_id in evidence_refs
+            if evidence_id in evidence_by_id
+        ]
         if evidence_by_id is not None
         else store.evidence_by_ids(evidence_refs)
     )
@@ -685,7 +795,9 @@ def _observation_context(
         if not attribution_overridden:
             if row.get("project_id"):
                 project_ids.add(str(row["project_id"]))
-            project_ids.update(str(item) for item in row_payload.get("project_ids", []) if item)
+            project_ids.update(
+                str(item) for item in row_payload.get("project_ids", []) if item
+            )
         session_id = row_payload.get("session_id")
         if session_id:
             sessions.add(str(session_id))
@@ -713,7 +825,11 @@ def _observation_context(
     )
     project_names = sorted(
         {
-            str(projects[project_id].get("name") or projects[project_id].get("logical_name") or project_id)
+            str(
+                projects[project_id].get("name")
+                or projects[project_id].get("logical_name")
+                or project_id
+            )
             for project_id in project_ids
             if project_id in projects
         },
@@ -757,7 +873,9 @@ def _focused_project_names(
             key=str.casefold,
         )
     )
-    direct = [name for name in all_names if len(name) >= 5 and normalized(name) in folded]
+    direct = [
+        name for name in all_names if len(name) >= 5 and normalized(name) in folded
+    ]
     if direct:
         return [max(direct, key=len)]
     stopwords = {
@@ -801,13 +919,21 @@ def _knowledge_scope(
 ) -> tuple[str, list[str]]:
     """Separate durable personal patterns from contextual project instructions."""
 
-    payload = observation.get("payload") if isinstance(observation.get("payload"), dict) else {}
-    declared = str(payload.get("scope") or payload.get("knowledge_scope") or "").casefold()
+    payload = (
+        observation.get("payload")
+        if isinstance(observation.get("payload"), dict)
+        else {}
+    )
+    declared = str(
+        payload.get("scope") or payload.get("knowledge_scope") or ""
+    ).casefold()
     context = context or _observation_context(store, observation)
     project_names = list(context["project_names"])
     kind = str(observation.get("kind") or "")
     if kind not in PERSONAL_PATTERN_KINDS:
-        return ("project" if kind in {"decision", "lesson", "project_fact"} else "global"), project_names
+        return (
+            "project" if kind in {"decision", "lesson", "project_fact"} else "global"
+        ), project_names
     if declared == "project":
         return "project", project_names
     if declared == "global" or context["trusted_profile_evidence"]:
@@ -816,7 +942,9 @@ def _knowledge_scope(
     observed_project_count = (
         len(context["project_ids"])
         if context["attribution_overridden"]
-        else max(len(context["project_ids"]), int(observation.get("project_count") or 0))
+        else max(
+            len(context["project_ids"]), int(observation.get("project_count") or 0)
+        )
     )
     stable_cross_project = (
         len(context["sessions"]) >= 3
@@ -833,8 +961,12 @@ def _knowledge_scope(
         )
         if value
     ).casefold()
-    explicitly_contextual = any(marker in pattern_text for marker in PROJECT_CONTEXT_MARKERS)
-    explicitly_reusable = any(marker in pattern_text for marker in GLOBAL_PATTERN_MARKERS)
+    explicitly_contextual = any(
+        marker in pattern_text for marker in PROJECT_CONTEXT_MARKERS
+    )
+    explicitly_reusable = any(
+        marker in pattern_text for marker in GLOBAL_PATTERN_MARKERS
+    )
     if explicitly_reusable and not explicitly_contextual:
         return "global", project_names
     if context["session_scoped"] or observed_project_count > 0:
@@ -868,7 +1000,11 @@ def default_knowledge_layer(layers: list[dict[str, Any]]) -> str:
 
 def _knowledge_deck(store: StateStore, vault: Path) -> dict[str, Any]:
     feedback = store.knowledge_feedback()
-    rows = sorted(store.observations("promoted"), key=lambda item: item["updated_at"], reverse=True)
+    rows = sorted(
+        store.observations("promoted"),
+        key=lambda item: item["updated_at"],
+        reverse=True,
+    )
     projects = [item for item in store.projects() if _project_is_attributable(item)]
     projects_by_id = {str(item["id"]): item for item in projects}
     all_project_names = sorted(
@@ -919,16 +1055,20 @@ def _knowledge_deck(store: StateStore, vault: Path) -> dict[str, Any]:
             all_project_names=all_project_names,
         )
         layer = knowledge_layer_for(item, project_scoped=scope == "project")
-        subject = _clean_markdown(
-            str(item.get("subject") or "Knowledge"), max_chars=96
-        )
+        subject = _clean_markdown(str(item.get("subject") or "Knowledge"), max_chars=96)
         if not _knowledge_card_is_useful(
             item, scope=scope, subject=subject, claim=claim
         ):
             continue
         if scope == "project":
-            project_stamp = " + ".join(project_names) if project_names else "Project not attributed"
-            note = _project_note(vault, project_names[0]) if len(project_names) == 1 else vault / "Projects" / "Index.md"
+            project_stamp = (
+                " + ".join(project_names) if project_names else "Project not attributed"
+            )
+            note = (
+                _project_note(vault, project_names[0])
+                if len(project_names) == 1
+                else vault / "Projects" / "Index.md"
+            )
         else:
             project_stamp = ""
             note = _observation_note(vault, item["kind"])
@@ -936,7 +1076,9 @@ def _knowledge_deck(store: StateStore, vault: Path) -> dict[str, Any]:
             {
                 "id": item["id"],
                 "layer": layer,
-                "kind": KIND_LABELS.get(item["kind"], item["kind"].replace("_", " ").title()),
+                "kind": KIND_LABELS.get(
+                    item["kind"], item["kind"].replace("_", " ").title()
+                ),
                 "subject": subject,
                 "claim": claim,
                 "confidence": round(float(item.get("confidence", 0)) * 100),
@@ -1091,7 +1233,9 @@ def _question_suggestions(
                 "text": f"Keep these workstreams together under {project}. They are parts of the same project because [reason].",
             },
         ]
-    if any(term in text for term in ("contribution", "direct", "implement", "components")):
+    if any(
+        term in text for term in ("contribution", "direct", "implement", "components")
+    ):
         return [
             {
                 "label": "My contribution",
@@ -1236,9 +1380,18 @@ def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
         group_path = vault / "Inbox" / "Review" / "Groups" / group["filename"]
         for item in group["items"]:
             payload = item.get("payload") or {}
-            nested_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+            nested_payload = (
+                payload.get("payload")
+                if isinstance(payload.get("payload"), dict)
+                else {}
+            )
             question = _clean_markdown(
-                str(payload.get("question") or nested_payload.get("question") or item.get("claim") or ""),
+                str(
+                    payload.get("question")
+                    or nested_payload.get("question")
+                    or item.get("claim")
+                    or ""
+                ),
                 max_chars=1600,
             )
             if not question:
@@ -1260,11 +1413,17 @@ def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
                 f"{subject} {question}",
                 all_project_names=all_project_names,
             )
-            scope = "profile" if group["key"] == "questions-profile-privacy" else "project"
+            scope = (
+                "profile" if group["key"] == "questions-profile-privacy" else "project"
+            )
             if scope == "project":
                 project_stamp = (
                     " + ".join(project_names[:2])
-                    + (f" + {len(project_names) - 2} more" if len(project_names) > 2 else "")
+                    + (
+                        f" + {len(project_names) - 2} more"
+                        if len(project_names) > 2
+                        else ""
+                    )
                     if project_names
                     else "Project not attributed"
                 )
@@ -1307,14 +1466,14 @@ def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
         )
     )
     categories = [
-        {"title": title, "count": count}
-        for title, count in category_counts.items()
+        {"title": title, "count": count} for title, count in category_counts.items()
     ]
     return {
         "cards": cards,
         "count": len(cards),
         "deferred_count": max(0, total_questions - len(cards)),
         "categories": categories,
+        "undo_available": store.last_question_dismissal() is not None,
     }
 
 
@@ -1323,13 +1482,13 @@ def _recent_activity(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     cutoff = now.astimezone(UTC) - timedelta(days=days)
     projects = {
-        item["id"]: item
-        for item in store.projects()
-        if _project_is_attributable(item)
+        item["id"]: item for item in store.projects() if _project_is_attributable(item)
     }
     presence: dict[str, bool] = {}
     with store.connect() as connection:
-        for row in connection.execute("SELECT project_id,present FROM project_presence").fetchall():
+        for row in connection.execute(
+            "SELECT project_id,present FROM project_presence"
+        ).fetchall():
             presence[str(row["project_id"])] = bool(row["present"])
         digest_rows = connection.execute(
             """SELECT source_type,project_id,occurred_at,payload_json FROM evidence
@@ -1365,25 +1524,29 @@ def _recent_activity(
             project_ids.add(str(row["project_id"]))
         for project_id in project_ids:
             project = projects.get(project_id)
-            if not project_id.startswith("project-") or not project or not presence.get(project_id, True):
+            if not project or not presence.get(project_id, True):
                 continue
             if project.get("classification") not in VISIBLE_PROJECT_CLASSES:
                 continue
             sessions_by_project[project_id].add(key)
-            last_activity[project_id] = max(last_activity.get(project_id, occurred), occurred)
+            last_activity[project_id] = max(
+                last_activity.get(project_id, occurred), occurred
+            )
 
     changes: dict[str, int] = defaultdict(int)
     for row in delta_rows:
         project_id = str(row["project_id"] or "")
         project = projects.get(project_id)
-        if not project_id.startswith("project-") or not project or not presence.get(project_id, True):
+        if not project or not presence.get(project_id, True):
             continue
         if project.get("classification") not in VISIBLE_PROJECT_CLASSES:
             continue
         changes[project_id] += 1
         occurred = _parse_datetime(row["activity_at"])
         if occurred:
-            last_activity[project_id] = max(last_activity.get(project_id, occurred), occurred)
+            last_activity[project_id] = max(
+                last_activity.get(project_id, occurred), occurred
+            )
 
     activity = []
     active_ids = set(sessions_by_project) | set(changes)
@@ -1393,16 +1556,26 @@ def _recent_activity(
         change_count = changes.get(project_id, 0)
         activity.append(
             {
-                "name": _clean_markdown(str(project.get("name") or "Untitled project"), max_chars=80),
-                "classification": str(project.get("classification") or "review").replace("-", " "),
+                "name": _clean_markdown(
+                    str(project.get("name") or "Untitled project"), max_chars=80
+                ),
+                "classification": str(
+                    project.get("classification") or "review"
+                ).replace("-", " "),
                 "sessions": sessions,
                 "changes": change_count,
                 "score": sessions * 3 + change_count,
-                "last_activity": last_activity.get(project_id).isoformat() if project_id in last_activity else None,
-                "url": obsidian_uri(vault, _project_note(vault, str(project.get("name") or ""))),
+                "last_activity": last_activity.get(project_id).isoformat()
+                if project_id in last_activity
+                else None,
+                "url": obsidian_uri(
+                    vault, _project_note(vault, str(project.get("name") or ""))
+                ),
             }
         )
-    activity.sort(key=lambda item: (item["score"], item["last_activity"] or ""), reverse=True)
+    activity.sort(
+        key=lambda item: (item["score"], item["last_activity"] or ""), reverse=True
+    )
     activity = activity[:6]
     max_score = max((item["score"] for item in activity), default=1)
     for item in activity:
@@ -1426,7 +1599,11 @@ def _recent_activity(
 
 
 def _recent_insights(store: StateStore, vault: Path) -> list[dict[str, Any]]:
-    rows = sorted(store.observations("promoted"), key=lambda item: item["updated_at"], reverse=True)
+    rows = sorted(
+        store.observations("promoted"),
+        key=lambda item: item["updated_at"],
+        reverse=True,
+    )
     insights = []
     for item in rows:
         if item["kind"] not in INSIGHT_KINDS or item.get("sensitivity") == "sensitive":
@@ -1436,8 +1613,12 @@ def _recent_insights(store: StateStore, vault: Path) -> list[dict[str, Any]]:
             continue
         insights.append(
             {
-                "kind": KIND_LABELS.get(item["kind"], item["kind"].replace("_", " ").title()),
-                "subject": _clean_markdown(str(item.get("subject") or "New insight"), max_chars=80),
+                "kind": KIND_LABELS.get(
+                    item["kind"], item["kind"].replace("_", " ").title()
+                ),
+                "subject": _clean_markdown(
+                    str(item.get("subject") or "New insight"), max_chars=80
+                ),
                 "claim": claim,
                 "confidence": round(float(item.get("confidence", 0)) * 100),
                 "updated_at": item.get("updated_at"),
@@ -1457,17 +1638,13 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
         dates = int(item.get("date_count", 0))
         projects = int(item.get("project_count", 0))
         progress = round(
-            (
-                min(sessions / 3, 1)
-                + min(dates / 2, 1)
-                + min(projects / 2, 1)
-            )
-            / 3
-            * 100
+            (min(sessions / 3, 1) + min(dates / 2, 1) + min(projects / 2, 1)) / 3 * 100
         )
         patterns.append(
             {
-                "label": _clean_markdown(str(item.get("label") or "Emerging pattern"), max_chars=80),
+                "label": _clean_markdown(
+                    str(item.get("label") or "Emerging pattern"), max_chars=80
+                ),
                 "claim": _clean_markdown(str(item.get("claim") or ""), max_chars=190),
                 "sessions": sessions,
                 "dates": dates,
@@ -1477,16 +1654,44 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
                 "url": obsidian_uri(vault, vault / "Memory" / "Patterns.md"),
             }
         )
-    patterns.sort(key=lambda item: (item["progress"], item["last_seen"] or ""), reverse=True)
+    patterns.sort(
+        key=lambda item: (item["progress"], item["last_seen"] or ""), reverse=True
+    )
     return patterns[:4]
 
 
 def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
+    pipeline_rows = store.pipeline_runs(limit=30)
     grouped: list[dict[str, Any]] = []
-    for run in store.runs(limit=30):
+    if pipeline_rows:
+        oldest_pipeline = min(str(row["started_at"]) for row in pipeline_rows)
+        source_rows = [
+            {
+                **row,
+                "pipeline": True,
+                "model": None,
+                "reasoning": None,
+                "evidence_count": 0,
+            }
+            for row in pipeline_rows
+        ]
+        source_rows.extend(
+            {**row, "pipeline": False}
+            for row in store.runs(limit=30)
+            if str(row.get("started_at") or "") < oldest_pipeline
+        )
+        source_rows.sort(key=lambda row: str(row.get("started_at") or ""), reverse=True)
+    else:
+        source_rows = [{**row, "pipeline": False} for row in store.runs(limit=30)]
+
+    for run in source_rows:
         started = _parse_datetime(run.get("started_at"))
         completed = _parse_datetime(run.get("completed_at"))
-        status = "completed" if run.get("status") == "validated" else str(run.get("status") or "unknown")
+        status = (
+            "completed"
+            if run.get("status") == "validated"
+            else str(run.get("status") or "unknown")
+        )
         candidate = {
             "kind": str(run.get("kind") or "operation").replace("-", " ").title(),
             "status": status,
@@ -1495,11 +1700,18 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
             "model": run.get("model"),
             "reasoning": run.get("reasoning"),
             "evidence_count": int(run.get("evidence_count") or 0),
-            "duration_seconds": max(0, round((completed - started).total_seconds())) if started and completed else None,
+            "duration_seconds": max(0, round((completed - started).total_seconds()))
+            if started and completed
+            else None,
             "batch_count": 1,
+            "stage": str(run.get("stage") or "").replace("_", " ").title(),
+            "error": sanitize_text(str(run.get("error") or ""), max_chars=240),
+            "trigger": str(run.get("trigger") or ""),
         }
         previous = grouped[-1] if grouped else None
-        previous_started = _parse_datetime(previous.get("started_at")) if previous else None
+        previous_started = (
+            _parse_datetime(previous.get("started_at")) if previous else None
+        )
         if (
             previous
             and previous["kind"] == candidate["kind"]
@@ -1510,8 +1722,13 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
         ):
             previous["batch_count"] += 1
             previous["evidence_count"] += candidate["evidence_count"]
-            if previous["duration_seconds"] is not None and candidate["duration_seconds"] is not None:
-                previous["duration_seconds"] = max(previous["duration_seconds"], candidate["duration_seconds"])
+            if (
+                previous["duration_seconds"] is not None
+                and candidate["duration_seconds"] is not None
+            ):
+                previous["duration_seconds"] = max(
+                    previous["duration_seconds"], candidate["duration_seconds"]
+                )
             continue
         grouped.append(candidate)
         if len(grouped) == limit:
@@ -1533,7 +1750,10 @@ def _git_summary(vault: Path) -> dict[str, Any]:
         return {"state": "unknown", "detail": "Git status unavailable"}
     changes = len([line for line in result.stdout.splitlines() if line.strip()])
     if changes:
-        return {"state": "attention", "detail": f"{changes} local edit{'s' if changes != 1 else ''}"}
+        return {
+            "state": "attention",
+            "detail": f"{changes} local edit{'s' if changes != 1 else ''}",
+        }
     return {"state": "good", "detail": "Working tree clean"}
 
 
@@ -1568,7 +1788,9 @@ def _focus(vault: Path) -> dict[str, str]:
     raw = _generated_section(path, "goal-suggestions")
     title_match = re.search(r"\*\*([^:*]+):\*\*", raw)
     return {
-        "title": _clean_markdown(title_match.group(1), max_chars=80) if title_match else "Current direction",
+        "title": _clean_markdown(title_match.group(1), max_chars=80)
+        if title_match
+        else "Current direction",
         "summary": _clean_markdown(raw, max_chars=380),
         "url": obsidian_uri(vault, path),
     }
@@ -1578,14 +1800,52 @@ def _system_status(
     store: StateStore, schedule: dict[str, Any], *, now: datetime
 ) -> dict[str, str]:
     bootstrap = store.bootstrap_state().get("state")
-    runs = [run for run in store.runs(limit=30) if run.get("kind") in {"daily", "weekly"}]
+    pipeline_runs = store.pipeline_runs(limit=30)
+    latest_pipeline = pipeline_runs[0] if pipeline_runs else None
+    runs = [
+        run for run in store.runs(limit=30) if run.get("kind") in {"daily", "weekly"}
+    ]
     latest = runs[0] if runs else None
     if bootstrap != "completed":
-        return {"tone": "attention", "label": "Setup needs attention", "detail": "Bootstrap is not complete."}
+        return {
+            "tone": "attention",
+            "label": "Setup needs attention",
+            "detail": "Bootstrap is not complete.",
+        }
     if not schedule.get("installed"):
-        return {"tone": "attention", "label": "Schedule needs attention", "detail": "The daily task is not installed."}
+        return {
+            "tone": "attention",
+            "label": "Schedule needs attention",
+            "detail": "The daily task is not installed.",
+        }
+    if latest_pipeline and latest_pipeline.get("status") == "failed":
+        stage = str(latest_pipeline.get("stage") or "unknown stage").replace("_", " ")
+        error = sanitize_text(str(latest_pipeline.get("error") or ""), max_chars=180)
+        detail = f"Failed during {stage}. Evidence is preserved for retry."
+        if error:
+            detail += f" {error}"
+        return {"tone": "danger", "label": "Last daily run failed", "detail": detail}
+    schedule_result = int(schedule.get("last_result") or 0)
+    scheduled_at = _parse_datetime(schedule.get("last_run"))
+    successful_at = _parse_datetime(
+        (latest_pipeline or {}).get("completed_at")
+        if latest_pipeline and latest_pipeline.get("status") == "completed"
+        else (latest or {}).get("completed_at")
+    )
+    if schedule_result != 0 and (
+        scheduled_at is None or successful_at is None or successful_at < scheduled_at
+    ):
+        return {
+            "tone": "danger",
+            "label": "Last scheduled run failed",
+            "detail": f"Scheduler exit code {schedule_result}. Evidence is preserved for retry.",
+        }
     if latest and latest.get("status") == "failed":
-        return {"tone": "danger", "label": "Last run failed safely", "detail": "Evidence is preserved for retry."}
+        return {
+            "tone": "danger",
+            "label": "Last run failed safely",
+            "detail": "Evidence is preserved for retry.",
+        }
     if latest is None:
         return {
             "tone": "ready",
@@ -1594,8 +1854,16 @@ def _system_status(
         }
     completed = _parse_datetime(latest.get("completed_at") or latest.get("started_at"))
     if completed and now.astimezone(UTC) - completed > timedelta(hours=48):
-        return {"tone": "attention", "label": "A refresh is due", "detail": "The latest successful update is more than two days old."}
-    return {"tone": "good", "label": "Brain is up to date", "detail": "Recent evidence has been processed successfully."}
+        return {
+            "tone": "attention",
+            "label": "A refresh is due",
+            "detail": "The latest successful update is more than two days old.",
+        }
+    return {
+        "tone": "good",
+        "label": "Brain is up to date",
+        "detail": "Recent evidence has been processed successfully.",
+    }
 
 
 def build_snapshot(
@@ -1649,23 +1917,27 @@ def build_snapshot(
     }
     daily = daily_history[0] if daily_history else dict(empty_summary)
     weekly = weekly_history[0] if weekly_history else dict(empty_summary)
-    activity, trend, total_sessions = _recent_activity(store, vault, now=now)
+    activity, trend, _historical_sessions = _recent_activity(store, vault, now=now)
+    session_coverage = store.session_coverage()
+    total_sessions = int(session_coverage["total"])
     pending = store.observations("pending")
     reviews = review_summary(pending)
     runs = _group_runs(store)
     status = _system_status(store, schedule, now=now)
 
-    present_projects = 0
-    first_party_projects = 0
-    for project in store.projects():
-        if not _project_is_attributable(project):
-            continue
-        presence = store.project_presence(project["id"])
-        if presence and not bool(presence["present"]):
-            continue
-        present_projects += 1
-        if project.get("classification") == "first-party":
-            first_party_projects += 1
+    runtime_projects = store.present_projects()
+    catalog_projects, _catalog_collections, _catalog_folders = catalog_groups(
+        runtime_projects
+    )
+    catalog_health = project_catalog_health(vault, runtime_projects)
+    present_projects = len(catalog_projects)
+    first_party_projects = len(
+        [
+            project
+            for project in catalog_projects
+            if project.get("classification") == "first-party"
+        ]
+    )
 
     latest_review = _latest_note(vault / "Inbox" / "Review", "Review-*.md")
     dashboard_links = {
@@ -1674,20 +1946,44 @@ def build_snapshot(
         "skills": obsidian_uri(vault, vault / "Skills" / "Index.md"),
         "memory": obsidian_uri(vault, vault / "Memory" / "LongTermMemory.md"),
         "goals": obsidian_uri(vault, vault / "Goals" / "ActiveGoals.md"),
-        "review": obsidian_uri(vault, latest_review or vault / "Inbox" / "Review" / "Index.md"),
-        "daily": obsidian_uri(vault, daily_path or vault / "Journal" / "Daily" / "Index.md"),
-        "weekly": obsidian_uri(vault, weekly_path or vault / "Journal" / "Weekly" / "Index.md"),
+        "review": obsidian_uri(
+            vault, latest_review or vault / "Inbox" / "Review" / "Index.md"
+        ),
+        "daily": obsidian_uri(
+            vault, daily_path or vault / "Journal" / "Daily" / "Index.md"
+        ),
+        "weekly": obsidian_uri(
+            vault, weekly_path or vault / "Journal" / "Weekly" / "Index.md"
+        ),
         "roadmap": obsidian_uri(vault, vault / "System" / "Roadmap.md"),
     }
 
     cached_search = _cached_search_health(paths, store)
     git = _git_summary(vault)
     schedule_state = str(schedule.get("state") or "unknown")
-    scheduler_good = bool(schedule.get("installed")) and schedule_state.casefold() in {"ready", "running"}
-    scheduler_detail = "Installed; first run pending" if not schedule.get("last_run") and scheduler_good else schedule_state.title()
+    scheduler_failed = (
+        status.get("tone") == "danger"
+        and "run failed" in str(status.get("label", "")).casefold()
+    )
+    scheduler_good = (
+        bool(schedule.get("installed"))
+        and schedule_state.casefold() in {"ready", "running"}
+        and not scheduler_failed
+    )
+    scheduler_detail = (
+        "Installed; first run pending"
+        if not schedule.get("last_run") and scheduler_good
+        else schedule_state.title()
+    )
+    if scheduler_failed:
+        scheduler_detail = status["detail"]
     checks = [
         {"label": "Vault", "state": "good", "detail": "Canonical notes available"},
-        {"label": "Scheduler", "state": "good" if scheduler_good else "attention", "detail": scheduler_detail},
+        {
+            "label": "Scheduler",
+            "state": "good" if scheduler_good else "attention",
+            "detail": scheduler_detail,
+        },
         {"label": "Search", **cached_search},
         {"label": "Private Git", **git},
         {
@@ -1696,6 +1992,26 @@ def build_snapshot(
             "detail": f"{store.evidence_count(status='new')} waiting for the next run"
             if store.evidence_count(status="new")
             else "Nothing waiting",
+        },
+        {
+            "label": "Session attribution",
+            "state": "attention" if session_coverage["unattributed"] else "good",
+            "detail": (
+                f"{session_coverage['attributed']} of {session_coverage['total']} sessions linked to projects; "
+                f"{session_coverage['unattributed']} still need context"
+                if session_coverage["total"]
+                else "No session evidence collected yet"
+            ),
+        },
+        {
+            "label": "Project catalog",
+            "state": "good" if catalog_health["ok"] else "attention",
+            "detail": (
+                f"{catalog_health['projects']} projects; "
+                f"{catalog_health['collections']} collections kept separate"
+                if catalog_health["ok"]
+                else str(catalog_health["reason"])
+            ),
         },
     ]
 
@@ -1721,16 +2037,39 @@ def build_snapshot(
             "codex_usage": codex_usage_snapshot,
         },
         "metrics": [
-            {"label": "Projects mapped", "value": present_projects, "detail": f"{first_party_projects} first-party"},
+            {
+                "label": "Projects mapped",
+                "value": present_projects,
+                "detail": f"{first_party_projects} first-party",
+            },
             {
                 "label": "Skills evidenced",
-                "value": len([path for path in (vault / "Skills").glob("*.md") if path.name != "Index.md"]),
+                "value": len(
+                    [
+                        path
+                        for path in (vault / "Skills").glob("*.md")
+                        if path.name != "Index.md"
+                    ]
+                ),
                 "detail": "Canonical skill notes",
             },
-            {"label": "Sessions understood", "value": total_sessions, "detail": "Deduplicated agent sessions"},
-            {"label": "Knowledge promoted", "value": len(store.observations("promoted")), "detail": "Evidence-backed observations"},
+            {
+                "label": "Sessions understood",
+                "value": total_sessions,
+                "detail": (
+                    f"{session_coverage['attributed']} linked to projects, "
+                    f"{session_coverage['unattributed']} not yet linked"
+                ),
+            },
+            {
+                "label": "Knowledge promoted",
+                "value": len(store.observations("promoted")),
+                "detail": "Evidence-backed observations",
+            },
         ],
         "activity": {"projects": activity, "trend": trend, "days": 7},
+        "project_catalog": catalog_health,
+        "session_coverage": session_coverage,
         "insights": _recent_insights(store, vault),
         "knowledge": _knowledge_deck(store, vault),
         "questions": _question_deck(store, vault),
@@ -1741,7 +2080,11 @@ def build_snapshot(
             "public": reviews["public_claims"],
             "private": reviews["private_review"],
             "groups": [
-                {"title": group["title"], "count": group["count"], "section": group["section"]}
+                {
+                    "title": group["title"],
+                    "count": group["count"],
+                    "section": group["section"],
+                }
                 for group in reviews["groups"]
             ],
             "url": dashboard_links["review"],
@@ -1764,13 +2107,21 @@ def build_snapshot(
 
 
 def render_dashboard(snapshot: dict[str, Any]) -> str:
-    packaged_template = Path(__file__).resolve().parent / "assets" / "dashboard" / "index.html"
+    packaged_template = (
+        Path(__file__).resolve().parent / "assets" / "dashboard" / "index.html"
+    )
     source_template = protocol_root() / "assets" / "dashboard" / "index.html"
-    template_path = packaged_template if packaged_template.is_file() else source_template
+    template_path = (
+        packaged_template if packaged_template.is_file() else source_template
+    )
     template = template_path.read_text(encoding="utf-8")
-    payload = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    payload = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")).replace(
+        "</", "<\\/"
+    )
     if template.count("__DASHBOARD_DATA__") != 1:
-        raise RuntimeError("Dashboard template must contain exactly one data placeholder.")
+        raise RuntimeError(
+            "Dashboard template must contain exactly one data placeholder."
+        )
     return template.replace("__DASHBOARD_DATA__", payload)
 
 
@@ -1794,7 +2145,9 @@ def open_dashboard(paths: RuntimePaths, vault: Path) -> str:
 
 def install_dashboard_shortcut(paths: RuntimePaths, vault: Path) -> Path:
     if os.name != "nt":
-        raise RuntimeError("Desktop shortcut installation is currently supported on Windows only.")
+        raise RuntimeError(
+            "Desktop shortcut installation is currently supported on Windows only."
+        )
     _ = paths
     owner = vault.name.removesuffix(" Second Brain").strip()
     words = re.findall(r"[A-Za-z0-9]+", owner)
@@ -1824,12 +2177,16 @@ def install_dashboard_shortcut(paths: RuntimePaths, vault: Path) -> Path:
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr or result.stdout or "Dashboard shortcut installation failed")
+        raise RuntimeError(
+            result.stderr or result.stdout or "Dashboard shortcut installation failed"
+        )
     try:
         payload = json.loads(result.stdout.strip().splitlines()[-1])
         shortcut = Path(payload["StartMenuShortcut"])
     except (IndexError, KeyError, json.JSONDecodeError) as error:
-        raise RuntimeError("Dashboard shortcut installer returned an invalid receipt") from error
+        raise RuntimeError(
+            "Dashboard shortcut installer returned an invalid receipt"
+        ) from error
     if not shortcut.is_file():
         raise RuntimeError("Dashboard shortcut was not created.")
     return shortcut

@@ -6,6 +6,7 @@ from second_brain_protocol.codex_account import normalize_rate_limits
 from second_brain_protocol.dashboard import (
     _knowledge_deck,
     _question_deck,
+    _recent_activity,
     _summary_cost,
     _summary_visuals,
     build_snapshot,
@@ -27,26 +28,27 @@ def test_daily_activity_bullets_become_visual_stats_and_chips() -> None:
     visuals = _summary_visuals(
         [
             {
-                "title": "Deterministic activity ledger",
+                "title": "Coverage details",
                 "paragraphs": [],
                 "items": [
-                    "Project deltas: 10 across Angel, HyperFrames, Portfolio",
-                    "Change types: classification_changed (5), files_changed (4), stack_changed (2)",
-                    "Agent sessions evaluated: 6 across 6 attributed projects",
-                    "Recurring patterns: 1 tracking, 1 promoted, 0 awaiting review",
+                    "Projects with detected changes: 10 - Angel, HyperFrames, Portfolio",
+                    "Change signals: classification_changed (5), files_changed (4), stack_changed (2)",
+                    "Agent sessions reviewed: 6 total - 5 linked to 3 projects; 1 not yet linked; Codex 4, Antigravity 2",
+                    "Knowledge signals: 1 tracking, 1 promoted, 0 awaiting review",
                 ],
             }
         ]
     )
 
-    assert [item["value"] for item in visuals["stats"]] == [10, 6, 6, 1]
+    assert [item["value"] for item in visuals["stats"]] == [10, 6, 3, 1]
     assert [item["title"] for item in visuals["groups"]] == [
-        "Projects touched",
+        "Projects with detected changes",
         "Change signals",
-        "Session coverage",
+        "Session-to-project coverage",
         "Pattern status",
     ]
     assert visuals["groups"][1]["chips"][0] == {"label": "Classification", "value": 5}
+    assert visuals["groups"][2]["chips"][-1] == {"label": "Not yet linked", "value": 1}
 
 
 def test_summary_cost_uses_exact_split_or_honest_legacy_range() -> None:
@@ -107,7 +109,50 @@ def test_codex_rate_limit_snapshot_keeps_only_display_fields() -> None:
     assert "credits" not in snapshot
 
 
-def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(tmp_path: Path) -> None:
+def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    vault.mkdir()
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    store.set_bootstrap_state("completed")
+    run_id = store.start_pipeline_run(
+        "daily", trigger="scheduled", stage="collect_projects"
+    )
+    store.set_pipeline_stage(run_id, "collect_sessions")
+    store.finish_pipeline_run(
+        run_id,
+        "failed",
+        error=r"RuntimeError: failed while reading C:\Users\private\session.jsonl",
+    )
+
+    snapshot = build_snapshot(
+        paths,
+        vault,
+        now=datetime(2026, 7, 18, 23, 0, tzinfo=UTC),
+        schedule={
+            "installed": True,
+            "state": "Ready",
+            "last_run": "2026-07-18T22:30:00-04:00",
+            "next_run": "2026-07-19T22:30:00-04:00",
+            "last_result": 1,
+            "missed_runs": 0,
+        },
+        codex_usage_snapshot={"available": False, "windows": []},
+    )
+
+    assert snapshot["status"]["label"] == "Last daily run failed"
+    assert "collect sessions" in snapshot["status"]["detail"]
+    assert "[LOCAL_PATH]" in snapshot["status"]["detail"]
+    assert snapshot["runs"][0]["status"] == "failed"
+    assert snapshot["runs"][0]["stage"] == "Collect Sessions"
+    assert "[LOCAL_PATH]" in render_dashboard(snapshot)
+
+
+def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(
+    tmp_path: Path,
+) -> None:
     vault = tmp_path / "Example Person Second Brain"
     paths = RuntimePaths.from_root(tmp_path / "runtime")
     store = StateStore(paths.state)
@@ -134,20 +179,28 @@ def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(tmp_
     _note(vault / "Memory" / "Patterns.md", "# Patterns\n")
     _note(vault / "Memory" / "Decisions.md", "# Decisions\n")
     _note(vault / "Memory" / "Lessons.md", "# Lessons\n")
-    _note(vault / "Goals" / "ActiveGoals.md", """# Goals
+    _note(
+        vault / "Goals" / "ActiveGoals.md",
+        """# Goals
 <!-- sb:generated goal-suggestions:start -->
 - **Build useful systems:** Create calm, reliable products with clear outcomes.
 <!-- sb:generated goal-suggestions:end -->
-""")
+""",
+    )
     _note(vault / "Inbox" / "Review" / "Review-2026-07-16.md", "# Review\n")
-    _note(vault / "Journal" / "Weekly" / "2026-W29.md", """# Week
+    _note(
+        vault / "Journal" / "Weekly" / "2026-W29.md",
+        """# Week
 <!-- sb:generated weekly:start -->
 Connected several project lessons into a reusable workflow.
 <!-- sb:generated weekly:end -->
-""")
+""",
+    )
     fake_path = "C:\\" + "Users\\private\\secret.txt"
     fake_secret = "sk-" + "abcdefghijklmnopqrstuvwxyz" + "123456"
-    _note(vault / "Journal" / "Daily" / "2026-07-16.md", f"""# Today
+    _note(
+        vault / "Journal" / "Daily" / "2026-07-16.md",
+        f"""# Today
 <!-- sb:generated daily:start -->
 ### Deterministic activity ledger
 
@@ -158,9 +211,12 @@ Connected several project lessons into a reusable workflow.
 
 The dashboard work was completed and verified.
 <!-- sb:generated daily:end -->
-""")
+""",
+    )
 
-    store.upsert_project({"id": "project-1", "name": "Private Project", "classification": "first-party"})
+    store.upsert_project(
+        {"id": "project-1", "name": "Private Project", "classification": "first-party"}
+    )
     store.set_project_presence("project-1", present=True)
     store.add_evidence(
         source_type="codex",
@@ -203,7 +259,9 @@ The dashboard work was completed and verified.
             "sensitivity": "sensitive",
             "promotion_tier": "review",
             "status": "pending",
-            "payload": {"question": "Should this profile claim remain private or be safe for career use?"},
+            "payload": {
+                "question": "Should this profile claim remain private or be safe for career use?"
+            },
         }
     )
     store.upsert_pattern_signal(
@@ -270,7 +328,12 @@ The dashboard work was completed and verified.
     assert snapshot["activity"]["projects"][0]["name"] == "Private Project"
     assert snapshot["review"]["questions"] == 1
     assert snapshot["insights"][0]["subject"] == "Outcome ownership"
-    assert snapshot["knowledge"]["counts"] == {"new": 1, "all": 1, "confirmed": 0, "removed": 0}
+    assert snapshot["knowledge"]["counts"] == {
+        "new": 1,
+        "all": 1,
+        "confirmed": 0,
+        "removed": 0,
+    }
     assert snapshot["knowledge"]["cards"][0]["subject"] == "Outcome ownership"
     assert snapshot["knowledge"]["cards"][0]["claim"].startswith("Example prefers")
     assert snapshot["knowledge"]["cards"][0]["layer"] == "about_shai"
@@ -284,18 +347,36 @@ The dashboard work was completed and verified.
     assert snapshot["knowledge"]["layers"][0]["label"] == "About Example"
     assert snapshot["knowledge"]["layers"][0]["short_label"] == "About Example"
     assert snapshot["knowledge"]["layers"][0]["count"] == 1
-    assert snapshot["briefing"]["daily"]["sections"][0]["title"] == "Deterministic activity ledger"
+    assert (
+        snapshot["briefing"]["daily"]["sections"][0]["title"]
+        == "Deterministic activity ledger"
+    )
     assert snapshot["summaries"]["counts"] == {"daily": 1, "weekly": 1}
-    assert snapshot["summaries"]["daily"][0]["highlights"][0] == "Shipped the safe dashboard generator."
+    assert (
+        snapshot["summaries"]["daily"][0]["highlights"][0]
+        == "Shipped the safe dashboard generator."
+    )
     assert snapshot["summaries"]["daily"][0]["usage"]["total_tokens"] == 1500
     assert snapshot["summaries"]["daily"][0]["usage"]["cached_input_tokens"] == 800
-    assert snapshot["summaries"]["daily"][0]["usage"]["pricing"]["estimate_low_usd"] == 0.00228
-    assert snapshot["summaries"]["daily"][0]["usage"]["codex_impact"]["percentage_points"] == 0.555
+    assert (
+        snapshot["summaries"]["daily"][0]["usage"]["pricing"]["estimate_low_usd"]
+        == 0.00228
+    )
+    assert (
+        snapshot["summaries"]["daily"][0]["usage"]["codex_impact"]["percentage_points"]
+        == 0.555
+    )
     assert snapshot["summaries"]["codex_usage"]["windows"][0]["used_percent"] == 37
-    assert snapshot["questions"]["cards"][0]["question"] == "Should this profile claim remain private or be safe for career use?"
+    assert (
+        snapshot["questions"]["cards"][0]["question"]
+        == "Should this profile claim remain private or be safe for career use?"
+    )
     assert snapshot["actions"] == {"enabled": False, "csrf_token": ""}
     assert "PENDING-RAW-SECRET" not in rendered
-    assert "Should this profile claim remain private or be safe for career use?" in rendered
+    assert (
+        "Should this profile claim remain private or be safe for career use?"
+        in rendered
+    )
     assert fake_path not in rendered
     assert fake_secret not in rendered
     assert "__DASHBOARD_DATA__" not in rendered
@@ -357,7 +438,11 @@ def test_project_decision_uses_an_attribution_stamp(
         }
     )
 
-    card = next(item for item in _knowledge_deck(store, vault)["cards"] if item["id"] == observation_id)
+    card = next(
+        item
+        for item in _knowledge_deck(store, vault)["cards"]
+        if item["id"] == observation_id
+    )
 
     assert card["scope"] == "project"
     assert card["layer"] == "project_knowledge"
@@ -396,7 +481,43 @@ def test_one_off_project_preference_is_not_a_curate_card(
     assert _knowledge_deck(store, vault)["cards"] == []
 
 
-def test_reusable_preference_from_one_project_stays_in_how_i_work(tmp_path: Path) -> None:
+def test_recent_activity_accepts_leaf_projects_with_folder_stable_ids(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.upsert_project(
+        {
+            "id": "folder-portmanager",
+            "name": "PortManager",
+            "classification": "review",
+        }
+    )
+    store.set_project_presence("folder-portmanager", present=True)
+    store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:antigravity:portmanager",
+        kind="session_digest",
+        project_id="folder-portmanager",
+        occurred_at="2026-07-19T12:00:00+00:00",
+        payload={
+            "source": "antigravity",
+            "session_id": "portmanager-session",
+            "project_ids": ["folder-portmanager"],
+        },
+    )
+
+    activity, _trend, _total = _recent_activity(
+        store,
+        tmp_path,
+        now=datetime(2026, 7, 19, 18, 0, tzinfo=UTC),
+    )
+
+    assert [item["name"] for item in activity] == ["PortManager"]
+
+
+def test_reusable_preference_from_one_project_stays_in_how_i_work(
+    tmp_path: Path,
+) -> None:
     vault = tmp_path / "Example Person Second Brain"
     (vault / "Projects").mkdir(parents=True)
     _note(vault / "Projects" / "Index.md", "# Projects\n")
@@ -432,7 +553,9 @@ def test_reusable_preference_from_one_project_stays_in_how_i_work(tmp_path: Path
     assert card["project_stamp"] == ""
 
 
-def test_routine_project_inventory_does_not_become_a_curate_card(tmp_path: Path) -> None:
+def test_routine_project_inventory_does_not_become_a_curate_card(
+    tmp_path: Path,
+) -> None:
     vault = tmp_path / "Example Person Second Brain"
     (vault / "Projects").mkdir(parents=True)
     _note(vault / "Projects" / "Index.md", "# Projects\n")
@@ -465,7 +588,11 @@ def test_project_question_shows_destination_and_tailored_answer_starter(
     (vault / "Inbox" / "Review" / "Groups").mkdir(parents=True)
     store = StateStore(tmp_path / "state.sqlite")
     store.upsert_project(
-        {"id": "project-angel", "name": "First Party Project With Existing Brain", "classification": "first-party"}
+        {
+            "id": "project-angel",
+            "name": "First Party Project With Existing Brain",
+            "classification": "first-party",
+        }
     )
     evidence_id, _ = store.add_evidence(
         source_type="project-activity",
@@ -631,16 +758,20 @@ def test_curate_starts_on_first_layer_that_needs_attention() -> None:
     ]
 
     assert default_knowledge_layer(layers) == "professional_profile"
-    assert default_knowledge_layer([{**item, "new": 0} for item in layers]) == "about_shai"
-
-
-def test_knowledge_cards_use_owner_name_instead_of_generic_user_wording() -> None:
-    assert personalize_knowledge_text("The user ships work. The user's process is careful.", "the user") == (
-        "the user ships work. the user's process is careful."
+    assert (
+        default_knowledge_layer([{**item, "new": 0} for item in layers]) == "about_shai"
     )
 
 
-def test_dashboard_output_is_derived_runtime_state_not_vault_content(tmp_path: Path) -> None:
+def test_knowledge_cards_use_owner_name_instead_of_generic_user_wording() -> None:
+    assert personalize_knowledge_text(
+        "The user ships work. The user's process is careful.", "the user"
+    ) == ("the user ships work. the user's process is careful.")
+
+
+def test_dashboard_output_is_derived_runtime_state_not_vault_content(
+    tmp_path: Path,
+) -> None:
     paths = RuntimePaths.from_root(tmp_path / "runtime")
     vault = tmp_path / "vault"
     assert paths.dashboard == (tmp_path / "runtime" / "dashboard").resolve()

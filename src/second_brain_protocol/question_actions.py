@@ -7,6 +7,110 @@ from .publisher import write_bootstrap_review_artifacts, write_review_artifacts
 from .review import build_review_groups
 from .security import sanitize_text
 from .state import StateStore
+from .state import utc_now
+
+
+QUESTION_DISMISSAL_REASON = "Dismissed as not relevant by the vault owner"
+
+
+def _set_review_feedback(
+    connection, observation_id: str, decision: str
+) -> str | None:
+    row = connection.execute(
+        "SELECT decision FROM review_feedback WHERE observation_id=?",
+        (observation_id,),
+    ).fetchone()
+    previous = str(row["decision"]) if row else None
+    connection.execute(
+        """INSERT INTO review_feedback(observation_id,decision,updated_at) VALUES(?,?,?)
+        ON CONFLICT(observation_id) DO UPDATE SET
+        decision=excluded.decision,updated_at=excluded.updated_at""",
+        (observation_id, decision, utc_now()),
+    )
+    return previous
+
+
+def dismiss_question(
+    vault: Path, store: StateStore, observation_id: str
+) -> dict[str, Any]:
+    """Dismiss one irrelevant pending question and retain category feedback."""
+
+    with store.transaction() as connection:
+        row = connection.execute(
+            "SELECT kind,status FROM observations WHERE id=?", (observation_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(observation_id)
+        if row["kind"] != "clarification" or row["status"] != "pending":
+            raise ValueError("Only pending clarification questions can be dismissed")
+        previous = _set_review_feedback(connection, observation_id, "dismissed")
+        connection.execute(
+            """UPDATE observations SET status='rejected',rejection_reason=?,updated_at=?
+            WHERE id=?""",
+            (QUESTION_DISMISSAL_REASON, utc_now(), observation_id),
+        )
+        connection.execute(
+            """INSERT INTO review_feedback_events(
+            observation_id,action,previous_decision,previous_status,created_at
+            ) VALUES(?,?,?,?,?)""",
+            (observation_id, "dismiss", previous, "pending", utc_now()),
+        )
+    if store.bootstrap_state().get("state") == "awaiting_review":
+        write_bootstrap_review_artifacts(vault, store)
+    else:
+        write_review_artifacts(vault, store)
+    return {
+        "id": observation_id,
+        "status": "rejected",
+        "dismissed": True,
+        "learning_updated": True,
+    }
+
+
+def undo_last_question_dismissal(vault: Path, store: StateStore) -> dict[str, Any]:
+    event = store.last_question_dismissal()
+    if event is None:
+        raise RuntimeError("There is no question dismissal to undo")
+    observation_id = str(event["observation_id"])
+    with store.transaction() as connection:
+        row = connection.execute(
+            "SELECT kind,status,rejection_reason FROM observations WHERE id=?",
+            (observation_id,),
+        ).fetchone()
+        if (
+            row is None
+            or row["kind"] != "clarification"
+            or row["status"] != "rejected"
+            or row["rejection_reason"] != QUESTION_DISMISSAL_REASON
+        ):
+            raise RuntimeError("The last dismissed question cannot be restored safely")
+        connection.execute(
+            """UPDATE observations SET status='pending',rejection_reason=NULL,updated_at=?
+            WHERE id=?""",
+            (utc_now(), observation_id),
+        )
+        previous = event.get("previous_decision")
+        if previous in {"answered", "dismissed"}:
+            _set_review_feedback(connection, observation_id, str(previous))
+        else:
+            connection.execute(
+                "DELETE FROM review_feedback WHERE observation_id=?", (observation_id,)
+            )
+        connection.execute(
+            "UPDATE review_feedback_events SET undone_at=? WHERE id=? AND undone_at IS NULL",
+            (utc_now(), int(event["id"])),
+        )
+        connection.execute(
+            """INSERT INTO review_feedback_events(
+            observation_id,action,previous_decision,previous_status,created_at
+            ) VALUES(?,?,?,?,?)""",
+            (observation_id, "undo", "dismissed", "rejected", utc_now()),
+        )
+    if store.bootstrap_state().get("state") == "awaiting_review":
+        write_bootstrap_review_artifacts(vault, store)
+    else:
+        write_review_artifacts(vault, store)
+    return {"id": observation_id, "status": "pending", "restored": True}
 
 
 def attribute_question(
@@ -91,6 +195,14 @@ def answer_question(
         },
     )
     store.decide_observation(observation_id, "resolved", clean_answer)
+    with store.transaction() as connection:
+        previous = _set_review_feedback(connection, observation_id, "answered")
+        connection.execute(
+            """INSERT INTO review_feedback_events(
+            observation_id,action,previous_decision,previous_status,created_at
+            ) VALUES(?,?,?,?,?)""",
+            (observation_id, "answer", previous, "pending", utc_now()),
+        )
 
     if store.bootstrap_state().get("state") == "awaiting_review":
         write_bootstrap_review_artifacts(vault, store)
