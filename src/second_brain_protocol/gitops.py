@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 import hashlib
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -15,6 +17,7 @@ from .state import StateStore
 
 PUBLIC_BRANCH = "automation/protocol-publish"
 PUBLIC_PROTOCOL_FINGERPRINT_KEY = "public_protocol_fingerprint"
+STALE_INDEX_LOCK_SECONDS = 60 * 60
 GITHUB_ED25519_KNOWN_HOST = (
     "github.com ssh-ed25519 "
     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
@@ -47,6 +50,76 @@ PRIVATE_COMMIT_PATHS = (
 
 class GitPolicyError(RuntimeError):
     pass
+
+
+def _git_process_running() -> bool | None:
+    """Return whether Git is active, or None when process state is unavailable."""
+
+    command = (
+        ["tasklist", "/fo", "csv", "/nh"]
+        if os.name == "nt"
+        else ["ps", "-A", "-o", "comm="]
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    if os.name == "nt":
+        names = [row[0] for row in csv.reader(result.stdout.splitlines()) if row]
+    else:
+        names = result.stdout.splitlines()
+    for name in names:
+        executable = Path(name.strip()).name.casefold()
+        if executable in {"git", "git.exe"} or executable.startswith(("git-", "git_")):
+            return True
+    return False
+
+
+def _recover_stale_index_lock(
+    vault: Path, *, minimum_age_seconds: int = STALE_INDEX_LOCK_SECONDS
+) -> bool:
+    """Remove only a provably stale, empty Git index lock.
+
+    A live or ambiguous lock remains blocking. The pipeline's own single-instance
+    lock prevents competing second-brain runs; this guard handles crash debris
+    left by an unrelated Git command between scheduled runs.
+    """
+
+    git_dir = vault / ".git"
+    lock = git_dir / "index.lock"
+    if not git_dir.is_dir() or not lock.is_file() or lock.is_symlink():
+        return False
+    try:
+        stat = lock.stat()
+    except OSError:
+        return False
+    age_seconds = max(0.0, time.time() - stat.st_mtime)
+    if stat.st_size != 0 or age_seconds < minimum_age_seconds:
+        return False
+    if _git_process_running() is not False:
+        return False
+
+    quarantine = git_dir / f"index.lock.sb-stale-{os.getpid()}-{time.time_ns()}"
+    try:
+        os.replace(lock, quarantine)
+    except OSError:
+        return False
+    try:
+        quarantine.unlink()
+    except OSError:
+        # The quarantined name cannot block Git even if cleanup is delayed.
+        pass
+    return True
 
 
 def _run(cwd: Path, *args: str, check: bool = True, timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -95,6 +168,7 @@ def assert_private_safe(vault: Path) -> None:
 
 
 def commit_if_changed(vault: Path, message: str, *, paths: Iterable[str] | None = None) -> bool:
+    _recover_stale_index_lock(vault)
     initialize_local_repository(vault)
     assert_private_safe(vault)
     if paths:
@@ -115,6 +189,7 @@ def commit_if_changed(vault: Path, message: str, *, paths: Iterable[str] | None 
 
 
 def snapshot_manual_markdown(vault: Path) -> bool:
+    _recover_stale_index_lock(vault)
     initialize_local_repository(vault)
     status = _run(vault, "git", "status", "--porcelain=v1", "--untracked-files=all").stdout.splitlines()
     paths: list[str] = []

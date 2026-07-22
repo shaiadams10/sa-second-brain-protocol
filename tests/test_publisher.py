@@ -814,3 +814,99 @@ def test_weekly_cannot_resolve_human_disclosure_question(tmp_path: Path) -> None
             question_ids=[question_id],
         )
     assert store.observation(question_id)["status"] == "pending"
+
+
+def test_daily_publishes_session_learning_and_generated_journal_index(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.upsert_project(
+        {
+            "id": "project-demo",
+            "name": "Demo",
+            "classification": "first-party",
+        }
+    )
+    store.set_project_presence("project-demo", present=True)
+    evidence_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:antigravity:demo",
+        kind="session_digest",
+        project_id="project-demo",
+        occurred_at=f"{date.today().isoformat()}T15:00:00+00:00",
+        payload={
+            "source": "antigravity",
+            "project_ids": ["project-demo"],
+            "started_at": f"{date.today().isoformat()}T15:00:00+00:00",
+            "user_messages": [{"text": "test"}],
+            "assistant_results": [{"text": "Successfully loaded the workspace."}],
+            "tool_usage": {"list_dir": 1},
+        },
+    )
+    output = {
+        "summary": "- Demo: verified agent connectivity.",
+        "observations": [],
+        "pattern_signals": [],
+        "project_updates": [],
+        "session_summaries": [
+            {
+                "evidence_ref": evidence_id,
+                "project_id": "project-demo",
+                "project_name": "Demo",
+                "summary": "Verified that the agent could load the project workspace.",
+            }
+        ],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+
+    result = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="daily",
+        evidence_ids=[evidence_id],
+    )
+
+    daily = Path(result["synthesis_path"]).read_text(encoding="utf-8")
+    index = Path(result["journal_index_path"]).read_text(encoding="utf-8")
+    assert "### Sessions reviewed" in daily
+    assert "Verified that the agent could load" in daily
+    assert "### What the brain learned" in daily
+    assert "No new durable personal" in daily
+    assert f"[[Journal/Daily/{date.today().isoformat()}" in index
+    assert store.summary_evidence_ids("daily", date.today().isoformat()) == [
+        evidence_id
+    ]
+
+
+def test_weekly_writes_stewardship_note_and_index(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    output = {
+        "summary": "- A quiet week with stewardship checks completed.",
+        "observations": [],
+        "pattern_signals": [],
+        "project_updates": [],
+        "session_summaries": [],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+    result = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=output,
+        run_kind="weekly",
+        evidence_ids=[],
+        summary_period="2026-W29",
+    )
+
+    weekly = Path(result["synthesis_path"]).read_text(encoding="utf-8")
+    stewardship = Path(result["stewardship_path"]).read_text(encoding="utf-8")
+    index = Path(result["journal_index_path"]).read_text(encoding="utf-8")
+    assert "### Second-brain stewardship" in weekly
+    assert "Session attribution" in stewardship
+    assert "[[Journal/Weekly/2026-W29" in index

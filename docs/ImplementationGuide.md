@@ -100,14 +100,14 @@ Approval writes the one-time completion marker, installs the Windows task, runs 
 
 The Windows task runs once each day at the configured local time:
 
-- Sunday through Friday: daily incremental pipeline.
+- Sunday through Friday: daily incremental pipeline, plus a missing-week catch-up when the latest weekly note was not completed.
 - Saturday: daily pipeline followed by weekly synthesis.
 - Empty day: record the run without a model call.
 - Missed run: start as soon as possible after the user logs in.
 - Existing run: ignore the overlapping instance.
 - Failed run: preserve evidence and checkpoints for retry.
 
-Daily output focuses on activity, implementations, decisions, blockers, candidate skills, and sanitized voice samples. Weekly output connects trajectories, wins, lessons, repeated work patterns, stale claims, contradictions, and next-focus suggestions.
+Daily output keeps a named project-change ledger, one sanitized recap for every attributed session, implementations, decisions, blockers, setup outcomes, candidate skills, and evidence-gated personal/work insights. Late-arriving sessions are labeled as backfill instead of being presented as same-day work. Weekly output connects trajectories, wins, lessons, repeated work patterns, stale claims, contradictions, and next-focus suggestions, then adds deterministic stewardship checks for attribution coverage, review load, missing projects, journal continuity, and recent pipeline failures. Daily and weekly indexes are rebuilt inside bounded generated sections.
 
 ## 8. Use the natural-language interface and local dashboard
 
@@ -117,7 +117,7 @@ An explicit request to forget a project first produces an exact-match impact pre
 
 The local dashboard has two modes. Its generated HTML file is a read-only fallback. Normal use starts a loopback-only server bound to `127.0.0.1`, which rebuilds the same private view on request and enables allowlisted owner actions for Knowledge Deck confirmation/retraction/undo and individual question answers. Its populated output lives under the machine-local runtime and is never committed. The dashboard contains canonical knowledge, structured daily and weekly summary logs, safe question text, counts, and aggregate run metadata only.
 
-The latest daily briefing preserves the generated note's named sections so deterministic activity and evidence-backed learning are easy to scan. The summary archive lists every available daily and weekly synthesis, shows quick points first, and reveals the complete generated section on demand; it does not create new interpretation beyond the canonical notes. The question deck shows one clarification at a time with its category explanation, answer guidance, and deterministic choices where a category has useful standard states. Saving records an explicit private answer; Answer later makes no change.
+The latest daily briefing preserves the generated note's named sections so deterministic activity and evidence-backed learning are easy to scan. The summary archive lists every available daily and weekly synthesis, shows quick points first, and reveals the complete generated section on demand; it does not create new interpretation beyond the canonical notes. Summary counts, groups, and claims carry sanitized provenance descriptors. Designed evidence popovers reveal the referenced projects or sessions on hover and keyboard focus, and their rows open canonical Obsidian notes. Raw conversations, paths, and machine identifiers remain excluded. The question deck shows one clarification at a time with its category explanation, answer guidance, and deterministic choices where a category has useful standard states. Saving records an explicit private answer; Answer later makes no change.
 
 The Knowledge Deck shows promoted canonical observations, never pending claim text. No action or Skip leaves knowledge unchanged. Confirm records explicit owner approval. Retract removes only matching lines inside valid `sb:generated` sections and tombstones the observation while preserving evidence, provenance, and all manual prose. Undo restores the most recent retraction and its previous confirmation state. Publication failures roll the action back; semantic-search refresh is derived work queued durably after the decision, performed in the background for changed notes only, and retried without reversing the owner's choice.
 

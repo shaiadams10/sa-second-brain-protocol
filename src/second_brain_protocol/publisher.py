@@ -71,7 +71,12 @@ def _ensure_generated_note(
 
 
 def _write_synthesis_summary(
-    vault: Path, run_kind: str, summary: str, *, activity: str | None = None
+    vault: Path,
+    run_kind: str,
+    summary: str,
+    *,
+    activity: str | None = None,
+    period: str | None = None,
 ) -> Path:
     today = date.today().isoformat()
     if run_kind == "bootstrap":
@@ -81,10 +86,11 @@ def _write_synthesis_summary(
         title = "Bootstrap synthesis"
         note_type = "bootstrap-synthesis"
     elif run_kind == "daily":
-        path = vault / "Journal" / "Daily" / f"{today}.md"
+        daily_id = period or today
+        path = vault / "Journal" / "Daily" / f"{daily_id}.md"
         section = "daily"
-        note_id = f"daily-{today}"
-        title = today
+        note_id = f"daily-{daily_id}"
+        title = daily_id
         note_type = "daily"
     elif run_kind.startswith("project-history:"):
         project_id = slugify(run_kind.split(":", 1)[1])
@@ -95,7 +101,7 @@ def _write_synthesis_summary(
         note_type = "project-session-analysis"
     else:
         week = datetime.now().isocalendar()
-        week_id = f"{week.year}-W{week.week:02d}"
+        week_id = period or f"{week.year}-W{week.week:02d}"
         path = vault / "Journal" / "Weekly" / f"{week_id}.md"
         section = "weekly"
         note_id = f"weekly-{week_id}"
@@ -128,6 +134,126 @@ def _write_synthesis_summary(
         )
     update_generated_file(path, section, generated)
     return path
+
+
+def _ensure_index_markers(path: Path, section: str, heading: str) -> None:
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# {heading}\n", encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    start = f"<!-- sb:generated {section}:start -->"
+    end = f"<!-- sb:generated {section}:end -->"
+    if start in text or end in text:
+        return
+    suffix = "" if text.endswith("\n") else "\n"
+    path.write_text(
+        text + suffix + f"\n{start}\n_No generated entries yet._\n{end}\n",
+        encoding="utf-8",
+    )
+
+
+def _update_journal_index(vault: Path, kind: str) -> Path:
+    folder_name = "Daily" if kind == "daily" else "Weekly"
+    folder = vault / "Journal" / folder_name
+    path = folder / "Index.md"
+    section = f"{kind}-index"
+    _ensure_index_markers(path, section, f"{folder_name} Notes")
+    pattern = "20??-??-??.md" if kind == "daily" else "20??-W??.md"
+    notes = sorted(folder.glob(pattern), key=lambda item: item.stem, reverse=True)
+    label = "Daily summary" if kind == "daily" else "Weekly reflection"
+    body = "\n".join(
+        f"- [[Journal/{folder_name}/{note.stem}|{note.stem}]] — {label}"
+        for note in notes
+    ) or "_No generated entries yet._"
+    update_generated_file(path, section, body)
+    return path
+
+
+def _weekly_stewardship_markdown(vault: Path, store: StateStore) -> str:
+    coverage = store.session_coverage()
+    pending_review = len(store.observations("pending"))
+    pending_evidence = store.evidence_count(status="new")
+    failures = [
+        item for item in store.pipeline_runs(limit=14) if item.get("status") == "failed"
+    ]
+    missing = store.missing_projects()
+    daily_notes = list((vault / "Journal" / "Daily").glob("20??-??-??.md"))
+    weekly_notes = list((vault / "Journal" / "Weekly").glob("20??-W??.md"))
+    attributed = int(coverage.get("attributed") or 0)
+    total = int(coverage.get("total") or 0)
+    unattributed = int(coverage.get("unattributed") or 0)
+    lines = [
+        "### Second-brain stewardship",
+        "",
+        f"- Session attribution: {attributed} of {total} indexed sessions linked; {unattributed} need attribution.",
+        f"- Review and ingestion: {pending_review} review items; {pending_evidence} evidence records waiting.",
+        f"- Project catalog: {len(store.present_projects())} present; {len(missing)} currently missing.",
+        f"- Journal continuity: {len(daily_notes)} daily notes and {len(weekly_notes)} weekly notes; generated indexes refreshed.",
+        f"- Pipeline reliability: {len(failures)} recent failed run{'s' if len(failures) != 1 else ''} retained for audit.",
+        "",
+        "#### Stewardship actions",
+        "",
+    ]
+    actions = []
+    if unattributed:
+        actions.append(
+            f"Reconcile {unattributed} unattributed sessions so future daily and weekly insight coverage is complete."
+        )
+    if failures:
+        actions.append(
+            "Review recent failed pipeline stages and confirm their evidence was recovered by a later run."
+        )
+    if pending_review:
+        actions.append(
+            f"Curate {pending_review} pending observations so ambiguous knowledge does not go stale."
+        )
+    if missing:
+        actions.append(
+            f"Confirm whether {len(missing)} missing project{'s' if len(missing) != 1 else ''} moved, disconnected, or should remain inactive."
+        )
+    if not actions:
+        actions.append("No stewardship exception needs attention this week.")
+    lines.extend(f"- {sanitize_text(action, max_chars=500)}" for action in actions)
+    return "\n".join(lines)
+
+
+def _write_stewardship_note(vault: Path, body: str) -> Path:
+    path = vault / "System" / "Stewardship.md"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "---\ntype: system-stewardship\n---\n\n# Second-brain stewardship\n\n"
+            "<!-- sb:generated stewardship:start -->\n"
+            "_No weekly stewardship run yet._\n"
+            "<!-- sb:generated stewardship:end -->\n\n## Manual notes\n\n",
+            encoding="utf-8",
+        )
+    update_generated_file(path, "stewardship", body)
+    return path
+
+
+def _learning_markdown(output: dict[str, Any]) -> str:
+    lines = ["### What the brain learned", ""]
+    items: list[str] = []
+    for observation in output.get("observations", []):
+        label = str(observation.get("kind") or "insight").replace("_", " ").title()
+        claim = sanitize_text(str(observation.get("claim") or ""), max_chars=700).strip()
+        if claim:
+            items.append(f"- {label}: {claim}")
+    for skill in output.get("skill_updates", []):
+        claim = sanitize_text(str(skill.get("claim") or ""), max_chars=700).strip()
+        if claim:
+            items.append(f"- Skill · {skill.get('name', 'Capability')}: {claim}")
+    for pattern in output.get("pattern_signals", []):
+        claim = sanitize_text(str(pattern.get("claim") or ""), max_chars=700).strip()
+        if claim:
+            items.append(f"- Pattern · {pattern.get('label', 'Working pattern')}: {claim}")
+    if not items:
+        items.append(
+            "- No new durable personal, skill, voice, or work-pattern insight passed the evidence gates."
+        )
+    lines.extend(items[:12])
+    return "\n".join(lines)
 
 
 def _evidence_dimensions(
@@ -1086,6 +1212,7 @@ def publish_model_output(
     run_kind: str,
     evidence_ids: list[str],
     question_ids: list[str] | None = None,
+    summary_period: str | None = None,
 ) -> dict[str, Any]:
     promoted = 0
     pending = 0
@@ -1116,6 +1243,17 @@ def publish_model_output(
         str(project["id"]): str(project.get("name") or project["id"])
         for project in catalog_projects
     }
+    session_summaries = output.get("session_summaries", [])
+    for item in session_summaries:
+        evidence_ref = str(item.get("evidence_ref") or "")
+        if evidence_ref not in evidence_ids:
+            raise ValueError(
+                f"Model invented session-summary evidence reference: {evidence_ref}"
+            )
+        if str(item.get("project_id") or "") not in known_projects:
+            raise ValueError(
+                f"Model referenced an unknown session-summary project: {item.get('project_id')}"
+            )
     accepted_question_destinations: set[str] = set()
     accepted_question_count = 0
     ranked_review_items = sorted(
@@ -1299,12 +1437,38 @@ def publish_model_output(
         )
         voice_samples_written += 1
 
+    stewardship = (
+        _weekly_stewardship_markdown(vault, store)
+        if run_kind == "weekly"
+        else None
+    )
     activity = activity_markdown(
-        store.evidence_by_ids(evidence_ids), pattern_stats=pattern_stats
+        store.evidence_by_ids(evidence_ids),
+        pattern_stats=pattern_stats,
+        project_names_by_id={
+            str(project_id): str(project.get("name") or project_id)
+            for project_id, project in known_projects.items()
+        },
+        session_summaries=session_summaries,
+        period=summary_period or (date.today().isoformat() if run_kind == "daily" else None),
+        learning=_learning_markdown(output),
+        stewardship=stewardship,
     )
     synthesis_path = _write_synthesis_summary(
-        vault, run_kind, output["summary"], activity=activity
+        vault,
+        run_kind,
+        output["summary"],
+        activity=activity,
+        period=summary_period,
     )
+    journal_index_path = None
+    stewardship_path = None
+    if run_kind in {"daily", "weekly"}:
+        period = synthesis_path.stem
+        store.replace_summary_evidence(run_kind, period, evidence_ids)
+        journal_index_path = _update_journal_index(vault, run_kind)
+    if run_kind == "weekly" and stewardship:
+        stewardship_path = _write_stewardship_note(vault, stewardship)
     review_path = (
         _write_review_note(vault, store) if pending or questions_resolved else None
     )
@@ -1322,6 +1486,8 @@ def publish_model_output(
         "patterns_pending": pattern_stats["pending"],
         "questions_resolved": questions_resolved,
         "synthesis_path": str(synthesis_path),
+        "journal_index_path": str(journal_index_path) if journal_index_path else None,
+        "stewardship_path": str(stewardship_path) if stewardship_path else None,
         "review_path": str(review_path) if review_path else None,
     }
 

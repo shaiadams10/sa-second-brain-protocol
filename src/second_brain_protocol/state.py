@@ -277,6 +277,16 @@ CREATE TABLE IF NOT EXISTS summary_runs (
   PRIMARY KEY(kind,period,run_id)
 );
 
+CREATE TABLE IF NOT EXISTS summary_evidence (
+  kind TEXT NOT NULL,
+  period TEXT NOT NULL,
+  evidence_id TEXT NOT NULL REFERENCES evidence(id) ON DELETE CASCADE,
+  PRIMARY KEY(kind,period,evidence_id)
+);
+
+CREATE INDEX IF NOT EXISTS summary_evidence_period_idx
+ON summary_evidence(kind,period);
+
 CREATE TABLE IF NOT EXISTS bootstrap (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   state TEXT NOT NULL,
@@ -1610,6 +1620,29 @@ class StateStore:
                 (kind, period),
             ).fetchall()
         return [str(row["run_id"]) for row in rows]
+
+    def replace_summary_evidence(
+        self, kind: str, period: str, evidence_ids: list[str]
+    ) -> None:
+        unique_ids = sorted(set(evidence_ids))
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM summary_evidence WHERE kind=? AND period=?",
+                (kind, period),
+            )
+            connection.executemany(
+                "INSERT INTO summary_evidence(kind,period,evidence_id) VALUES(?,?,?)",
+                [(kind, period, evidence_id) for evidence_id in unique_ids],
+            )
+
+    def summary_evidence_ids(self, kind: str, period: str) -> list[str]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT evidence_id FROM summary_evidence
+                WHERE kind=? AND period=? ORDER BY evidence_id""",
+                (kind, period),
+            ).fetchall()
+        return [str(row["evidence_id"]) for row in rows]
 
     def usage_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         if not run_ids:

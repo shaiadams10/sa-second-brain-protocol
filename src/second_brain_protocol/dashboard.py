@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .activity import session_recap
 from .codex_account import read_codex_rate_limits
 from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_root
 from .markdown import slugify
@@ -304,11 +305,24 @@ def _status_chips(text: str) -> list[dict[str, Any]]:
     return chips
 
 
-def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
+def _evidence_for(
+    evidence: list[dict[str, Any]], *categories: str
+) -> list[dict[str, Any]]:
+    allowed = set(categories)
+    return [item for item in evidence if str(item.get("category")) in allowed]
+
+
+def _summary_visuals(
+    sections: list[dict[str, Any]], *, evidence: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Turn deterministic activity bullets into compact visual dashboard data."""
 
     stats: list[dict[str, Any]] = []
     groups: list[dict[str, Any]] = []
+    evidence = evidence or []
+    project_evidence = _evidence_for(evidence, "project_change")
+    session_evidence = _evidence_for(evidence, "session")
+    pattern_evidence = _evidence_for(evidence, "pattern")
     items = [str(item) for section in sections for item in section.get("items", [])]
     for item in items:
         label, separator, detail = item.partition(":")
@@ -330,6 +344,7 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "label": "Projects changed",
                     "icon": "🚀",
                     "tone": "pink",
+                    "evidence": project_evidence,
                 }
             )
             groups.append(
@@ -338,18 +353,45 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "icon": "🗂️",
                     "tone": "pink",
                     "description": "Projects with new file, Git, stack, lifecycle, or working-tree changes in this run",
-                    "chips": [{"label": name} for name in names],
+                    "evidence": project_evidence,
+                    "chips": [
+                        {
+                            "label": name,
+                            "evidence": [
+                                row
+                                for row in project_evidence
+                                if row.get("label") == name
+                            ],
+                        }
+                        for name in names
+                    ],
                 }
             )
         elif normalized in {"change types", "change signals"}:
             chips = _count_chips(detail)
             if chips:
+                for chip in chips:
+                    chip["evidence"] = [
+                        row
+                        for row in project_evidence
+                        if str(chip["label"]).casefold()
+                        in {
+                            str(
+                                CHANGE_LABELS.get(
+                                    str(signal),
+                                    str(signal).replace("_", " ").title(),
+                                )
+                            ).casefold()
+                            for signal in row.get("signals", [])
+                        }
+                    ]
                 groups.append(
                     {
                         "title": "Change signals",
                         "icon": "🧩",
                         "tone": "purple",
                         "description": f"{sum(chip['value'] for chip in chips)} signals across {len(chips)} types",
+                        "evidence": project_evidence,
                         "chips": chips,
                     }
                 )
@@ -371,12 +413,14 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                         "label": "Sessions reviewed",
                         "icon": "🤖",
                         "tone": "purple",
+                        "evidence": session_evidence,
                     },
                     {
                         "value": projects,
                         "label": "Projects represented in sessions",
                         "icon": "🔗",
                         "tone": "green",
+                        "evidence": session_evidence,
                     },
                 ]
             )
@@ -386,10 +430,11 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "icon": "🤖",
                     "tone": "green" if unlinked == 0 else "yellow",
                     "description": "How many reviewed agent sessions could be connected to a known project",
+                    "evidence": session_evidence,
                     "chips": [
-                        {"label": "Reviewed sessions", "value": sessions},
-                        {"label": "Linked sessions", "value": linked},
-                        {"label": "Projects represented", "value": projects},
+                        {"label": "Reviewed sessions", "value": sessions, "evidence": session_evidence},
+                        {"label": "Linked sessions", "value": linked, "evidence": session_evidence},
+                        {"label": "Projects represented", "value": projects, "evidence": session_evidence},
                         {"label": "Not yet linked", "value": unlinked},
                     ],
                 }
@@ -408,12 +453,14 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                         "label": "Sessions reviewed",
                         "icon": "🤖",
                         "tone": "purple",
+                        "evidence": session_evidence,
                     },
                     {
                         "value": projects,
                         "label": "Projects represented in sessions",
                         "icon": "🔗",
                         "tone": "green",
+                        "evidence": session_evidence,
                     },
                 ]
             )
@@ -423,9 +470,10 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "icon": "🤖",
                     "tone": "green",
                     "description": "How many reviewed agent sessions could be connected to a known project",
+                    "evidence": session_evidence,
                     "chips": [
-                        {"label": "Reviewed sessions", "value": sessions},
-                        {"label": "Projects represented", "value": projects},
+                        {"label": "Reviewed sessions", "value": sessions, "evidence": session_evidence},
+                        {"label": "Projects represented", "value": projects, "evidence": session_evidence},
                     ],
                 }
             )
@@ -447,6 +495,7 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "label": "Patterns promoted",
                     "icon": "🔁",
                     "tone": "yellow",
+                    "evidence": pattern_evidence,
                 }
             )
             groups.append(
@@ -455,7 +504,8 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                     "icon": "🔁",
                     "tone": "yellow",
                     "description": "Recurring signals moving through evidence gates",
-                    "chips": chips,
+                    "evidence": pattern_evidence,
+                    "chips": [dict(chip, evidence=pattern_evidence) for chip in chips],
                 }
             )
 
@@ -467,9 +517,19 @@ def _summary_visuals(sections: list[dict[str, Any]]) -> dict[str, Any]:
                 "tone": "purple",
                 "description": item,
                 "chips": [],
+                "evidence": evidence,
             }
             for index, item in enumerate(items[:6], 1)
         ]
+    for stat in stats:
+        if not stat.get("evidence"):
+            stat.pop("evidence", None)
+    for group in groups:
+        if not group.get("evidence"):
+            group.pop("evidence", None)
+        for chip in group.get("chips", []):
+            if not chip.get("evidence"):
+                chip.pop("evidence", None)
     return {"available": bool(stats or groups), "stats": stats[:4], "groups": groups}
 
 
@@ -626,8 +686,202 @@ def _summary_usage(store: StateStore, kind: str, period: str) -> dict[str, Any]:
     return result
 
 
+def _cached_summary_evidence_ids(
+    paths: RuntimePaths, sections: list[dict[str, Any]]
+) -> list[str]:
+    """Recover legacy summary provenance without publishing raw model cache data."""
+
+    recap = next(
+        (
+            section
+            for section in sections
+            if "recap" in str(section.get("title") or "").casefold()
+        ),
+        sections[0] if sections else {"items": []},
+    )
+    expected = [
+        _clean_markdown(str(item), max_chars=1200)
+        for item in recap.get("items", [])
+    ]
+    if not expected:
+        return []
+    cache_root = paths.runs / "model-cache"
+    if not cache_root.is_dir():
+        return []
+    candidates = sorted(
+        cache_root.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True
+    )
+    for path in candidates[:200]:
+        try:
+            cached = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        result = cached.get("result") if isinstance(cached, dict) else None
+        if not isinstance(result, dict):
+            continue
+        cached_sections = _summary_sections(str(result.get("summary") or ""))
+        actual = [
+            _clean_markdown(str(item), max_chars=1200)
+            for section in cached_sections
+            for item in section.get("items", [])
+        ]
+        if actual == expected:
+            return [str(value) for value in cached.get("evidence_ids") or []]
+    return []
+
+
+def _summary_evidence_rows(
+    store: StateStore,
+    paths: RuntimePaths,
+    kind: str,
+    period: str,
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    evidence_ids = store.summary_evidence_ids(kind, period)
+    if not evidence_ids:
+        evidence_ids = _cached_summary_evidence_ids(paths, sections)
+    return store.evidence_by_ids(evidence_ids)
+
+
+def _summary_evidence_cards(
+    vault: Path,
+    store: StateStore,
+    rows: list[dict[str, Any]],
+    *,
+    kind: str,
+) -> list[dict[str, Any]]:
+    projects = {
+        str(project["id"]): str(project.get("name") or project["id"])
+        for project in store.projects()
+    }
+    cards: list[dict[str, Any]] = []
+    for row in rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if row.get("kind") == "project_delta":
+            name = str(payload.get("project_name") or projects.get(str(row.get("project_id"))) or "Project")
+            signals = [str(value) for value in payload.get("change_types") or []]
+            detail = ", ".join(
+                CHANGE_LABELS.get(signal, signal.replace("_", " ").title())
+                for signal in signals
+            ) or "Project activity"
+            cards.append(
+                {
+                    "category": "project_change",
+                    "label": name,
+                    "meta": "Project change",
+                    "detail": detail,
+                    "signals": signals,
+                    "url": obsidian_uri(vault, _project_note(vault, name)),
+                }
+            )
+        elif row.get("kind") == "session_digest":
+            project_ids = [str(value) for value in payload.get("project_ids") or []]
+            name = next(
+                (projects[value] for value in project_ids if value in projects),
+                "Unattributed session",
+            )
+            occurred = _parse_datetime(
+                str(payload.get("started_at") or row.get("occurred_at") or "")
+            )
+            time_label = (
+                occurred.astimezone().strftime("%b %-d · %H:%M")
+                if occurred and os.name != "nt"
+                else occurred.astimezone().strftime("%b %#d · %H:%M")
+                if occurred
+                else "Time unavailable"
+            )
+            source = str(payload.get("source") or "agent").title()
+            cards.append(
+                {
+                    "category": "session",
+                    "label": name,
+                    "meta": f"{source} · {time_label}",
+                    "detail": session_recap(payload),
+                    "signals": [],
+                    "url": obsidian_uri(vault, _project_note(vault, name)),
+                }
+            )
+        elif row.get("kind") == "recurring_pattern":
+            cards.append(
+                {
+                    "category": "pattern",
+                    "label": str(payload.get("label") or "Recurring pattern"),
+                    "meta": "Knowledge signal",
+                    "detail": sanitize_text(
+                        str(payload.get("claim") or "Pattern evidence"), max_chars=500
+                    ),
+                    "signals": [],
+                    "url": obsidian_uri(vault, vault / "Memory" / "Patterns.md"),
+                }
+            )
+    if kind == "weekly" and (vault / "System" / "Stewardship.md").is_file():
+        cards.append(
+            {
+                "category": "stewardship",
+                "label": "Second-brain stewardship",
+                "meta": "Weekly system review",
+                "detail": "Coverage, continuity, review load, and recovery checks.",
+                "signals": [],
+                "url": obsidian_uri(vault, vault / "System" / "Stewardship.md"),
+            }
+        )
+    unique: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for card in cards:
+        key = (str(card["category"]), str(card["label"]), str(card["meta"]))
+        if key not in seen:
+            unique.append(card)
+            seen.add(key)
+    return unique
+
+
+def _attach_section_evidence(
+    sections: list[dict[str, Any]], evidence: list[dict[str, Any]]
+) -> None:
+    for section in sections:
+        title = str(section.get("title") or "").casefold()
+        if "session" in title:
+            selected = _evidence_for(evidence, "session")
+        elif "project" in title or "change" in title or "activity" in title:
+            selected = _evidence_for(evidence, "project_change", "session")
+        elif "pattern" in title or "learn" in title:
+            selected = _evidence_for(evidence, "pattern")
+        elif "steward" in title or "system" in title:
+            selected = _evidence_for(evidence, "stewardship")
+        else:
+            selected = evidence
+        section["evidence"] = selected
+
+
+def _apply_canonical_evidence_details(
+    evidence: list[dict[str, Any]], sections: list[dict[str, Any]]
+) -> None:
+    session_items = [
+        str(item)
+        for section in sections
+        if "session" in str(section.get("title") or "").casefold()
+        for item in section.get("items", [])
+    ]
+    for card in evidence:
+        if card.get("category") != "session":
+            continue
+        label = str(card.get("label") or "")
+        match = next(
+            (item for item in session_items if item.casefold().startswith(label.casefold())),
+            None,
+        )
+        if match and "—" in match:
+            card["detail"] = sanitize_text(match.split("—", 1)[1].strip(), max_chars=800)
+
+
 def _summary_entry(
-    vault: Path, path: Path, kind: str, *, usage: dict[str, Any] | None = None
+    vault: Path,
+    path: Path,
+    kind: str,
+    *,
+    store: StateStore,
+    paths: RuntimePaths,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     raw = _generated_section(path, kind)
     if not raw or "no automated run yet" in raw.casefold():
@@ -635,6 +889,12 @@ def _summary_entry(
     sections = _summary_sections(raw)
     if not sections:
         return None
+    evidence_rows = _summary_evidence_rows(store, paths, kind, path.stem, sections)
+    evidence = _summary_evidence_cards(
+        vault, store, evidence_rows, kind=kind
+    )
+    _apply_canonical_evidence_details(evidence, sections)
+    _attach_section_evidence(sections, evidence)
 
     synthesis = next(
         (
@@ -670,14 +930,20 @@ def _summary_entry(
         "summary": summary,
         "highlights": highlights[:6],
         "sections": sections,
-        "visuals": _summary_visuals(sections),
+        "visuals": _summary_visuals(sections, evidence=evidence),
+        "evidence": evidence,
         "usage": usage or {"available": False, "iterations": []},
         "url": obsidian_uri(vault, path),
     }
 
 
 def _summary_history(
-    vault: Path, kind: str, store: StateStore, *, limit: int = 24
+    vault: Path,
+    kind: str,
+    store: StateStore,
+    paths: RuntimePaths,
+    *,
+    limit: int = 24,
 ) -> list[dict[str, Any]]:
     folder = vault / "Journal" / ("Daily" if kind == "daily" else "Weekly")
     pattern = "20??-??-??.md" if kind == "daily" else "*.md"
@@ -692,6 +958,8 @@ def _summary_history(
             vault,
             path,
             kind,
+            store=store,
+            paths=paths,
             usage=_summary_usage(store, kind, path.stem),
         )
         if entry:
@@ -1687,6 +1955,7 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
     for run in source_rows:
         started = _parse_datetime(run.get("started_at"))
         completed = _parse_datetime(run.get("completed_at"))
+        error = sanitize_text(str(run.get("error") or ""), max_chars=4000)
         status = (
             "completed"
             if run.get("status") == "validated"
@@ -1705,8 +1974,10 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
             else None,
             "batch_count": 1,
             "stage": str(run.get("stage") or "").replace("_", " ").title(),
-            "error": sanitize_text(str(run.get("error") or ""), max_chars=240),
+            "error": error,
+            "error_summary": sanitize_text(error, max_chars=240),
             "trigger": str(run.get("trigger") or ""),
+            "source": "Pipeline" if run.get("pipeline") else "Model run",
         }
         previous = grouped[-1] if grouped else None
         previous_started = (
@@ -1902,8 +2173,8 @@ def build_snapshot(
 
     daily_path = _latest_note(vault / "Journal" / "Daily", "20??-??-??.md")
     weekly_path = _latest_note(vault / "Journal" / "Weekly", "*.md")
-    daily_history = _summary_history(vault, "daily", store)
-    weekly_history = _summary_history(vault, "weekly", store)
+    daily_history = _summary_history(vault, "daily", store, paths)
+    weekly_history = _summary_history(vault, "weekly", store, paths)
     for entry in (*daily_history, *weekly_history):
         entry["usage"]["codex_impact"] = _summary_codex_impact(
             entry["usage"], codex_usage_snapshot

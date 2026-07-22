@@ -3,7 +3,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from second_brain_protocol.activity import (
+    activity_markdown,
+    build_project_delta,
+    session_recap,
+)
 from second_brain_protocol.collector import collect_projects
+from second_brain_protocol.scanner import relevant_manifest
 from second_brain_protocol.state import StateStore
 
 
@@ -135,3 +141,56 @@ def test_remote_migration_keeps_project_identity_at_same_source_directory(
     assert migrated["projects"][0]["id"] == project_id
     assert migrated["projects"][0]["classification"] == "review"
     assert len(store.projects()) == 1
+
+
+def test_gitlink_directory_stats_do_not_create_false_file_changes(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "Repo"
+    gitlink = repo / "nested-gitlink"
+    gitlink.mkdir(parents=True)
+
+    manifest = relevant_manifest(repo, ["nested-gitlink"])
+    assert manifest == {"nested-gitlink": (0, 0)}
+
+    previous = {
+        "id": "project-demo",
+        "name": "Demo",
+        "classification": "first-party",
+        "manifest": {"nested-gitlink": (4096, 123456)},
+        "tech_stack": [],
+        "second_brain_files": [],
+        "git_history": {"working_tree": [], "recent_commits": []},
+        "head_commit": "abc",
+    }
+    current = dict(previous, manifest=manifest)
+    assert build_project_delta(previous, current, was_present=True) is None
+
+
+def test_session_ledger_keeps_connectivity_tests_and_labels_backfill() -> None:
+    payload = {
+        "source": "antigravity",
+        "project_ids": ["project-demo"],
+        "started_at": "2026-07-19T23:20:28Z",
+        "user_messages": [{"text": "<USER_REQUEST>test</USER_REQUEST>"}],
+        "assistant_results": [{"text": "I successfully loaded the workspace."}],
+        "tool_usage": {"list_dir": 1},
+    }
+    assert session_recap(payload) == (
+        "Connectivity test completed; the workspace loaded successfully."
+    )
+    markdown = activity_markdown(
+        [
+            {
+                "id": "ev-session",
+                "kind": "session_digest",
+                "occurred_at": "2026-07-19T23:20:28Z",
+                "payload": payload,
+            }
+        ],
+        project_names_by_id={"project-demo": "Demo"},
+        period="2026-07-20",
+    )
+    assert "[[Projects/demo|Demo]]" in markdown
+    assert "Connectivity test completed" in markdown
+    assert "backfill from 2026-07-19" in markdown

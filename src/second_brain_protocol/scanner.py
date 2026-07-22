@@ -250,6 +250,14 @@ def relevant_manifest(repo: Path, tracked: Iterable[str]) -> dict[str, tuple[int
         if any(part in PRUNE_DIRS for part in Path(relative).parts):
             continue
         path = repo / relative
+        # Gitlink entries are represented by directories in the working tree.
+        # Windows can report their directory size as either 0 or 4096 between
+        # otherwise identical scans, which creates false project activity.  The
+        # parent repository's Git head/commit delta already captures a changed
+        # Gitlink pointer, so keep only a stable sentinel in the file manifest.
+        if path.is_dir():
+            manifest[relative.replace("\\", "/")] = (0, 0)
+            continue
         try:
             stat = path.stat()
         except OSError:

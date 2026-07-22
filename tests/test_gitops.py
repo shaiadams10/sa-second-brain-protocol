@@ -1,12 +1,63 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import time
 from pathlib import Path
 
 from second_brain_protocol import gitops
 from second_brain_protocol.config import RuntimePaths
 from second_brain_protocol.state import StateStore
+
+
+def test_old_empty_index_lock_is_recovered_when_git_is_idle(
+    tmp_path: Path, monkeypatch
+) -> None:
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    lock = git_dir / "index.lock"
+    lock.touch()
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(gitops, "_git_process_running", lambda: False)
+
+    assert gitops._recover_stale_index_lock(tmp_path, minimum_age_seconds=60)
+    assert not lock.exists()
+
+
+def test_old_index_lock_is_preserved_while_git_is_running(
+    tmp_path: Path, monkeypatch
+) -> None:
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    lock = git_dir / "index.lock"
+    lock.touch()
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(gitops, "_git_process_running", lambda: True)
+
+    assert not gitops._recover_stale_index_lock(tmp_path, minimum_age_seconds=60)
+    assert lock.exists()
+
+
+def test_fresh_or_nonempty_index_lock_is_never_auto_removed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    lock = git_dir / "index.lock"
+    monkeypatch.setattr(gitops, "_git_process_running", lambda: False)
+
+    lock.touch()
+    assert not gitops._recover_stale_index_lock(tmp_path, minimum_age_seconds=60)
+    assert lock.exists()
+
+    lock.write_text("prospective index data", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(lock, (old, old))
+    assert not gitops._recover_stale_index_lock(tmp_path, minimum_age_seconds=60)
+    assert lock.exists()
 
 
 def test_active_account_falls_back_to_selected_login_on_github_503(monkeypatch) -> None:

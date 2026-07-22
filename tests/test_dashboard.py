@@ -121,10 +121,14 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
         "daily", trigger="scheduled", stage="collect_projects"
     )
     store.set_pipeline_stage(run_id, "collect_sessions")
+    raw_error = (
+        r"RuntimeError: failed while reading C:\Users\private\session.jsonl\n"
+        + "The collector retained the checkpoint for a safe retry. " * 12
+    )
     store.finish_pipeline_run(
         run_id,
         "failed",
-        error=r"RuntimeError: failed while reading C:\Users\private\session.jsonl",
+        error=raw_error,
     )
 
     snapshot = build_snapshot(
@@ -147,7 +151,14 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
     assert "[LOCAL_PATH]" in snapshot["status"]["detail"]
     assert snapshot["runs"][0]["status"] == "failed"
     assert snapshot["runs"][0]["stage"] == "Collect Sessions"
-    assert "[LOCAL_PATH]" in render_dashboard(snapshot)
+    assert snapshot["runs"][0]["source"] == "Pipeline"
+    assert "[TRUNCATED]" in snapshot["runs"][0]["error_summary"]
+    assert "[TRUNCATED]" not in snapshot["runs"][0]["error"]
+    rendered = render_dashboard(snapshot)
+    assert "[LOCAL_PATH]" in rendered
+    assert 'make("button", "run")' in rendered
+    assert 'aria-labelledby="run-dialog-title"' in rendered
+    assert "openRunDialog(run)" in rendered
 
 
 def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(
@@ -777,3 +788,110 @@ def test_dashboard_output_is_derived_runtime_state_not_vault_content(
     assert paths.dashboard == (tmp_path / "runtime" / "dashboard").resolve()
     assert paths.dashboard.is_relative_to(paths.root)
     assert not paths.dashboard.is_relative_to(vault)
+
+
+def test_summary_stats_carry_hoverable_clickable_canonical_evidence(
+    tmp_path: Path,
+) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    vault = tmp_path / "Example Person Second Brain"
+    for folder in (
+        "Journal/Daily",
+        "Journal/Weekly",
+        "Projects",
+        "Skills",
+        "Memory",
+        "Goals",
+        "Inbox/Review",
+        "System",
+    ):
+        (vault / folder).mkdir(parents=True, exist_ok=True)
+    _note(vault / "Home.md", "# Home\n")
+    _note(vault / "Projects" / "demo.md", "# Demo\n")
+    _note(vault / "Projects" / "Index.md", "# Projects\n")
+    _note(vault / "Skills" / "Index.md", "# Skills\n")
+    _note(vault / "Memory" / "LongTermMemory.md", "# Memory\n")
+    _note(vault / "Goals" / "ActiveGoals.md", "# Goals\n")
+    _note(
+        vault / "Journal" / "Daily" / "2026-07-19.md",
+        """# Day
+<!-- sb:generated daily:start -->
+### Quick activity recap
+
+- Demo: verified connectivity.
+
+### Project changes
+
+- Demo — files changed.
+
+### Sessions reviewed
+
+- Demo · Antigravity · 19:20 — Connectivity test completed; the workspace loaded successfully.
+
+### Coverage details
+
+- Projects with detected changes: 1 - Demo
+- Change signals: files_changed (1)
+- Agent sessions reviewed: 1 total - 1 linked to 1 projects; 0 not yet linked; Antigravity 1
+- Knowledge signals: 0 tracking, 0 promoted, 0 awaiting review
+<!-- sb:generated daily:end -->
+""",
+    )
+    store = StateStore(paths.state)
+    store.set_bootstrap_state("completed")
+    store.upsert_project(
+        {"id": "project-demo", "name": "Demo", "classification": "first-party"}
+    )
+    store.set_project_presence("project-demo", present=True)
+    delta_id, _ = store.add_evidence(
+        source_type="project-activity",
+        source_ref="project-delta:demo",
+        kind="project_delta",
+        project_id="project-demo",
+        payload={
+            "project_id": "project-demo",
+            "project_name": "Demo",
+            "change_types": ["files_changed"],
+        },
+    )
+    session_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:antigravity:demo",
+        kind="session_digest",
+        project_id="project-demo",
+        occurred_at="2026-07-19T23:20:28Z",
+        payload={
+            "source": "antigravity",
+            "project_ids": ["project-demo"],
+            "started_at": "2026-07-19T23:20:28Z",
+            "user_messages": [{"text": "test"}],
+            "assistant_results": [{"text": "Successfully loaded the workspace."}],
+            "tool_usage": {"list_dir": 1},
+        },
+    )
+    store.replace_summary_evidence("daily", "2026-07-19", [delta_id, session_id])
+
+    snapshot = build_snapshot(
+        paths,
+        vault,
+        now=datetime(2026, 7, 20, 1, 0, tzinfo=UTC),
+        schedule={"installed": False},
+        codex_usage_snapshot={"available": False, "windows": []},
+    )
+    daily = snapshot["summaries"]["daily"][0]
+    projects_stat = daily["visuals"]["stats"][0]
+    sessions_stat = daily["visuals"]["stats"][1]
+    assert projects_stat["evidence"][0]["label"] == "Demo"
+    assert sessions_stat["evidence"][0]["detail"].startswith(
+        "Connectivity test completed"
+    )
+    assert sessions_stat["evidence"][0]["url"].startswith("obsidian://open")
+    rendered = render_dashboard(snapshot)
+    assert "evidence-popover" in rendered
+    assert "evidence-align-right" in rendered
+    assert "wrapEvidenceTrigger" in rendered
+    assert ".evidence-surface:hover > .evidence-popover" not in rendered
+    assert 'make("button", "evidence-affordance"' in rendered
+    assert "evidence-row" in rendered
+    assert "Open ↗" in rendered
+    assert "title=" not in rendered

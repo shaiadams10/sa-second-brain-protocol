@@ -298,7 +298,8 @@
     .briefing-group-title { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: var(--pink-soft); font-family: var(--mono); font-size: 10px; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; }
     .briefing-group-description { margin: 0 0 8px; color: #bdb4c1; font-size: 11px; }
     .briefing-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-    .briefing-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #77707d; background: rgba(255, 255, 255, 0.08); color: #eee9f0; font-family: var(--mono); font-size: 8px; font-weight: 800; }
+    .briefing-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #77707d; appearance: none; background: rgba(255, 255, 255, 0.08); color: #eee9f0; font-family: var(--mono); font-size: 8px; font-weight: 800; text-decoration: none; }
+    a.briefing-chip:hover, a.briefing-chip:focus-visible, button.briefing-chip:hover, button.briefing-chip:focus-visible { border-color: var(--pink-soft); background: rgba(248, 198, 220, 0.2); outline: none; }
     .briefing-chip strong { display: grid; place-items: center; min-width: 17px; height: 17px; padding-inline: 3px; background: var(--pink); color: white; font-size: 8px; }
     .briefing-group p { margin: 6px 0 0; color: #d5ced9; font-size: 13px; }
     .briefing-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
@@ -386,9 +387,35 @@
     .visual-group-head { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .visual-description { margin: 6px 0 10px; color: var(--muted); font-size: 12px; }
     .visual-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .visual-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid var(--ink); background: var(--paper-bright); font-family: var(--mono); font-size: 9px; font-weight: 800; }
+    .visual-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: inherit; font-family: var(--mono); font-size: 9px; font-weight: 800; text-decoration: none; }
+    a.visual-chip:hover, a.visual-chip:focus-visible, button.visual-chip:hover, button.visual-chip:focus-visible { transform: translate(-1px, -1px); background: var(--purple-soft); box-shadow: 2px 2px 0 var(--ink); outline: none; }
     .visual-chip-value { display: grid; place-items: center; min-width: 19px; height: 19px; padding: 0 4px; background: var(--purple-deep); color: white; font-size: 9px; }
     .summary-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
+
+    .evidence-surface { position: relative; }
+    .evidence-affordance { position: absolute; top: 7px; right: 7px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: var(--purple-deep); cursor: help; font-family: var(--mono); font-size: 8px; font-weight: 950; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; box-shadow: 1px 1px 0 var(--ink); }
+    .evidence-affordance::before { content: ""; width: 6px; height: 6px; background: var(--pink); border-radius: 50%; }
+    .evidence-affordance:hover, .evidence-affordance:focus-visible { transform: translate(-1px, -1px); border-color: var(--pink); background: var(--pink-soft); box-shadow: 2px 2px 0 var(--ink); outline: none; }
+    .evidence-inline { position: relative; display: inline-flex; }
+    .evidence-inline-link { cursor: pointer; }
+    .evidence-inline-link:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+    .evidence-popover { position: fixed; top: 0; left: 0; z-index: 80; display: none; width: min(390px, calc(100vw - 48px)); padding: 11px; border: 2px solid var(--ink); background: var(--paper-bright); color: var(--ink); box-shadow: 6px 6px 0 var(--purple-deep); cursor: default; }
+    .evidence-surface.evidence-transient > .evidence-popover,
+    .evidence-affordance:focus-visible ~ .evidence-popover,
+    .evidence-inline:hover > .evidence-popover,
+    .evidence-inline:focus-within > .evidence-popover,
+    .evidence-popover:focus-within,
+    .evidence-surface.evidence-pinned > .evidence-popover { display: grid; gap: 7px; }
+    .evidence-popover-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1.5px dashed #a49da7; }
+    .evidence-popover-title { font-family: var(--mono); font-size: 10px; font-weight: 950; text-transform: uppercase; }
+    .evidence-popover-count { color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; }
+    .evidence-list { display: grid; gap: 6px; max-height: 300px; overflow: auto; }
+    .evidence-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px; border: 1px solid #c8bfca; background: white; color: inherit; text-decoration: none; }
+    .evidence-row:hover, .evidence-row:focus-visible { transform: translate(-1px, -1px); border-color: var(--ink); background: var(--purple-soft); box-shadow: 2px 2px 0 var(--ink); outline: none; }
+    .evidence-row-label { overflow: hidden; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+    .evidence-row-meta { color: var(--purple-deep); font-family: var(--mono); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+    .evidence-row-detail { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .evidence-row-arrow { align-self: start; color: var(--pink); font-family: var(--mono); font-weight: 950; }
 
     .questions-panel { grid-column: span 12; background: linear-gradient(120deg, rgba(248, 198, 220, 0.34), rgba(255, 253, 247, 0.96) 45%); }
     .question-progress { flex: 0 0 auto; padding: 6px 9px; border: 1.5px solid var(--ink); background: var(--pink-soft); font-family: var(--mono); font-size: 11px; font-weight: 900; }
@@ -468,12 +495,47 @@
     .runs-panel { grid-column: span 6; }
     .focus-panel { grid-column: span 6; background: var(--purple-deep); color: white; }
     .focus-panel::before { background: var(--pink); }
-    .run { display: grid; grid-template-columns: minmax(130px, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px dashed #a49da7; }
+    .run {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(130px, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      padding: 12px 70px 12px 10px;
+      border: 0;
+      border-top: 1px dashed #a49da7;
+      appearance: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+      transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    }
+    .run::after { content: "OPEN ↗"; position: absolute; right: 10px; color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; opacity: 0; transform: translateX(-4px); transition: opacity 140ms ease, transform 140ms ease; }
+    .run:hover, .run:focus-visible { z-index: 1; background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); transform: translate(-2px, -2px); }
+    .run:hover::after, .run:focus-visible::after { opacity: 1; transform: translateX(0); }
+    .run:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
     .run-kind { font-weight: 800; }
     .run-meta, .run-status { color: var(--muted); font-family: var(--mono); font-size: 10px; }
     .run-status.completed { color: var(--green); font-weight: 900; }
     .run-status.failed { color: var(--red); font-weight: 900; }
-    .run-error { grid-column: 1 / -1; color: var(--red); font: 11px/1.45 var(--mono); }
+    .run-error { grid-column: 1 / -1; overflow: hidden; color: var(--red); font: 11px/1.45 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .run-dialog { width: min(720px, calc(100vw - 32px)); max-height: min(820px, calc(100vh - 32px)); padding: 0; overflow: auto; border: 3px solid var(--ink); background: var(--paper-bright); color: var(--ink); box-shadow: 9px 9px 0 var(--purple-deep); }
+    .run-dialog::backdrop { background: rgba(29, 27, 31, 0.66); backdrop-filter: blur(3px); }
+    .run-dialog-card { padding: clamp(20px, 4vw, 34px); }
+    .run-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 18px; border-bottom: 1.5px dashed var(--muted); }
+    .run-dialog-kicker { color: var(--pink); font-family: var(--mono); font-size: 10px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+    .run-dialog-title { margin: 5px 0 0; font-family: var(--mono); font-size: clamp(24px, 4vw, 38px); line-height: 1; }
+    .run-dialog-close { flex: 0 0 auto; min-height: 36px; padding: 7px 10px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font-family: var(--mono); font-size: 10px; font-weight: 900; }
+    .run-dialog-close:hover, .run-dialog-close:focus-visible { background: var(--pink-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .run-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+    .run-detail { min-width: 0; padding: 12px; border: 1.5px solid var(--ink); background: var(--paper-muted); }
+    .run-detail-label { display: block; margin-bottom: 5px; color: var(--muted); font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+    .run-detail-value { overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; font-weight: 800; }
+    .run-detail-error-wrap { margin-top: 16px; }
+    .run-detail-error { max-height: 320px; margin: 7px 0 0; padding: 14px; overflow: auto; border: 1.5px solid var(--red); background: #fff6fa; color: var(--red); font: 11px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
     .focus-title { margin: 7px 0 12px; font-family: var(--mono); font-size: clamp(27px, 3vw, 42px); line-height: 1.05; }
     .focus-copy { color: #d9d1e6; }
     .focus-links { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
@@ -522,6 +584,9 @@
       .summary-footer { align-items: stretch; flex-direction: column; }
       .project-row { grid-template-columns: 1fr auto; }
       .project-track { grid-column: 1 / -1; }
+      .run { grid-template-columns: 1fr auto; padding-right: 54px; }
+      .run-meta, .run-error { grid-column: 1 / -1; }
+      .run-detail-grid { grid-template-columns: 1fr; }
       .footer { flex-direction: column; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -753,6 +818,22 @@
     <footer class="footer"><span id="privacy-text">Canonical knowledge only.</span><span>Local loopback actions // raw evidence excluded</span></footer>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="run-dialog" id="run-dialog" aria-labelledby="run-dialog-title">
+    <div class="run-dialog-card">
+      <div class="run-dialog-head">
+        <div>
+          <div class="run-dialog-kicker" id="run-dialog-kicker">Automation run</div>
+          <h2 class="run-dialog-title" id="run-dialog-title">Run details</h2>
+        </div>
+        <button class="run-dialog-close" id="run-dialog-close" type="button">Close ×</button>
+      </div>
+      <div class="run-detail-grid" id="run-detail-grid"></div>
+      <section class="run-detail-error-wrap" id="run-detail-error-wrap" aria-labelledby="run-detail-error-label">
+        <span class="run-detail-label" id="run-detail-error-label">Full error</span>
+        <pre class="run-detail-error" id="run-detail-error"></pre>
+      </section>
+    </div>
+  </dialog>
 
   <script>
     (() => {
@@ -762,6 +843,142 @@
       const setText = (id, value) => { const node = byId(id); if (node) node.textContent = value ?? ""; };
       const setLink = (id, value) => { const node = byId(id); if (node && value) node.href = value; };
       const make = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+      let evidencePopoverId = 0;
+      const attachEvidence = (node, evidence, label = "Evidence", exactTrigger = null) => {
+        const rows = Array.isArray(evidence) ? evidence.filter((item) => item && item.label) : [];
+        if (!node || !rows.length) return node;
+        node.classList.add("evidence-surface");
+        if (exactTrigger) node.classList.add("evidence-inline");
+        const popoverId = `evidence-popover-${++evidencePopoverId}`;
+        const trigger = exactTrigger || make("button", "evidence-affordance", `${rows.length} source${rows.length === 1 ? "" : "s"}`);
+        const directLink = Boolean(exactTrigger && trigger.tagName === "A" && trigger.hasAttribute("href"));
+        if (exactTrigger) {
+          trigger.classList.add("evidence-inline-link");
+          if (directLink) {
+            trigger.setAttribute("aria-describedby", popoverId);
+          } else {
+            trigger.type = "button";
+            trigger.setAttribute("aria-haspopup", "dialog");
+            trigger.setAttribute("aria-controls", popoverId);
+            trigger.setAttribute("aria-expanded", "false");
+            trigger.setAttribute("aria-label", `Show ${label} evidence`);
+          }
+        } else {
+          trigger.type = "button";
+          trigger.setAttribute("aria-haspopup", "dialog");
+          trigger.setAttribute("aria-controls", popoverId);
+          trigger.setAttribute("aria-expanded", "false");
+          trigger.setAttribute("aria-label", `Show ${label} evidence`);
+        }
+        const popover = make("aside", "evidence-popover");
+        popover.id = popoverId;
+        popover.setAttribute("role", "dialog");
+        popover.setAttribute("aria-label", `${label} details`);
+        const head = make("div", "evidence-popover-head");
+        head.append(make("span", "evidence-popover-title", label), make("span", "evidence-popover-count", `${rows.length} linked item${rows.length === 1 ? "" : "s"}`));
+        const list = make("div", "evidence-list");
+        rows.forEach((item) => {
+          const row = make("a", "evidence-row");
+          row.href = item.url || "#";
+          row.append(
+            make("span", "evidence-row-label", item.label),
+            make("span", "evidence-row-arrow", "Open ↗"),
+            make("span", "evidence-row-meta", item.meta || "Canonical evidence"),
+            make("p", "evidence-row-detail", item.detail || "Open the linked note for more detail.")
+          );
+          list.append(row);
+        });
+        popover.append(head, list);
+        if (!exactTrigger) node.append(trigger);
+        node.append(popover);
+        const alignPopover = () => {
+          const bounds = trigger.getBoundingClientRect();
+          const popoverWidth = Math.min(390, window.innerWidth - 48);
+          const priorDisplay = popover.style.display;
+          const priorVisibility = popover.style.visibility;
+          popover.style.width = `${popoverWidth}px`;
+          popover.style.display = "grid";
+          popover.style.visibility = "hidden";
+          const popoverHeight = popover.getBoundingClientRect().height;
+          const alignRight = bounds.left + 8 + popoverWidth > window.innerWidth - 16;
+          let left = alignRight ? bounds.right - popoverWidth - 8 : bounds.left + 8;
+          left = Math.max(16, Math.min(left, window.innerWidth - popoverWidth - 16));
+          let top = bounds.bottom + 8;
+          if (top + popoverHeight > window.innerHeight - 16 && bounds.top - popoverHeight - 8 >= 16) {
+            top = bounds.top - popoverHeight - 8;
+          }
+          top = Math.max(16, Math.min(top, window.innerHeight - popoverHeight - 16));
+          popover.style.left = `${left}px`;
+          popover.style.top = `${top}px`;
+          popover.style.display = priorDisplay;
+          popover.style.visibility = priorVisibility;
+          node.classList.toggle("evidence-align-right", alignRight);
+        };
+        const setPinned = (pinned) => {
+          node.classList.toggle("evidence-pinned", pinned);
+          if (!directLink) trigger.setAttribute("aria-expanded", String(pinned));
+        };
+        const closeOtherPopovers = () => {
+          document.querySelectorAll(".evidence-pinned").forEach((item) => {
+            if (item !== node) {
+              item.classList.remove("evidence-pinned");
+              item.querySelector(".evidence-affordance")?.setAttribute("aria-expanded", "false");
+            }
+          });
+        };
+        let hoverCloseTimer;
+        trigger.addEventListener("pointerenter", () => {
+          alignPopover();
+          if (!exactTrigger) {
+            clearTimeout(hoverCloseTimer);
+            node.classList.add("evidence-transient");
+          }
+        });
+        trigger.addEventListener("focusin", alignPopover);
+        if (!exactTrigger) {
+          trigger.addEventListener("pointerleave", () => {
+            hoverCloseTimer = setTimeout(() => node.classList.remove("evidence-transient"), 120);
+          });
+          popover.addEventListener("pointerenter", () => {
+            clearTimeout(hoverCloseTimer);
+            node.classList.add("evidence-transient");
+          });
+          popover.addEventListener("pointerleave", () => {
+            if (!node.classList.contains("evidence-pinned")) node.classList.remove("evidence-transient");
+          });
+        }
+        if (!directLink) trigger.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          alignPopover();
+          closeOtherPopovers();
+          setPinned(!node.classList.contains("evidence-pinned"));
+        });
+        node.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            setPinned(false);
+            node.classList.remove("evidence-transient");
+            if (node.contains(document.activeElement)) document.activeElement.blur();
+          }
+        });
+        return node;
+      };
+      const wrapEvidenceTrigger = (link, evidence, label) => {
+        const wrapper = make("span", "evidence-inline");
+        wrapper.append(link);
+        return attachEvidence(wrapper, evidence, label, link);
+      };
+      document.addEventListener("click", (event) => {
+        document.querySelectorAll(".evidence-pinned").forEach((node) => {
+          if (!node.contains(event.target)) {
+            node.classList.remove("evidence-pinned");
+            node.querySelector(".evidence-affordance")?.setAttribute("aria-expanded", "false");
+          }
+        });
+        document.querySelectorAll(".evidence-inline").forEach((node) => {
+          if (!node.contains(event.target) && node.contains(document.activeElement)) document.activeElement.blur();
+        });
+      });
       const patternsPanel = document.querySelector(".patterns-panel");
       if (patternsPanel && byId("system")) byId("system").insertAdjacentElement("afterend", patternsPanel);
       const parseDate = (value) => value ? new Date(value) : null;
@@ -783,6 +1000,50 @@
         const minutes = Math.round(seconds / 60);
         return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
       };
+      const runDialog = byId("run-dialog");
+      const closeRunDialog = () => {
+        if (!runDialog) return;
+        if (typeof runDialog.close === "function") runDialog.close();
+        else runDialog.removeAttribute("open");
+      };
+      const openRunDialog = (run) => {
+        if (!runDialog) return;
+        const kind = run.batch_count > 1 ? `${run.kind} ×${run.batch_count}` : run.kind;
+        setText("run-dialog-kicker", `${run.source || "Automation"} // ${run.status || "unknown"}`);
+        setText("run-dialog-title", kind);
+        const fullDateOptions = {
+          weekday: "long", year: "numeric", month: "long", day: "numeric",
+          hour: "numeric", minute: "2-digit", second: "2-digit"
+        };
+        const facts = [
+          ["Status", run.status],
+          ["Trigger", run.trigger || "Not recorded"],
+          ["Pipeline stage", run.stage || "Not applicable"],
+          ["Started", formatDate(run.started_at, fullDateOptions)],
+          ["Completed", run.completed_at ? formatDate(run.completed_at, fullDateOptions) : "Not completed"],
+          ["Duration", run.duration_seconds === null ? "Not available" : formatDuration(run.duration_seconds)],
+          ["Model", run.model || "Not applicable"],
+          ["Reasoning", run.reasoning || "Not applicable"],
+          ["Evidence processed", String(run.evidence_count || 0)],
+          ["Runs in group", String(run.batch_count || 1)]
+        ];
+        const grid = byId("run-detail-grid");
+        grid.replaceChildren();
+        facts.forEach(([label, value]) => {
+          const detail = make("div", "run-detail");
+          detail.append(make("span", "run-detail-label", label), make("div", "run-detail-value", value));
+          grid.append(detail);
+        });
+        const errorWrap = byId("run-detail-error-wrap");
+        errorWrap.hidden = !run.error;
+        setText("run-detail-error", run.error || "");
+        if (typeof runDialog.showModal === "function") runDialog.showModal();
+        else runDialog.setAttribute("open", "");
+      };
+      byId("run-dialog-close")?.addEventListener("click", closeRunDialog);
+      runDialog?.addEventListener("click", (event) => {
+        if (event.target === runDialog) closeRunDialog();
+      });
       let toastTimer;
       const toast = (message) => {
         const node = byId("toast");
@@ -833,6 +1094,7 @@
         setText("briefing-title", `${formatDate(`${daily.period}T12:00:00`, { month: "short", day: "numeric" })} at a glance.`);
         setText("briefing-summary", daily.summary);
         setText("briefing-source", "Latest daily synthesis");
+        attachEvidence(document.querySelector(".briefing-summary-card"), daily.evidence, "Daily evidence");
         const visuals = daily.visuals || { stats: [], groups: [] };
         visuals.stats.slice(0, 4).forEach((stat) => {
           const node = make("article", "briefing-stat");
@@ -841,6 +1103,7 @@
             make("span", "briefing-stat-value", String(stat.value || 0)),
             make("span", "briefing-stat-label", stat.label)
           );
+          attachEvidence(node, stat.evidence, stat.label);
           byId("briefing-glance").append(node);
         });
         if (visuals.groups.length) {
@@ -852,12 +1115,17 @@
             if (visual.description) group.append(make("p", "briefing-group-description", visual.description));
             const chips = make("div", "briefing-chips");
             (visual.chips || []).slice(0, 5).forEach((chip) => {
-              const node = make("span", "briefing-chip", chip.label);
+              const hasEvidence = Array.isArray(chip.evidence) && chip.evidence.length > 0;
+              const linked = hasEvidence && chip.evidence.length === 1 && chip.evidence[0].url;
+              const node = make(linked ? "a" : hasEvidence ? "button" : "span", "briefing-chip", chip.label);
+              if (linked) node.href = chip.evidence[0].url;
               if (chip.value !== undefined) node.append(make("strong", "", String(chip.value)));
-              chips.append(node);
+              chips.append(hasEvidence ? wrapEvidenceTrigger(node, chip.evidence, chip.label) : node);
             });
             if ((visual.chips || []).length > 5) chips.append(make("span", "briefing-chip", `+${visual.chips.length - 5} more`));
-            group.append(chips); byId("briefing-groups").append(group);
+            group.append(chips);
+            attachEvidence(group, visual.evidence, visual.title);
+            byId("briefing-groups").append(group);
           });
         } else {
           daily.sections.slice(0, 3).forEach((section) => {
@@ -955,6 +1223,7 @@
                 make("span", "glance-value", tokenNumber.format(stat.value || 0)),
                 make("span", "glance-label", stat.label)
               );
+              attachEvidence(card, stat.evidence, stat.label);
               glance.append(card);
             });
             snapshot.append(glance);
@@ -1032,6 +1301,7 @@
             const block = make("section", "summary-section");
             const title = make("div", "summary-section-title");
             title.append(make("span", "summary-section-icon", sectionIcon(section.title)), make("span", "", section.title));
+            attachEvidence(title, section.evidence, section.title);
             block.append(title);
             section.paragraphs.forEach((paragraph) => block.append(make("p", "", paragraph)));
             const isActivity = /activity|ledger|moved|work/i.test(section.title);
@@ -1045,13 +1315,17 @@
                 if (group.chips && group.chips.length) {
                   const chips = make("div", "visual-chips");
                   group.chips.forEach((chip) => {
-                    const node = make("span", "visual-chip");
+                    const hasEvidence = Array.isArray(chip.evidence) && chip.evidence.length > 0;
+                    const linked = hasEvidence && chip.evidence.length === 1 && chip.evidence[0].url;
+                    const node = make(linked ? "a" : hasEvidence ? "button" : "span", "visual-chip");
+                    if (linked) node.href = chip.evidence[0].url;
                     node.append(make("span", "", chip.label));
                     if (chip.value !== undefined) node.append(make("span", "visual-chip-value", tokenNumber.format(chip.value)));
-                    chips.append(node);
+                    chips.append(hasEvidence ? wrapEvidenceTrigger(node, chip.evidence, chip.label) : node);
                   });
                   visual.append(chips);
                 }
+                attachEvidence(visual, group.evidence, group.title);
                 groups.append(visual);
               });
               block.append(groups);
@@ -1063,6 +1337,7 @@
                 const detail = parts.length ? parts.join(":").trim() : String(item);
                 const card = make("article", "summary-item-card");
                 card.append(make("div", "summary-item-label", label), make("div", "summary-item-detail", detail.replace(/_/g, " ")));
+                attachEvidence(card, section.evidence, section.title);
                 board.append(card);
               });
               block.append(board);
@@ -1093,8 +1368,10 @@
         const day = make("div", "trend-day");
         const bar = make("span", "trend-bar");
         bar.style.height = `${Math.max(5, Math.round(item.sessions / maxSessions * 92))}px`;
-        day.title = `${item.sessions} deduplicated session${item.sessions === 1 ? "" : "s"}`;
+        day.setAttribute("aria-label", `${item.sessions} deduplicated session${item.sessions === 1 ? "" : "s"}`);
         day.append(make("span", "trend-value", String(item.sessions)), bar, make("span", "trend-label", formatDate(`${item.date}T12:00:00`, { weekday: "narrow" })));
+        const matchingDaily = (summaries.daily || []).find((entry) => entry.period === item.date);
+        if (matchingDaily) attachEvidence(day, matchingDaily.evidence, `Activity on ${item.date}`);
         byId("trend").append(day);
       });
 
@@ -1277,14 +1554,19 @@
         byId("run-list").append(make("div", "empty", "No completed automation runs yet."));
       } else {
         data.runs.forEach((run) => {
-          const row = make("div", "run");
+          const row = make("button", "run");
+          row.type = "button";
+          row.setAttribute("aria-haspopup", "dialog");
+          row.setAttribute("aria-controls", "run-dialog");
+          row.setAttribute("aria-label", `Open full ${run.kind} run`);
           const kind = run.batch_count > 1 ? `${run.kind} ×${run.batch_count}` : run.kind;
           const metaParts = [formatDate(run.started_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })];
           if (run.duration_seconds !== null) metaParts.push(formatDuration(run.duration_seconds));
           if (run.evidence_count) metaParts.push(`${run.evidence_count} evidence`);
           if (run.stage) metaParts.push(run.stage);
           row.append(make("div", "run-kind", kind), make("div", "run-meta", metaParts.join(" // ")), make("div", `run-status ${run.status}`, run.status));
-          if (run.error) row.append(make("div", "run-error", run.error));
+          if (run.error_summary) row.append(make("div", "run-error", run.error_summary));
+          row.addEventListener("click", () => openRunDialog(run));
           byId("run-list").append(row);
         });
       }
@@ -1342,7 +1624,7 @@
           button.querySelector(".layer-count").textContent = String(newCount);
           button.classList.toggle("awaiting-review", newCount > 0);
           button.classList.toggle("caught-up", newCount === 0);
-          button.title = newCount ? `${newCount} new card${newCount === 1 ? "" : "s"} waiting for review` : "No new cards — open to browse confirmed knowledge";
+          button.setAttribute("aria-label", newCount ? `${newCount} new card${newCount === 1 ? "" : "s"} waiting for review` : "No new cards — open to browse confirmed knowledge");
           button.setAttribute("aria-label", `${button.querySelector(".layer-name").textContent}: ${newCount} new`);
         });
       };

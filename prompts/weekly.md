@@ -8,6 +8,8 @@ permalink: personal-vault/protocol/prompts/weekly
 
 Make the top-level `summary` a quick weekly activity recap. Use 3-8 short Markdown bullets, grouped mentally by project or trajectory but without extra headings. Lead with concrete shipped work, meaningful changes, decisions, blockers, and momentum; keep each bullet to roughly 22 words or fewer. Do not use the recap for ingestion mechanics, evidence counts, or generic statements that synthesis succeeded. Structured observations, patterns, project updates, and review items continue to improve durable knowledge separately.
 
+Emit one `session_summaries` item for every attributed `session_digest` in the packet. Cite the digest evidence ID and preserve its exact project ID and name. Keep each summary to one sentence describing the useful outcome, decision, blocker, or setup result; identify metadata-only backfill honestly. These items support drill-down and provenance, while the top-level weekly recap should still emphasize trajectories rather than enumerate sessions.
+
 For `project_updates`, preserve the scanner-provided project ID and project name exactly. The deterministic catalog owns identity; never rename projects or emit dossiers for collection containers or content-free folders.
 
 Connect the week's approved and new evidence across projects. Use `project_delta`, `session_digest`, and `recurring_pattern` records to distinguish genuinely new activity from previously evaluated history. Identify major wins, trajectories, capability evidence, cross-project lessons, stable work patterns, stable voice patterns, stale claims, and suggested next focus areas without overstating skills, personality, or voice.

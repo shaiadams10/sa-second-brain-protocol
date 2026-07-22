@@ -704,16 +704,26 @@ def _synthesize(
     paths: RuntimePaths,
     defaults: dict[str, Any],
     evidence_override: list[dict[str, Any]] | None = None,
+    summary_period: str | None = None,
 ) -> dict[str, Any]:
     if evidence_override is None:
         compact_session_evidence(store)
     if evidence_override is not None:
         evidence = evidence_override
     elif kind == "weekly":
-        since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+        if summary_period and re.fullmatch(r"\d{4}-W\d{2}", summary_period):
+            year, week = (int(value) for value in summary_period.replace("W", "").split("-"))
+            start_date = date.fromisocalendar(year, week, 1)
+            local_tz = datetime.now().astimezone().tzinfo
+            start = datetime.combine(start_date, datetime.min.time(), tzinfo=local_tz).astimezone(UTC)
+            end = start + timedelta(days=7)
+        else:
+            start = datetime.now(UTC) - timedelta(days=7)
+            end = datetime.now(UTC) + timedelta(seconds=1)
         evidence = [
             item
-            for item in store.evidence_since(since)
+            for item in store.evidence_since(start.isoformat())
+            if str(item.get("occurred_at") or item.get("created_at") or "") < end.isoformat()
             if item.get("status") not in {"compacted", "superseded"}
             and not (
                 item["source_type"] in SESSION_SOURCE_TYPES
@@ -738,6 +748,34 @@ def _synthesize(
     )
     feedback_profile = knowledge_feedback_profile(store)
     if not evidence:
+        if kind == "weekly":
+            published = publish_model_output(
+                vault=vault_root(),
+                store=store,
+                output={
+                    "summary": "- No new project or agent-session activity was available for this period; stewardship checks still ran.",
+                    "observations": [],
+                    "pattern_signals": [],
+                    "project_updates": [],
+                    "session_summaries": [],
+                    "skill_updates": [],
+                    "voice_samples": [],
+                    "review_items": [],
+                    "question_resolutions": [],
+                },
+                run_kind=kind,
+                evidence_ids=[],
+                question_ids=[item["id"] for item in pending_questions],
+                summary_period=summary_period,
+            )
+            return {
+                "status": "completed",
+                "run_ids": [],
+                "evidence_count": 0,
+                "remaining_evidence": 0,
+                "model_called": False,
+                **published,
+            }
         return {"status": "empty", "evidence_count": 0, "model_called": False}
     weekly_fingerprint = None
     if kind == "weekly":
@@ -790,6 +828,9 @@ def _synthesize(
                 for item in collection:
                     used_ids.update(item.get("evidence_refs", []))
             used_ids.update(item["evidence_ref"] for item in output["voice_samples"])
+            used_ids.update(
+                item["evidence_ref"] for item in output.get("session_summaries", [])
+            )
             for item in output.get("review_items", []):
                 used_ids.update(item.get("evidence_refs", []))
             for item in output.get("question_resolutions", []):
@@ -817,7 +858,11 @@ def _synthesize(
     skill_updates: dict[str, dict[str, Any]] = {}
     pattern_signals: dict[str, dict[str, Any]] = {}
     question_resolutions: dict[str, dict[str, Any]] = {}
+    session_summaries: dict[str, dict[str, Any]] = {}
     for output in outputs:
+        for item in output.get("session_summaries", []):
+            evidence_ref = str(item["evidence_ref"])
+            session_summaries.setdefault(evidence_ref, dict(item))
         for item in output.get("question_resolutions", []):
             existing = question_resolutions.get(item["question_id"])
             if not existing or item["confidence"] > existing["confidence"]:
@@ -878,6 +923,7 @@ def _synthesize(
         "observations": [item for output in outputs for item in output["observations"]],
         "pattern_signals": list(pattern_signals.values()),
         "project_updates": list(project_updates.values()),
+        "session_summaries": list(session_summaries.values()),
         "skill_updates": list(skill_updates.values()),
         "voice_samples": voice_samples,
         "review_items": [item for output in outputs for item in output.get("review_items", [])],
@@ -907,6 +953,7 @@ def _synthesize(
         run_kind=kind,
         evidence_ids=processed_ids,
         question_ids=[item["id"] for item in pending_questions],
+        summary_period=summary_period,
     )
     if kind in {"daily", "weekly"}:
         store.replace_summary_runs(
@@ -954,7 +1001,9 @@ def _bootstrap_synthesis_step(
     }
 
 
-def incremental(kind: str, *, trigger: str = "manual") -> dict[str, Any]:
+def incremental(
+    kind: str, *, trigger: str = "manual", summary_period: str | None = None
+) -> dict[str, Any]:
     paths, config, defaults, store = context()
     if store.bootstrap_state()["state"] != "completed":
         raise RuntimeError("Complete and approve bootstrap before incremental runs.")
@@ -991,7 +1040,13 @@ def incremental(kind: str, *, trigger: str = "manual") -> dict[str, Any]:
                 strict=False,
             )
             stage("synthesize")
-            result = _synthesize(kind, store=store, paths=paths, defaults=defaults)
+            result = _synthesize(
+                kind,
+                store=store,
+                paths=paths,
+                defaults=defaults,
+                summary_period=summary_period,
+            )
             if result["status"] == "empty":
                 stage("notify")
                 notify(
@@ -1116,12 +1171,26 @@ def refresh_project(identifier: str) -> dict[str, Any]:
         return {"project_id": project["id"], "project": project["name"], **result}
 
 
+def _weekly_target_period(today: date) -> str:
+    # Saturday is the normal synthesis day and Sunday is its immediate catch-up
+    # window.  From Monday onward, catch up the preceding ISO week rather than
+    # writing late evidence into the new week's note.
+    target = today if today.weekday() >= 5 else today - timedelta(days=7)
+    week = target.isocalendar()
+    return f"{week.year}-W{week.week:02d}"
+
+
 def scheduled() -> dict[str, Any]:
     try:
         daily_result = incremental("daily", trigger="scheduled")
         result = {"daily": daily_result}
-        if datetime.now().strftime("%A") == "Saturday":
-            result["weekly"] = incremental("weekly", trigger="scheduled")
+        today = date.today()
+        weekly_period = _weekly_target_period(today)
+        weekly_note = vault_root() / "Journal" / "Weekly" / f"{weekly_period}.md"
+        if today.strftime("%A") == "Saturday" or not weekly_note.is_file():
+            result["weekly"] = incremental(
+                "weekly", trigger="scheduled", summary_period=weekly_period
+            )
         return result
     except Exception as error:
         notify(

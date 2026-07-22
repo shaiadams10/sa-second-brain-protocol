@@ -1,11 +1,31 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime
+import re
 from typing import Any
+
+from .markdown import slugify
+from .security import sanitize_text
 
 
 MAX_CHANGED_PATHS = 100
 MAX_COMMITS = 25
+CHANGE_LABELS = {
+    "added": "project added",
+    "classification_changed": "classification changed",
+    "commits_added": "commits added",
+    "files_changed": "files changed",
+    "head_changed": "Git head changed",
+    "lifecycle_changed": "lifecycle changed",
+    "moved": "project moved",
+    "project_brain_changed": "project guidance changed",
+    "reactivated": "project reactivated",
+    "removed": "project removed",
+    "renamed": "project renamed",
+    "stack_changed": "technology stack changed",
+    "working_tree_changed": "working tree changed",
+}
 
 
 def _manifest(project: dict[str, Any] | None) -> dict[str, tuple[int, int]]:
@@ -16,6 +36,14 @@ def _manifest(project: dict[str, Any] | None) -> dict[str, tuple[int, int]]:
         if isinstance(value, (list, tuple)) and len(value) >= 2:
             result[str(path)] = (int(value[0]), int(value[1]))
     return result
+
+
+def _manifest_value_changed(before: tuple[int, int], after: tuple[int, int]) -> bool:
+    # ``(0, 0)`` is the scanner's stable Gitlink/directory sentinel.  Ignore the
+    # one-time transition from the legacy, platform-dependent directory stat.
+    if after == (0, 0):
+        return False
+    return before != after
 
 
 def _new_commits(
@@ -103,7 +131,7 @@ def build_project_delta(
     modified_files = sorted(
         path
         for path in set(previous_manifest) & set(current_manifest)
-        if previous_manifest[path] != current_manifest[path]
+        if _manifest_value_changed(previous_manifest[path], current_manifest[path])
     )
     if added_files or removed_files or modified_files:
         change_types.append("files_changed")
@@ -165,8 +193,74 @@ def build_project_delta(
     }
 
 
+def _project_link(name: str) -> str:
+    return f"[[Projects/{slugify(name)}|{name}]]"
+
+
+def _request_text(payload: dict[str, Any]) -> str:
+    messages = payload.get("user_messages") or []
+    if not messages:
+        return ""
+    text = sanitize_text(str(messages[0].get("text") or ""), max_chars=600)
+    match = re.search(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", text, re.DOTALL)
+    if match:
+        text = match.group(1)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def session_recap(payload: dict[str, Any]) -> str:
+    """Create a safe deterministic fallback when the model omits a session recap."""
+
+    request = _request_text(payload)
+    assistant_text = " ".join(
+        sanitize_text(str(item.get("text") or ""), max_chars=1000)
+        for item in (payload.get("assistant_results") or [])[:3]
+    ).casefold()
+    if request.casefold() in {"test", "connectivity test", "connection test"} and any(
+        phrase in assistant_text
+        for phrase in (
+            "successfully connected",
+            "successfully loaded",
+            "loaded the workspace",
+            "loaded your workspace",
+        )
+    ):
+        return "Connectivity test completed; the workspace loaded successfully."
+
+    visible_users = len(payload.get("user_messages") or [])
+    assistant_count = len(payload.get("assistant_results") or [])
+    tool_count = sum(
+        int(value) for value in (payload.get("tool_usage") or {}).values()
+    )
+    if not visible_users:
+        return "Backfilled session metadata; no user-authored message was available for synthesis."
+    parts = [
+        f"{visible_users} user message{'s' if visible_users != 1 else ''}",
+        f"{assistant_count} selected result{'s' if assistant_count != 1 else ''}",
+    ]
+    if tool_count:
+        parts.append(f"{tool_count} tool action{'s' if tool_count != 1 else ''}")
+    return "Session reviewed: " + ", ".join(parts) + "."
+
+
+def _session_time(payload: dict[str, Any]) -> str:
+    value = str(payload.get("started_at") or "")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return "time unavailable"
+    return parsed.strftime("%H:%M")
+
+
 def activity_markdown(
-    evidence: list[dict[str, Any]], *, pattern_stats: dict[str, int] | None = None
+    evidence: list[dict[str, Any]],
+    *,
+    pattern_stats: dict[str, int] | None = None,
+    project_names_by_id: dict[str, str] | None = None,
+    session_summaries: list[dict[str, Any]] | None = None,
+    period: str | None = None,
+    learning: str | None = None,
+    stewardship: str | None = None,
 ) -> str:
     deltas = [item for item in evidence if item.get("kind") == "project_delta"]
     sessions = [item for item in evidence if item.get("kind") == "session_digest"]
@@ -196,7 +290,72 @@ def activity_markdown(
         str(item.get("payload", {}).get("source") or "unknown").casefold()
         for item in sessions
     )
-    lines = ["### Coverage details", ""]
+    names_by_id = project_names_by_id or {}
+    recaps = {
+        str(item.get("evidence_ref")): sanitize_text(
+            str(item.get("summary") or ""), max_chars=1200
+        ).strip()
+        for item in (session_summaries or [])
+        if item.get("evidence_ref") and item.get("summary")
+    }
+    lines: list[str] = []
+    if deltas:
+        lines.extend(["### Project changes", ""])
+        for item in sorted(
+            deltas,
+            key=lambda row: str(row.get("payload", {}).get("project_name") or ""),
+        ):
+            payload = item.get("payload") or {}
+            name = str(payload.get("project_name") or "Unknown project")
+            labels = [
+                CHANGE_LABELS.get(str(change), str(change).replace("_", " "))
+                for change in payload.get("change_types") or []
+            ]
+            lines.append(f"- {_project_link(name)} — {', '.join(labels)}.")
+
+    if sessions:
+        lines.extend(([""] if lines else []) + ["### Sessions reviewed", ""])
+        for item in sorted(
+            sessions,
+            key=lambda row: str(
+                (row.get("payload") or {}).get("started_at")
+                or row.get("occurred_at")
+                or row.get("created_at")
+                or ""
+            ),
+        ):
+            payload = item.get("payload") or {}
+            project_ids = [str(value) for value in payload.get("project_ids") or []]
+            name = next(
+                (names_by_id[value] for value in project_ids if value in names_by_id),
+                "Unattributed session",
+            )
+            link = _project_link(name) if name != "Unattributed session" else name
+            source = str(payload.get("source") or "agent").title()
+            recap = recaps.get(str(item.get("id"))) or session_recap(payload)
+            occurred = str(
+                payload.get("started_at")
+                or item.get("occurred_at")
+                or item.get("created_at")
+                or ""
+            )
+            occurred_date = occurred[:10]
+            backfill = (
+                f" · backfill from {occurred_date}"
+                if period and occurred_date and occurred_date != period
+                else ""
+            )
+            lines.append(
+                f"- {link} · {source} · {_session_time(payload)}{backfill} — {recap}"
+            )
+
+    if learning:
+        lines.extend(([""] if lines else []) + [learning.strip()])
+
+    if stewardship:
+        lines.extend(([""] if lines else []) + [stewardship.strip()])
+
+    lines.extend(([""] if lines else []) + ["### Coverage details", ""])
     lines.append(
         f"- Projects with detected changes: {len(deltas)}"
         + (f" - {', '.join(project_names[:12])}" if project_names else "")
