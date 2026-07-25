@@ -11,6 +11,7 @@ from .config import (
     dashboard_runtime,
     load_defaults,
     load_runtime_config,
+    set_model_runtime,
     setup_runtime,
     vault_root,
 )
@@ -61,7 +62,8 @@ def _json(value: object) -> None:
 
 def _common() -> tuple[RuntimePaths, dict, dict, StateStore]:
     paths = setup_runtime()
-    return paths, load_runtime_config(paths), load_defaults(), StateStore(paths.state)
+    config = load_runtime_config(paths)
+    return paths, config, load_defaults(config), StateStore(paths.state)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -161,7 +163,17 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("reindex")
     sub.add_parser("health")
     models = sub.add_parser("models")
-    models.add_subparsers(dest="action", required=True).add_parser("check")
+    model_actions = models.add_subparsers(dest="action", required=True)
+    model_actions.add_parser("check")
+    model_runtime = model_actions.add_parser("set-runtime")
+    model_runtime.add_argument(
+        "--provider", required=True, choices=("openai", "openrouter")
+    )
+    model_runtime.add_argument(
+        "--policy",
+        required=True,
+        choices=("chatgpt-direct-v1", "openrouter-hybrid-v1"),
+    )
     protocol = sub.add_parser("protocol")
     protocol_publish = protocol.add_subparsers(dest="action", required=True).add_parser(
         "publish"
@@ -422,8 +434,11 @@ def main(argv: list[str] | None = None) -> int:
             path = write_report(paths)
             _json({"report": str(path), "health": health_report(paths)})
         elif args.command == "models":
-            paths, _config, defaults, _store = _common()
-            _json(canary(paths, defaults["models"]))
+            if args.action == "set-runtime":
+                _json(set_model_runtime(args.provider, args.policy))
+            else:
+                paths, _config, defaults, _store = _common()
+                _json(canary(paths, defaults["models"]))
         elif args.command == "protocol":
             paths, config, _defaults, store = _common()
             if store.bootstrap_state()["state"] != "completed":

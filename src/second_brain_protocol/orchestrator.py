@@ -67,7 +67,7 @@ from .state import StateStore, canonical_hash, utc_now
 def context() -> tuple[RuntimePaths, dict[str, Any], dict[str, Any], StateStore]:
     paths = setup_runtime()
     config = load_runtime_config(paths)
-    defaults = load_defaults()
+    defaults = load_defaults(config)
     store = StateStore(paths.state)
     store.backup(paths.runs / "backups" / f"state-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}.sqlite")
     return paths, config, defaults, store

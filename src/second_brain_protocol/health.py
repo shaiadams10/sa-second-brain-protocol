@@ -40,6 +40,8 @@ def report(paths: RuntimePaths, *, include_memory: bool = True) -> dict[str, Any
         "vault_exists": vault_root().is_dir(),
         "runtime_exists": paths.root.is_dir(),
         "projects_root_readable": Path(config["projects_root"]).is_dir(),
+        "model_provider": config.get("model_provider", "openai"),
+        "model_policy": config.get("model_policy", "chatgpt-direct-v1"),
         "bootstrap": store.bootstrap_state(),
         "codex": codex_version,
         "basic_memory_package": _version(

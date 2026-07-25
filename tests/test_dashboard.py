@@ -162,8 +162,12 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
 
 
 def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        "second_brain_protocol.state.utc_now",
+        lambda: "2026-07-16T18:00:00+00:00",
+    )
     vault = tmp_path / "Example Person Second Brain"
     paths = RuntimePaths.from_root(tmp_path / "runtime")
     store = StateStore(paths.state)

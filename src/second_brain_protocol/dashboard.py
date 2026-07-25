@@ -35,8 +35,16 @@ MODEL_PRICING_USD_PER_MTOK = {
     "gpt-5.6-luna": {"input": 1.0, "cached_input": 0.10, "output": 6.0},
     "gpt-5.6-terra": {"input": 2.5, "cached_input": 0.25, "output": 15.0},
     "gpt-5.6-sol": {"input": 5.0, "cached_input": 0.50, "output": 30.0},
+    "deepseek/deepseek-v4-flash": {
+        "input": 0.098,
+        "cached_input": 0.0196,
+        "output": 0.196,
+    },
+    "openai/gpt-5.6-luna": {"input": 1.0, "cached_input": 0.10, "output": 6.0},
+    "openai/gpt-5.6-terra": {"input": 2.5, "cached_input": 0.25, "output": 15.0},
+    "openai/gpt-5.6-sol": {"input": 5.0, "cached_input": 0.50, "output": 30.0},
 }
-PRICING_AS_OF = "2026-07-17"
+PRICING_AS_OF = "2026-07-24"
 INSIGHT_KINDS = {
     "decision",
     "lesson",
@@ -2149,8 +2157,8 @@ def build_snapshot(
     if now.tzinfo is None:
         now = now.replace(tzinfo=UTC)
     store = StateStore(paths.state)
-    defaults = load_defaults()
     runtime_config = load_runtime_config(paths)
+    defaults = load_defaults(runtime_config)
     if schedule is None and codex_usage_snapshot is None:
         with ThreadPoolExecutor(max_workers=2) as executor:
             schedule_future = executor.submit(
