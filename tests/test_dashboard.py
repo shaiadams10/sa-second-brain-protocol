@@ -33,7 +33,7 @@ def test_daily_activity_bullets_become_visual_stats_and_chips() -> None:
                 "items": [
                     "Projects with detected changes: 10 - Angel, HyperFrames, Portfolio",
                     "Change signals: classification_changed (5), files_changed (4), stack_changed (2)",
-                    "Agent sessions reviewed: 6 total - 5 linked to 3 projects; 1 not yet linked; Codex 4, Antigravity 2",
+                    "Agent sessions reviewed: 6 total - 5 linked to 3 projects; 1 analyzed profile-only; Codex 4, Antigravity 2",
                     "Knowledge signals: 1 tracking, 1 promoted, 0 awaiting review",
                 ],
             }
@@ -44,11 +44,14 @@ def test_daily_activity_bullets_become_visual_stats_and_chips() -> None:
     assert [item["title"] for item in visuals["groups"]] == [
         "Projects with detected changes",
         "Change signals",
-        "Session-to-project coverage",
+        "Session analysis coverage",
         "Pattern status",
     ]
     assert visuals["groups"][1]["chips"][0] == {"label": "Classification", "value": 5}
-    assert visuals["groups"][2]["chips"][-1] == {"label": "Not yet linked", "value": 1}
+    assert visuals["groups"][2]["chips"][-1] == {
+        "label": "Profile-only sessions",
+        "value": 1,
+    }
 
 
 def test_summary_cost_uses_exact_split_or_honest_legacy_range() -> None:
@@ -836,7 +839,7 @@ def test_summary_stats_carry_hoverable_clickable_canonical_evidence(
 
 - Projects with detected changes: 1 - Demo
 - Change signals: files_changed (1)
-- Agent sessions reviewed: 1 total - 1 linked to 1 projects; 0 not yet linked; Antigravity 1
+- Agent sessions reviewed: 1 total - 1 linked to 1 projects; 0 analyzed profile-only; Antigravity 1
 - Knowledge signals: 0 tracking, 0 promoted, 0 awaiting review
 <!-- sb:generated daily:end -->
 """,

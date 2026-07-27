@@ -79,7 +79,7 @@ def _config(tmp_path: Path) -> dict:
     }
 
 
-def test_collection_reads_full_content_only_for_uniquely_matched_sessions(
+def test_collection_ingests_unmatched_sessions_in_profile_only_lane(
     tmp_path: Path,
 ) -> None:
     sessions = tmp_path / "codex" / "sessions"
@@ -100,7 +100,7 @@ def test_collection_reads_full_content_only_for_uniquely_matched_sessions(
         sessions / "unrelated.jsonl",
         "unrelated-session",
         unrelated_path,
-        "must not be ingested",
+        "profile-only content",
     )
     project = {
         "id": "project-angel",
@@ -126,10 +126,23 @@ def test_collection_reads_full_content_only_for_uniquely_matched_sessions(
     assert result["sources_indexed"] == 2
     assert result["sources_matched"] == 1
     assert result["sources_unmatched"] == 1
-    assert result["sources_skipped_without_project"] == 1
+    assert result["sources_skipped_without_project"] == 0
+    assert result["sources_ingested_profile_only"] == 1
     messages = [row for row in store.evidence() if row["kind"] == "visible_message"]
-    assert [row["payload"]["text"] for row in messages] == ["matched content"]
-    assert messages[0]["project_id"] == "project-angel"
+    assert [row["payload"]["text"] for row in messages] == [
+        "matched content",
+        "profile-only content",
+    ]
+    matched = next(
+        row for row in messages if row["payload"]["text"] == "matched content"
+    )
+    profile_only = next(
+        row for row in messages if row["payload"]["text"] == "profile-only content"
+    )
+    assert matched["project_id"] == "project-angel"
+    assert matched["payload"]["analysis_lane"] == "full"
+    assert profile_only["project_id"] is None
+    assert profile_only["payload"]["analysis_lane"] == "profile_only"
     index = {row["session_id"]: row for row in store.session_project_index()}
     assert index["matched-session"]["status"] == "matched"
     assert index["unrelated-session"]["status"] == "unmatched"
@@ -137,7 +150,7 @@ def test_collection_reads_full_content_only_for_uniquely_matched_sessions(
     repeated = collect_sessions(store, config)
     assert repeated["codex"] == 0
     assert (
-        len([row for row in store.evidence() if row["kind"] == "visible_message"]) == 1
+        len([row for row in store.evidence() if row["kind"] == "visible_message"]) == 2
     )
 
 

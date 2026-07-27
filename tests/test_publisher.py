@@ -766,6 +766,256 @@ def test_weekly_resolves_objective_question_from_authoritative_delta(
     assert resolved["payload"]["automatic_resolution"]["evidence_refs"] == [evidence_id]
 
 
+def _empty_output(**overrides: object) -> dict:
+    output = {
+        "summary": "Evidence-backed update.",
+        "observations": [],
+        "pattern_signals": [],
+        "learning_signals": [],
+        "project_updates": [],
+        "session_summaries": [],
+        "skill_updates": [],
+        "voice_samples": [],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+    output.update(overrides)
+    return output
+
+
+def test_profile_only_evidence_cannot_create_project_knowledge(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    evidence_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:codex:unknown",
+        kind="session_digest",
+        payload={
+            "session_id": "unknown",
+            "source": "codex",
+            "project_ids": [],
+            "analysis_lane": "profile_only",
+            "user_messages": [{"text": "Change the deployment."}],
+        },
+        occurred_at="2026-01-01T10:00:00Z",
+    )
+
+    with pytest.raises(ValueError, match="cannot support a project update"):
+        publish_model_output(
+            vault=tmp_path,
+            store=store,
+            output=_empty_output(
+                project_updates=[
+                    {
+                        "project_id": "project-invented",
+                        "name": "Invented",
+                        "summary": "A project fact inferred from unknown context.",
+                        "evidence_refs": [evidence_id],
+                    }
+                ]
+            ),
+            run_kind="daily",
+            evidence_ids=[evidence_id],
+        )
+
+    with pytest.raises(ValueError, match="cannot support project facts"):
+        publish_model_output(
+            vault=tmp_path,
+            store=store,
+            output=_empty_output(
+                observations=[
+                    {
+                        "kind": "project_fact",
+                        "subject": "Unknown project",
+                        "claim": "The unknown session changed a project.",
+                        "evidence_refs": [evidence_id],
+                        "confidence": 0.9,
+                        "explicit": False,
+                        "scope": "project",
+                        "public_claim": False,
+                        "authoritative": False,
+                    }
+                ]
+            ),
+            run_kind="daily",
+            evidence_ids=[evidence_id],
+        )
+
+    assert store.observations() == []
+    assert not (tmp_path / "Projects").exists()
+
+
+def test_learning_progression_tracks_unknown_and_cross_project_evidence(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    profile_ref, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:codex:profile",
+        kind="session_digest",
+        payload={
+            "session_id": "profile",
+            "source": "codex",
+            "project_ids": [],
+            "analysis_lane": "profile_only",
+        },
+        occurred_at="2026-01-01T10:00:00Z",
+    )
+    applied_ref, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:codex:project-one",
+        kind="session_digest",
+        project_id="project-one",
+        payload={
+            "session_id": "project-one-session",
+            "source": "codex",
+            "project_ids": ["project-one"],
+            "analysis_lane": "full",
+        },
+        occurred_at="2026-01-02T10:00:00Z",
+    )
+    verified_ref, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="session-digest:antigravity:project-two",
+        kind="session_digest",
+        project_id="project-two",
+        payload={
+            "session_id": "project-two-session",
+            "source": "antigravity",
+            "project_ids": ["project-two"],
+            "analysis_lane": "full",
+        },
+        occurred_at="2026-01-03T10:00:00Z",
+    )
+
+    first = publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=_empty_output(
+            learning_signals=[
+                {
+                    "topic_key": "service-readiness",
+                    "label": "Service readiness",
+                    "signal_type": "learning_edge",
+                    "claim": "the user explicitly identified service readiness as unresolved.",
+                    "evidence_refs": [profile_ref],
+                    "confidence": 0.86,
+                }
+            ]
+        ),
+        run_kind="daily",
+        evidence_ids=[profile_ref],
+    )
+    assert first["learning_profile_only_events"] == 1
+    assert store.learning_topic("service-readiness")["current_state"] == "exploring"
+
+    publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=_empty_output(
+            learning_signals=[
+                {
+                    "topic_key": "service-readiness",
+                    "label": "Service readiness",
+                    "signal_type": "applied_learning",
+                    "claim": "the user later applied bounded readiness checks correctly.",
+                    "evidence_refs": [applied_ref],
+                    "confidence": 0.93,
+                }
+            ]
+        ),
+        run_kind="daily",
+        evidence_ids=[applied_ref],
+    )
+    assert store.learning_topic("service-readiness")["current_state"] == "applied"
+    assert store.learning_topic("service-readiness")["open_learning_edge"] is False
+
+    publish_model_output(
+        vault=tmp_path,
+        store=store,
+        output=_empty_output(
+            learning_signals=[
+                {
+                    "topic_key": "service-readiness",
+                    "label": "Service readiness",
+                    "signal_type": "validated_outcome",
+                    "claim": "the user directed and validated the readiness design in another project.",
+                    "evidence_refs": [verified_ref],
+                    "confidence": 0.97,
+                }
+            ]
+        ),
+        run_kind="daily",
+        evidence_ids=[verified_ref],
+    )
+
+    topic = store.learning_topic("service-readiness")
+    assert topic["current_state"] == "verified"
+    assert topic["session_count"] == 3
+    assert topic["date_count"] == 3
+    assert topic["project_count"] == 2
+    assert topic["context_count"] == 3
+    tracker = (tmp_path / "Memory" / "Learning.md").read_text(encoding="utf-8")
+    assert "Verified through a validated outcome" in tracker
+    assert "2 known projects, 1 profile-only contexts" in tracker
+
+
+def test_profile_only_context_can_complete_stable_pattern_breadth(
+    tmp_path: Path,
+) -> None:
+    _note(tmp_path / "Identity" / "WorkStyle.md")
+    store = StateStore(tmp_path / "state.sqlite")
+    refs = []
+    for index, (project_id, lane, occurred_at) in enumerate(
+        (
+            ("project-one", "full", "2026-01-01T10:00:00Z"),
+            ("project-one", "full", "2026-01-02T10:00:00Z"),
+            (None, "profile_only", "2026-01-02T12:00:00Z"),
+        )
+    ):
+        evidence_id, _ = store.add_evidence(
+            source_type="session-digest",
+            source_ref=f"session-digest:codex:context-{index}",
+            kind="session_digest",
+            project_id=project_id,
+            payload={
+                "session_id": f"context-{index}",
+                "source": "codex",
+                "project_ids": [project_id] if project_id else [],
+                "analysis_lane": lane,
+            },
+            occurred_at=occurred_at,
+        )
+        refs.append(evidence_id)
+        result = publish_model_output(
+            vault=tmp_path,
+            store=store,
+            output=_empty_output(
+                pattern_signals=[
+                    {
+                        "pattern_key": "verification-before-handoff",
+                        "kind": "work_style",
+                        "label": "Verification before handoff",
+                        "claim": "Across contexts, the user checks behavior before accepting a handoff.",
+                        "evidence_refs": [evidence_id],
+                        "confidence": 0.9,
+                        "explicit": False,
+                        "scope": "context" if not project_id else "project",
+                    }
+                ]
+            ),
+            run_kind="daily",
+            evidence_ids=[evidence_id],
+        )
+
+    assert result["patterns_promoted"] == 1
+    pattern = store.pattern_signal("verification-before-handoff")
+    assert pattern["status"] == "promoted"
+    assert pattern["project_count"] == 1
+    assert pattern["payload"]["context_count"] == 2
+
+
 def test_weekly_cannot_resolve_human_disclosure_question(tmp_path: Path) -> None:
     store = StateStore(tmp_path / "state.sqlite")
     evidence_id, _ = store.add_evidence(

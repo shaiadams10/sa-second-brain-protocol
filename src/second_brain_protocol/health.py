@@ -61,6 +61,19 @@ def report(paths: RuntimePaths, *, include_memory: bool = True) -> dict[str, Any
             status: len(store.pattern_signals(status))
             for status in ("tracking", "promoted", "pending", "conflict", "rejected")
         },
+        "learning_topics": {
+            state: sum(
+                item["current_state"] == state for item in store.learning_topics()
+            )
+            for state in (
+                "exploring",
+                "developing",
+                "demonstrated",
+                "applied",
+                "verified",
+                "mixed",
+            )
+        },
         "recent_runs": store.runs(limit=10),
         "recent_pipeline_runs": store.pipeline_runs(limit=10),
     }

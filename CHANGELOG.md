@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added an isolated profile-only analysis lane for unmatched and ambiguous Codex/Antigravity sessions. Their visible interactions can improve personal, voice, preference, pattern, goal, and learning knowledge, while deterministic publication blocks project facts, updates, decisions, lessons, ownership, authorship, skill verification, validated outcomes, project summaries, and project-question resolution.
+- Added longitudinal topic-level learning evidence with dated events for learning edges, demonstrated understanding, applied learning, architectural judgment, operational capability, validated outcomes, and counterevidence. The derived state and cross-session/date/project/context breadth are visible in `Memory/Learning.md`.
+- Reframed daily and weekly synthesis as a dual-lens evaluation of both work outcomes and what the user's interactions demonstrate, and changed stable-pattern breadth from two known projects to two independent contexts without assigning projects to profile-only sessions.
+
 - Documented the complete project/session lifecycle, including collection-versus-project boundaries, one-project question admission, ownership-versus-learning policy, safe forgetting, automatic incremental discovery, and the Antigravity IDE workspace-association limitation plus the explicit-Project workflow.
 - Added safe Antigravity recovery from exact project-facing tool paths plus previewed owner-confirmed session links for conversations Antigravity leaves outside a project.
 - Made missing project folders visible in health output while preserving the soft-missing versus explicitly-forgotten safety boundary.

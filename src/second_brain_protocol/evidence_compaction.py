@@ -101,6 +101,10 @@ def _tool_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def compact_session_evidence(store: StateStore) -> dict[str, int]:
+    attribution = {
+        (str(row["surface"]), str(row["session_id"])): row
+        for row in store.session_project_index()
+    }
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in store.evidence(status="new"):
         payload = row.get("payload") or {}
@@ -135,11 +139,22 @@ def compact_session_evidence(store: StateStore) -> dict[str, int]:
         project_ids = sorted(
             {str(row["project_id"]) for row in rows if row.get("project_id")}
         )
+        indexed = attribution.get((source_type, session_id), {})
+        attribution_status = str(indexed.get("status") or "").strip() or (
+            "matched" if len(project_ids) == 1 else "unmatched"
+        )
+        analysis_lane = (
+            "full"
+            if attribution_status == "matched" and len(project_ids) == 1
+            else "profile_only"
+        )
         source_ids = [row["id"] for row in ordered]
         payload = {
             "session_id": session_id,
             "source": source_type,
             "project_ids": project_ids,
+            "analysis_lane": analysis_lane,
+            "attribution_status": attribution_status,
             "started_at": str(
                 ordered[0].get("occurred_at") or ordered[0]["created_at"]
             ),

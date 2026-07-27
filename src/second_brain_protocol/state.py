@@ -238,6 +238,45 @@ CREATE TABLE IF NOT EXISTS pattern_signals (
 
 CREATE INDEX IF NOT EXISTS pattern_signals_status_idx ON pattern_signals(status);
 
+CREATE TABLE IF NOT EXISTS learning_signal_events (
+  id TEXT PRIMARY KEY,
+  topic_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  signal_type TEXT NOT NULL,
+  claim TEXT NOT NULL,
+  evidence_refs_json TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  project_ids_json TEXT NOT NULL,
+  context_keys_json TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS learning_signal_events_topic_idx
+ON learning_signal_events(topic_key,occurred_at);
+
+CREATE TABLE IF NOT EXISTS learning_topics (
+  topic_key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  current_state TEXT NOT NULL,
+  assessment TEXT NOT NULL,
+  evidence_refs_json TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  session_count INTEGER NOT NULL,
+  date_count INTEGER NOT NULL,
+  project_count INTEGER NOT NULL,
+  context_count INTEGER NOT NULL,
+  signal_counts_json TEXT NOT NULL,
+  open_learning_edge INTEGER NOT NULL DEFAULT 0,
+  first_seen TEXT NOT NULL,
+  last_seen TEXT NOT NULL,
+  last_progress_at TEXT,
+  payload_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS learning_topics_state_idx
+ON learning_topics(current_state,last_seen);
+
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -1098,6 +1137,16 @@ class StateStore:
                         payload.pop("project_id", None)
                 if "project_ids" in payload:
                     payload["project_ids"] = [project_id] if project_id else []
+                if (
+                    payload.get("session_id")
+                    and (
+                        payload.get("analysis_lane")
+                        or "project_ids" in payload
+                    )
+                ):
+                    payload["analysis_lane"] = (
+                        "full" if project_id else "profile_only"
+                    )
                 connection.execute(
                     """UPDATE evidence SET project_id=?,payload_json=?,content_hash=?
                     WHERE id=?""",
@@ -1271,6 +1320,125 @@ class StateStore:
                     str(record.get("last_seen") or now),
                 ),
             )
+
+    def add_learning_signal_event(self, record: dict[str, Any]) -> tuple[str, bool]:
+        event_id = "learn-" + canonical_hash(
+            {
+                "topic_key": record["topic_key"],
+                "signal_type": record["signal_type"],
+                "claim": record["claim"],
+                "evidence_refs": sorted(set(record["evidence_refs"])),
+            }
+        )[:24]
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO learning_signal_events(
+                id,topic_key,label,signal_type,claim,evidence_refs_json,confidence,
+                project_ids_json,context_keys_json,occurred_at,created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    event_id,
+                    record["topic_key"],
+                    record["label"],
+                    record["signal_type"],
+                    record["claim"],
+                    json.dumps(sorted(set(record["evidence_refs"]))),
+                    float(record["confidence"]),
+                    json.dumps(sorted(set(record.get("project_ids", [])))),
+                    json.dumps(sorted(set(record.get("context_keys", [])))),
+                    str(record["occurred_at"]),
+                    utc_now(),
+                ),
+            )
+        return event_id, cursor.rowcount == 1
+
+    def learning_signal_events(
+        self, topic_key: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM learning_signal_events"
+        params: list[str] = []
+        if topic_key:
+            query += " WHERE topic_key=?"
+            params.append(topic_key)
+        query += " ORDER BY occurred_at,id"
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["evidence_refs"] = json.loads(item.pop("evidence_refs_json"))
+            item["project_ids"] = json.loads(item.pop("project_ids_json"))
+            item["context_keys"] = json.loads(item.pop("context_keys_json"))
+            result.append(item)
+        return result
+
+    def upsert_learning_topic(self, record: dict[str, Any]) -> None:
+        payload = dict(record)
+        with self.connect() as connection:
+            connection.execute(
+                """INSERT INTO learning_topics(
+                topic_key,label,current_state,assessment,evidence_refs_json,
+                confidence,session_count,date_count,project_count,context_count,
+                signal_counts_json,open_learning_edge,first_seen,last_seen,
+                last_progress_at,payload_json
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(topic_key) DO UPDATE SET
+                label=excluded.label,current_state=excluded.current_state,
+                assessment=excluded.assessment,
+                evidence_refs_json=excluded.evidence_refs_json,
+                confidence=excluded.confidence,session_count=excluded.session_count,
+                date_count=excluded.date_count,project_count=excluded.project_count,
+                context_count=excluded.context_count,
+                signal_counts_json=excluded.signal_counts_json,
+                open_learning_edge=excluded.open_learning_edge,
+                first_seen=excluded.first_seen,last_seen=excluded.last_seen,
+                last_progress_at=excluded.last_progress_at,
+                payload_json=excluded.payload_json""",
+                (
+                    record["topic_key"],
+                    record["label"],
+                    record["current_state"],
+                    record["assessment"],
+                    json.dumps(sorted(set(record["evidence_refs"]))),
+                    float(record["confidence"]),
+                    int(record.get("session_count", 0)),
+                    int(record.get("date_count", 0)),
+                    int(record.get("project_count", 0)),
+                    int(record.get("context_count", 0)),
+                    json.dumps(record.get("signal_counts", {}), sort_keys=True),
+                    int(bool(record.get("open_learning_edge"))),
+                    str(record["first_seen"]),
+                    str(record["last_seen"]),
+                    record.get("last_progress_at"),
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                ),
+            )
+
+    def learning_topics(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM learning_topics
+                ORDER BY last_seen DESC,topic_key"""
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["evidence_refs"] = json.loads(item.pop("evidence_refs_json"))
+            item["signal_counts"] = json.loads(item.pop("signal_counts_json"))
+            item["payload"] = json.loads(item.pop("payload_json"))
+            item["open_learning_edge"] = bool(item["open_learning_edge"])
+            result.append(item)
+        return result
+
+    def learning_topic(self, topic_key: str) -> dict[str, Any] | None:
+        return next(
+            (
+                item
+                for item in self.learning_topics()
+                if item["topic_key"] == topic_key
+            ),
+            None,
+        )
 
     def clear_current_project_paths(self) -> None:
         with self.connect() as connection:

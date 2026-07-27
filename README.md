@@ -100,7 +100,7 @@ Identity/                 Persona, voice, values, preferences, work style
 Experience/               Employment, education, military, career timeline
 Projects/                 Evidence-backed project dossiers
 Skills/                   Skills with proof, confidence, and verification dates
-Memory/                   Decisions, lessons, patterns, long-term memories
+Memory/                   Decisions, lessons, patterns, learning, long-term memories
 Goals/                    Active and archived goals
 Journal/Daily/            Incremental activity summaries
 Journal/Weekly/           Cross-project synthesis and reflection

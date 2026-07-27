@@ -18,7 +18,7 @@ Checkpoints advance only after schema validation and deterministic publication. 
 
 Conversation text and project-name mentions are never used to decide which project owns a session. Before a conversation body is parsed, the collector reads only bounded authoritative metadata: the Codex session header, the Antigravity conversation database's workspace URI, or Antigravity's aggregate conversation metadata record. It resolves that workspace and any unique Git remote against current leaf-project paths, validated historical path aliases retained across scans, and unique Git identity.
 
-Every session receives exactly one of three machine-local states: matched to one leaf project, unmatched, or ambiguous. Only a uniquely matched session is fully ingested and eligible for a model packet. Unmatched and ambiguous sources retain a fingerprinted metadata record so later project moves or newly recovered aliases can be reconsidered without reading their conversation content. Conflicting metadata never creates a multi-project session; it removes attribution until deterministic evidence resolves the conflict.
+Every session receives exactly one of three machine-local attribution states: matched to one leaf project, unmatched, or ambiguous. A uniquely matched session is ingested in the full lane and may support both project and person learning. Unmatched and ambiguous sources are ingested in the profile-only lane using visible messages and bounded interaction metadata; they may support person, voice, preference, work-style, goal, pattern, and learning signals but never project knowledge, ownership, authorship, skill verification, validated project outcomes, or project-question resolution. Their fingerprinted attribution record remains available so later project moves, newly recovered aliases, or an explicit owner correction can safely move them into the full lane. Conflicting metadata never creates a multi-project session, and conversation text is never used to guess the project.
 
 When Antigravity explicitly records a conversation as outside a project, an owner-confirmed one-session mapping may be stored only in machine-local configuration. This exception is never inferred from a project-name mention, never maps several projects at once, and remains subordinate to an explicit owner correction.
 
@@ -66,9 +66,21 @@ Daily and weekly model batches record machine-local usage metadata. New Codex ru
 
 ## Recurring patterns
 
-Daily and weekly reasoning may propose a normalized `pattern_signal` for preferences, work style, voice style, personality, or preferred operating protocols. The deterministic registry merges signals by a stable semantic key and retains evidence references, first and last observation, confidence, and counts across sessions, dates, and projects.
+Daily and weekly reasoning may propose a normalized `pattern_signal` for preferences, work style, voice style, personality, or preferred operating protocols. The deterministic registry merges signals by a stable semantic key and retains evidence references, first and last observation, confidence, and counts across sessions, dates, known projects, and independent profile-only contexts.
 
-A non-explicit pattern remains in the machine registry without creating review work until it has support from at least three sessions, two dates, and two projects. Eligible patterns pass through the normal conflict and promotion policy before entering canonical identity notes. Rejected observations tombstone the linked registry entry so the same pattern is not repeatedly proposed.
+A non-explicit pattern remains in the machine registry without creating review work until it has support from at least three sessions, two dates, and two independent contexts. A known project is one context; an unattributed profile-only session may provide another context without acquiring a project identity. Eligible patterns pass through the normal conflict and promotion policy before entering canonical identity notes. Rejected observations tombstone the linked registry entry so the same pattern is not repeatedly proposed.
+
+## Longitudinal learning
+
+Daily and weekly reasoning may also emit a stable topic-keyed `learning_signal`. Signal types distinguish an active learning edge, demonstrated understanding, later application, architectural judgment, operational capability, an attributed validated outcome, and counterevidence. The deterministic learning registry stores every event with its evidence, date, known-project breadth, and profile-only context breadth, then derives the current topic state:
+
+- `exploring` when only an unresolved edge is supported;
+- `demonstrated` when correct understanding or judgment is shown;
+- `applied` when later evidence shows use in practice;
+- `verified` when attributed evidence contains a validated outcome;
+- `mixed` when a newer edge or counterevidence remains after prior progress.
+
+Merely asking a question is never sufficient evidence for a learning edge. The prompt must show explicit uncertainty, repeated unresolved misunderstanding, or clear correction evidence. A later assistant answer does not resolve an edge by itself; the user must later use, explain, diagnose, transfer, or validate the concept correctly. The current state and breadth are published deterministically to `Memory/Learning.md`, while event details remain machine-local and evidence-backed.
 
 Daily and weekly journals begin with a terse project-oriented activity recap, followed by deterministic coverage details and the evidence-backed knowledge synthesis. The recap says what changed in short phrases; coverage separately reports how many projects changed, how many sessions were reviewed, how many were linked to projects, and how many could not yet be linked.
 

@@ -496,6 +496,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         "sources_unmatched": 0,
         "sources_ambiguous": 0,
         "sources_skipped_without_project": 0,
+        "sources_ingested_profile_only": 0,
     }
 
     def route_source(
@@ -510,7 +511,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         fallback_paths: list[str] | None = None,
         project_override: str | None = None,
         override_resolver: str = "related_session_source",
-    ) -> tuple[str | None, bool]:
+    ) -> tuple[str | None, bool, str, str]:
         resolution = resolver.resolve(
             workspace,
             remote_url=remote_url,
@@ -564,10 +565,10 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         counts["sources_indexed"] += 1
         counts[f"sources_{resolution.status}"] += 1
         if resolution.status != "matched" or not resolution.project_id:
-            counts["sources_skipped_without_project"] += 1
-            store.set_collection_receipt(source_key, fingerprint)
-            return None, False
-        return resolution.project_id, not ingested
+            if not ingested:
+                counts["sources_ingested_profile_only"] += 1
+            return None, not ingested, "profile_only", resolution.status
+        return resolution.project_id, not ingested, "full", resolution.status
 
     codex_roots = [
         Path(config["codex_sessions"]),
@@ -577,7 +578,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         fingerprint = _file_fingerprint(path)
         source_key = _source_key("codex-file:", path)
         metadata = codex_session_metadata(path)
-        project_id, should_ingest = route_source(
+        project_id, should_ingest, analysis_lane, attribution_status = route_source(
             source_key=source_key,
             surface="codex",
             session_id=str(metadata["session_id"] or path.stem),
@@ -598,8 +599,15 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         )
         batch: list[dict[str, Any]] = []
         for record in parse_codex_jsonl(path, start_offset=start_offset):
+            if (
+                analysis_lane == "profile_only"
+                and record["kind"] not in {"visible_message", "tool_metadata"}
+            ):
+                continue
             payload = dict(record)
             cursor = payload.pop("_cursor", record["source_ref"])
+            payload["analysis_lane"] = analysis_lane
+            payload["attribution_status"] = attribution_status
             batch.append(
                 {
                     "source_type": "codex",
@@ -657,7 +665,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         )
         session_id = antigravity_session_id(path)
         workspace = database_workspaces.get(session_id)
-        project_id, should_ingest = route_source(
+        project_id, should_ingest, analysis_lane, attribution_status = route_source(
             source_key=source_key,
             surface="antigravity",
             session_id=session_id,
@@ -678,8 +686,15 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
         for record in parse_antigravity_transcript(
             path, start_offset=start_offset, workspace=workspace
         ):
+            if (
+                analysis_lane == "profile_only"
+                and record["kind"] not in {"visible_message", "tool_metadata"}
+            ):
+                continue
             payload = dict(record)
             cursor = payload.pop("_cursor", record["source_ref"])
+            payload["analysis_lane"] = analysis_lane
+            payload["attribution_status"] = attribution_status
             batch.append(
                 {
                     "source_type": "antigravity",
@@ -710,7 +725,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
             related_project = store.resolved_session_source_project(
                 "antigravity", session_id
             )
-            project_id, should_ingest = route_source(
+            project_id, should_ingest, analysis_lane, _attribution_status = route_source(
                 source_key=source_key,
                 surface="antigravity",
                 session_id=session_id,
@@ -721,6 +736,12 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
                 ),
             )
             if not should_ingest:
+                continue
+            if analysis_lane == "profile_only":
+                store.mark_session_source_ingested(
+                    source_key, fingerprint=fingerprint
+                )
+                store.set_collection_receipt(source_key, fingerprint)
                 continue
             _, added = store.add_evidence(
                 source_type="antigravity",
@@ -740,7 +761,7 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
             path,
         )
         session_id = path.stem
-        project_id, should_ingest = route_source(
+        project_id, should_ingest, analysis_lane, attribution_status = route_source(
             source_key=source_key,
             surface="antigravity",
             session_id=session_id,
@@ -757,29 +778,32 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
             store.mark_session_source_ingested(source_key, fingerprint=fingerprint)
             store.set_collection_receipt(source_key, fingerprint)
             continue
-        if not should_ingest or not project_id:
+        if not should_ingest:
             continue
         checkpoint = store.checkpoint(source_key)
         with _database_read_snapshot(path, Path(config["runtime_root"])) as (
             database_path,
             immutable,
         ):
-            payload = inspect_antigravity_database(database_path, immutable=immutable)
-            _, added = store.add_evidence(
-                source_type="antigravity",
-                source_ref=(
-                    "antigravity-db-schema:"
-                    + hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:24]
-                ),
-                kind="database_inventory",
-                payload={
-                    "database": path.name,
-                    "schema": payload.get("tables", []),
-                    "error": payload.get("error"),
-                },
-                project_id=project_id,
-            )
-            counts["databases"] += int(added)
+            if analysis_lane == "full" and project_id:
+                payload = inspect_antigravity_database(
+                    database_path, immutable=immutable
+                )
+                _, added = store.add_evidence(
+                    source_type="antigravity",
+                    source_ref=(
+                        "antigravity-db-schema:"
+                        + hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:24]
+                    ),
+                    kind="database_inventory",
+                    payload={
+                        "database": path.name,
+                        "schema": payload.get("tables", []),
+                        "error": payload.get("error"),
+                    },
+                    project_id=project_id,
+                )
+                counts["databases"] += int(added)
             if path.stem not in transcript_session_ids:
                 start_idx = validated_antigravity_database_resume_index(
                     database_path,
@@ -790,8 +814,15 @@ def collect_sessions(store: StateStore, config: dict[str, Any]) -> dict[str, int
                 for record in parse_antigravity_database(
                     database_path, start_idx=start_idx, immutable=immutable
                 ):
+                    if (
+                        analysis_lane == "profile_only"
+                        and record["kind"] not in {"visible_message", "tool_metadata"}
+                    ):
+                        continue
                     record_payload = dict(record)
                     cursor = record_payload.pop("_cursor", record["source_ref"])
+                    record_payload["analysis_lane"] = analysis_lane
+                    record_payload["attribution_status"] = attribution_status
                     batch.append(
                         {
                             "source_type": "antigravity",

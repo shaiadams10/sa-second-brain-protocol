@@ -574,6 +574,7 @@ def _analyze_one_project_session_history(
         ),
         "observations": [],
         "pattern_signals": [],
+        "learning_signals": [],
         "project_updates": [
             {
                 "project_id": project_id,
@@ -732,15 +733,6 @@ def _synthesize(
         ]
     else:
         evidence = store.evidence(status="new")
-    evidence = [
-        item
-        for item in evidence
-        if not (
-            item["source_type"] == "session-digest"
-            and item["kind"] == "session_digest"
-            and not item.get("project_id")
-        )
-    ]
     pending_questions = (
         pending_question_context(store.observations("pending"))
         if kind == "weekly"
@@ -756,6 +748,7 @@ def _synthesize(
                     "summary": "- No new project or agent-session activity was available for this period; stewardship checks still ran.",
                     "observations": [],
                     "pattern_signals": [],
+                    "learning_signals": [],
                     "project_updates": [],
                     "session_summaries": [],
                     "skill_updates": [],
@@ -822,6 +815,7 @@ def _synthesize(
             for collection in (
                 output["observations"],
                 output.get("pattern_signals", []),
+                output.get("learning_signals", []),
                 output["project_updates"],
                 output["skill_updates"],
             ):
@@ -857,9 +851,13 @@ def _synthesize(
     project_updates: dict[str, dict[str, Any]] = {}
     skill_updates: dict[str, dict[str, Any]] = {}
     pattern_signals: dict[str, dict[str, Any]] = {}
+    learning_signals: list[dict[str, Any]] = []
     question_resolutions: dict[str, dict[str, Any]] = {}
     session_summaries: dict[str, dict[str, Any]] = {}
     for output in outputs:
+        learning_signals.extend(
+            dict(item) for item in output.get("learning_signals", [])
+        )
         for item in output.get("session_summaries", []):
             evidence_ref = str(item["evidence_ref"])
             session_summaries.setdefault(evidence_ref, dict(item))
@@ -922,6 +920,7 @@ def _synthesize(
         "summary": "\n\n".join(output["summary"] for output in outputs),
         "observations": [item for output in outputs for item in output["observations"]],
         "pattern_signals": list(pattern_signals.values()),
+        "learning_signals": learning_signals,
         "project_updates": list(project_updates.values()),
         "session_summaries": list(session_summaries.values()),
         "skill_updates": list(skill_updates.values()),
@@ -934,6 +933,7 @@ def _synthesize(
         for name in (
             "observations",
             "pattern_signals",
+            "learning_signals",
             "project_updates",
             "skill_updates",
             "voice_samples",

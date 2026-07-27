@@ -374,7 +374,7 @@ def activity_markdown(
     lines.append(
         f"- Agent sessions reviewed: {len(sessions)} total - "
         f"{len(attributed_sessions)} linked to {len(session_projects)} projects; "
-        f"{unattributed} not yet linked"
+        f"{unattributed} analyzed profile-only"
         + (f"; {source_detail}" if source_detail else "")
     )
     stats = pattern_stats or {}

@@ -1395,7 +1395,7 @@
           const row = make("a", "pattern"); row.href = pattern.url;
           const top = make("div", "pattern-top"); top.append(make("span", "pattern-name", pattern.label), make("span", "pattern-score", `${pattern.progress}%`));
           const track = make("div", "pattern-track"); const fill = make("div", "pattern-fill"); fill.style.width = `${pattern.progress}%`; track.append(fill);
-          const meta = make("div", "pattern-meta"); meta.append(make("span", "", `${pattern.sessions}/3 sessions`), make("span", "", `${pattern.dates}/2 dates`), make("span", "", `${pattern.projects}/2 projects`));
+          const meta = make("div", "pattern-meta"); meta.append(make("span", "", `${pattern.sessions}/3 sessions`), make("span", "", `${pattern.dates}/2 dates`), make("span", "", `${pattern.contexts ?? pattern.projects}/2 contexts`));
           row.append(top, track, meta); byId("pattern-list").append(row);
         });
       }

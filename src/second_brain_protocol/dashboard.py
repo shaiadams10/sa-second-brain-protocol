@@ -405,7 +405,7 @@ def _summary_visuals(
                 )
         elif normalized == "agent sessions reviewed":
             match = re.match(
-                r"(\d+)\s+total\s+-\s+(\d+)\s+linked\s+to\s+(\d+)\s+projects?;\s+(\d+)\s+not\s+yet\s+linked(?:;\s*(.*))?",
+                r"(\d+)\s+total\s+-\s+(\d+)\s+linked\s+to\s+(\d+)\s+projects?;\s+(\d+)\s+(?:not\s+yet\s+linked|analyzed\s+profile-only)(?:;\s*(.*))?",
                 detail,
                 re.IGNORECASE,
             )
@@ -434,16 +434,16 @@ def _summary_visuals(
             )
             groups.append(
                 {
-                    "title": "Session-to-project coverage",
+                    "title": "Session analysis coverage",
                     "icon": "🤖",
-                    "tone": "green" if unlinked == 0 else "yellow",
-                    "description": "How many reviewed agent sessions could be connected to a known project",
+                    "tone": "green",
+                    "description": "Reviewed sessions are either project-linked or safely restricted to person-level analysis",
                     "evidence": session_evidence,
                     "chips": [
                         {"label": "Reviewed sessions", "value": sessions, "evidence": session_evidence},
                         {"label": "Linked sessions", "value": linked, "evidence": session_evidence},
                         {"label": "Projects represented", "value": projects, "evidence": session_evidence},
-                        {"label": "Not yet linked", "value": unlinked},
+                        {"label": "Profile-only sessions", "value": unlinked},
                     ],
                 }
             )
@@ -1913,8 +1913,18 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
         sessions = int(item.get("session_count", 0))
         dates = int(item.get("date_count", 0))
         projects = int(item.get("project_count", 0))
+        contexts = int(
+            ((item.get("payload") or {}).get("context_count"))
+            or projects
+        )
         progress = round(
-            (min(sessions / 3, 1) + min(dates / 2, 1) + min(projects / 2, 1)) / 3 * 100
+            (
+                min(sessions / 3, 1)
+                + min(dates / 2, 1)
+                + min(contexts / 2, 1)
+            )
+            / 3
+            * 100
         )
         patterns.append(
             {
@@ -1925,6 +1935,7 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
                 "sessions": sessions,
                 "dates": dates,
                 "projects": projects,
+                "contexts": contexts,
                 "progress": progress,
                 "last_seen": item.get("last_seen"),
                 "url": obsidian_uri(vault, vault / "Memory" / "Patterns.md"),
@@ -2273,11 +2284,11 @@ def build_snapshot(
             else "Nothing waiting",
         },
         {
-            "label": "Session attribution",
-            "state": "attention" if session_coverage["unattributed"] else "good",
+            "label": "Session analysis lanes",
+            "state": "good" if session_coverage["total"] else "neutral",
             "detail": (
                 f"{session_coverage['attributed']} of {session_coverage['total']} sessions linked to projects; "
-                f"{session_coverage['unattributed']} still need context"
+                f"{session_coverage['unattributed']} safely analyzed profile-only"
                 if session_coverage["total"]
                 else "No session evidence collected yet"
             ),
@@ -2337,7 +2348,7 @@ def build_snapshot(
                 "value": total_sessions,
                 "detail": (
                     f"{session_coverage['attributed']} linked to projects, "
-                    f"{session_coverage['unattributed']} not yet linked"
+                    f"{session_coverage['unattributed']} profile-only"
                 ),
             },
             {

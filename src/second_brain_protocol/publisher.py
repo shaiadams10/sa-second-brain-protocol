@@ -234,20 +234,50 @@ def _write_stewardship_note(vault: Path, body: str) -> Path:
 
 def _learning_markdown(output: dict[str, Any]) -> str:
     lines = ["### What the brain learned", ""]
-    items: list[str] = []
+    learning_items: list[str] = []
+    person_items: list[str] = []
+    project_items: list[str] = []
+    capability_items: list[str] = []
+    pattern_items: list[str] = []
+    project_kinds = {"project_fact", "decision", "lesson"}
+    for signal in output.get("learning_signals", []):
+        claim = sanitize_text(str(signal.get("claim") or ""), max_chars=700).strip()
+        if claim:
+            signal_type = str(signal.get("signal_type") or "learning").replace(
+                "_", " "
+            )
+            learning_items.append(
+                f"- Learning - {signal.get('label', 'Topic')} ({signal_type}): {claim}"
+            )
     for observation in output.get("observations", []):
         label = str(observation.get("kind") or "insight").replace("_", " ").title()
         claim = sanitize_text(str(observation.get("claim") or ""), max_chars=700).strip()
         if claim:
-            items.append(f"- {label}: {claim}")
+            item = f"- {label}: {claim}"
+            if observation.get("kind") in project_kinds:
+                project_items.append(item)
+            else:
+                person_items.append(item)
     for skill in output.get("skill_updates", []):
         claim = sanitize_text(str(skill.get("claim") or ""), max_chars=700).strip()
         if claim:
-            items.append(f"- Skill · {skill.get('name', 'Capability')}: {claim}")
+            capability_items.append(
+                f"- Skill - {skill.get('name', 'Capability')}: {claim}"
+            )
     for pattern in output.get("pattern_signals", []):
         claim = sanitize_text(str(pattern.get("claim") or ""), max_chars=700).strip()
         if claim:
-            items.append(f"- Pattern · {pattern.get('label', 'Working pattern')}: {claim}")
+            pattern_items.append(
+                f"- Pattern - {pattern.get('label', 'Working pattern')}: {claim}"
+            )
+    # Keep person-level learning visible even on project-heavy days.
+    items = (
+        learning_items
+        + person_items
+        + pattern_items
+        + capability_items
+        + project_items
+    )
     if not items:
         items.append(
             "- No new durable personal, skill, voice, or work-pattern insight passed the evidence gates."
@@ -286,6 +316,122 @@ def _evidence_project_ids(store: StateStore, refs: list[str]) -> set[str]:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         projects.update(str(item) for item in payload.get("project_ids", []) if item)
     return projects
+
+
+def _evidence_context_keys(store: StateStore, refs: list[str]) -> set[str]:
+    contexts = {
+        f"project:{project_id}"
+        for project_id in _evidence_project_ids(store, refs)
+    }
+    for row in store.evidence_by_ids(refs):
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if (
+            row.get("source_type") == "session-digest"
+            and row.get("kind") == "session_digest"
+            and not row.get("project_id")
+            and not payload.get("project_ids")
+            and payload.get("session_id")
+        ):
+            context_hash = canonical_hash(
+                {
+                    "source": payload.get("source"),
+                    "session_id": payload.get("session_id"),
+                }
+            )[:16]
+            contexts.add(f"profile:{context_hash}")
+    return contexts
+
+
+def _profile_only_session_refs(store: StateStore, refs: list[str]) -> set[str]:
+    profile_only: set[str] = set()
+    for row in store.evidence_by_ids(refs):
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if (
+            row.get("source_type") == "session-digest"
+            and row.get("kind") == "session_digest"
+            and (
+                payload.get("analysis_lane") == "profile_only"
+                or (
+                    not row.get("project_id")
+                    and not payload.get("project_ids")
+                )
+            )
+        ):
+            profile_only.add(str(row["id"]))
+    return profile_only
+
+
+def _validate_evidence_lane_isolation(
+    store: StateStore,
+    output: dict[str, Any],
+    *,
+    evidence_ids: list[str],
+) -> None:
+    """Prevent unattributed session evidence from leaking into project knowledge."""
+
+    allowed_ids = set(evidence_ids)
+
+    def refs(item: dict[str, Any]) -> list[str]:
+        return [str(value) for value in item.get("evidence_refs", [])]
+
+    for item in output.get("project_updates", []):
+        item_refs = refs(item)
+        if _profile_only_session_refs(store, item_refs):
+            raise ValueError(
+                "Profile-only session evidence cannot support a project update"
+            )
+
+    for item in output.get("session_summaries", []):
+        evidence_ref = str(item.get("evidence_ref") or "")
+        if evidence_ref in allowed_ids and _profile_only_session_refs(
+            store, [evidence_ref]
+        ):
+            raise ValueError(
+                "Profile-only sessions cannot be emitted as project session summaries"
+            )
+
+    for item in output.get("skill_updates", []):
+        if _profile_only_session_refs(store, refs(item)):
+            raise ValueError(
+                "Profile-only session evidence must use learning signals, not skill updates"
+            )
+
+    for item in output.get("observations", []):
+        item_refs = refs(item)
+        if not _profile_only_session_refs(store, item_refs):
+            continue
+        if item.get("kind") in {"project_fact", "decision", "lesson"}:
+            raise ValueError(
+                "Profile-only session evidence cannot support project facts, decisions, or lessons"
+            )
+        if item.get("scope") == "project":
+            raise ValueError(
+                "Profile-only session evidence cannot support project-scoped observations"
+            )
+
+    for item in output.get("pattern_signals", []):
+        if (
+            _profile_only_session_refs(store, refs(item))
+            and item.get("scope") == "project"
+        ):
+            raise ValueError(
+                "Profile-only session patterns must use context or global scope"
+            )
+
+    for item in output.get("learning_signals", []):
+        if (
+            item.get("signal_type") == "validated_outcome"
+            and _profile_only_session_refs(store, refs(item))
+        ):
+            raise ValueError(
+                "A validated learning outcome requires attributed project evidence"
+            )
+
+    for item in output.get("question_resolutions", []):
+        if _profile_only_session_refs(store, refs(item)):
+            raise ValueError(
+                "Profile-only session evidence cannot resolve project questions"
+            )
 
 
 def _promotion_status(
@@ -340,13 +486,16 @@ def _promotion_status(
     ):
         return "promoted", "authoritative or corroborated project fact"
     if pattern_kind:
+        context_count = len(
+            _evidence_context_keys(store, observation["evidence_refs"])
+        )
         if (
             observation.get("explicit") and scope == "global" and explicit_user_evidence
-        ) or (session_count >= 3 and date_count >= 2 and project_count >= 2):
-            return "promoted", "stable multi-session pattern"
+        ) or (session_count >= 3 and date_count >= 2 and context_count >= 2):
+            return "promoted", "stable multi-session, multi-context pattern"
         return (
             "pending",
-            "project-scoped or insufficient cross-session pattern evidence",
+            "contextual or insufficient cross-session pattern evidence",
         )
     if kind in {"experience", "education", "military"}:
         trusted = any(
@@ -479,11 +628,16 @@ def _publish_pattern_signals(
         scope = (
             "global"
             if "global" in {existing_scope, signal_scope}
-            else (signal_scope or existing_scope or "project")
+            else (
+                "context"
+                if "context" in {existing_scope, signal_scope}
+                else (signal_scope or existing_scope or "project")
+            )
         )
         source_count, project_count, date_count, session_count = _evidence_dimensions(
             store, merged_refs
         )
+        context_count = len(_evidence_context_keys(store, merged_refs))
         status = "tracking"
         observation_id = (existing or {}).get("observation_id")
         rejection_reason = None
@@ -510,7 +664,7 @@ def _publish_pattern_signals(
             observation_id = clarification_id
             stats["pending"] += 1
         elif (explicit and scope == "global") or (
-            session_count >= 3 and date_count >= 2 and project_count >= 2
+            session_count >= 3 and date_count >= 2 and context_count >= 2
         ):
             observation = {
                 "kind": PATTERN_KIND_TO_OBSERVATION[kind],
@@ -567,6 +721,7 @@ def _publish_pattern_signals(
             "scope": scope,
             "source_count": source_count,
             "project_count": project_count,
+            "context_count": context_count,
             "date_count": date_count,
             "session_count": session_count,
             "status": status,
@@ -585,6 +740,7 @@ def _publish_pattern_signals(
             "session_count": record["session_count"],
             "date_count": record["date_count"],
             "project_count": record["project_count"],
+            "context_count": record["context_count"],
             "status": record["status"],
             "evidence_refs": merged_refs,
         }
@@ -599,6 +755,273 @@ def _publish_pattern_signals(
         )
         store.mark_evidence([pattern_evidence_id], "processed")
     return stats
+
+
+LEARNING_PROGRESS_TYPES = {
+    "demonstrated_understanding",
+    "applied_learning",
+    "architectural_judgment",
+    "operational_capability",
+    "validated_outcome",
+}
+
+LEARNING_STATE_LABELS = {
+    "exploring": "Exploring",
+    "developing": "Developing understanding",
+    "demonstrated": "Understanding demonstrated",
+    "applied": "Applied in practice",
+    "verified": "Verified through a validated outcome",
+    "mixed": "Mixed evidence / active learning edge",
+}
+
+
+def _learning_event_record(
+    store: StateStore, signal: dict[str, Any]
+) -> dict[str, Any]:
+    refs = [str(value) for value in signal["evidence_refs"]]
+    rows = store.evidence_by_ids(refs)
+    project_ids = sorted(_evidence_project_ids(store, refs))
+    context_keys = sorted(_evidence_context_keys(store, refs))
+    occurred_at = max(
+        (
+            str(row.get("occurred_at") or row.get("created_at") or utc_now())
+            for row in rows
+        ),
+        default=utc_now(),
+    )
+    return {
+        **signal,
+        "evidence_refs": refs,
+        "project_ids": project_ids,
+        "context_keys": context_keys,
+        "occurred_at": occurred_at,
+    }
+
+
+def _rebuild_learning_topic(store: StateStore, topic_key: str) -> dict[str, Any]:
+    events = store.learning_signal_events(topic_key)
+    if not events:
+        raise RuntimeError(f"Learning topic has no events: {topic_key}")
+    refs = sorted(
+        {
+            evidence_ref
+            for event in events
+            for evidence_ref in event["evidence_refs"]
+        }
+    )[:200]
+    _source_count, project_count, date_count, session_count = _evidence_dimensions(
+        store, refs
+    )
+    context_count = len(_evidence_context_keys(store, refs))
+    counts = Counter(str(event["signal_type"]) for event in events)
+    ordered = sorted(events, key=lambda item: (item["occurred_at"], item["id"]))
+    positive = [
+        event
+        for event in ordered
+        if event["signal_type"] in LEARNING_PROGRESS_TYPES
+    ]
+    edges = [
+        event for event in ordered if event["signal_type"] == "learning_edge"
+    ]
+    counterevidence = [
+        event for event in ordered if event["signal_type"] == "counterevidence"
+    ]
+    latest_edge = edges[-1] if edges else None
+    progress_after_edge = [
+        event
+        for event in positive
+        if latest_edge is None or event["occurred_at"] > latest_edge["occurred_at"]
+    ]
+    latest_progress = positive[-1] if positive else None
+    open_edge = bool(latest_edge and not progress_after_edge)
+
+    applicable = progress_after_edge if latest_edge else positive
+    applicable_types = {str(event["signal_type"]) for event in applicable}
+    if "validated_outcome" in applicable_types:
+        current_state = "verified"
+    elif applicable_types & {"applied_learning", "operational_capability"}:
+        current_state = "applied"
+    elif applicable_types & {
+        "demonstrated_understanding",
+        "architectural_judgment",
+    }:
+        current_state = "demonstrated"
+    elif open_edge and positive:
+        current_state = "mixed"
+    elif open_edge:
+        current_state = "exploring"
+    else:
+        current_state = "developing"
+
+    latest_counter = counterevidence[-1] if counterevidence else None
+    if (
+        latest_counter
+        and latest_progress
+        and latest_counter["occurred_at"] > latest_progress["occurred_at"]
+    ):
+        current_state = "mixed"
+
+    assessment_event = (
+        latest_edge
+        if open_edge and latest_edge
+        else (latest_progress or ordered[-1])
+    )
+    record = {
+        "topic_key": topic_key,
+        "label": str(ordered[-1]["label"]),
+        "current_state": current_state,
+        "assessment": str(assessment_event["claim"]),
+        "evidence_refs": refs,
+        "confidence": max(float(event["confidence"]) for event in events),
+        "session_count": session_count,
+        "date_count": date_count,
+        "project_count": project_count,
+        "context_count": context_count,
+        "signal_counts": dict(sorted(counts.items())),
+        "open_learning_edge": open_edge,
+        "first_seen": ordered[0]["occurred_at"],
+        "last_seen": ordered[-1]["occurred_at"],
+        "last_progress_at": (
+            latest_progress["occurred_at"] if latest_progress else None
+        ),
+    }
+    store.upsert_learning_topic(record)
+    return record
+
+
+def _write_learning_tracker(vault: Path, store: StateStore) -> Path:
+    path = vault / "Memory" / "Learning.md"
+    _ensure_generated_note(
+        path,
+        note_id="learning",
+        note_type="learning-tracker",
+        title="Learning and demonstrated understanding",
+        section="learning",
+        tags="memory, learning, second-brain",
+    )
+    topics = store.learning_topics()
+    if not topics:
+        body = "Learning signals will appear here as sessions are evaluated over time."
+    else:
+        sections: list[str] = []
+        for topic in topics:
+            profile_contexts = max(
+                0, int(topic["context_count"]) - int(topic["project_count"])
+            )
+            counts = ", ".join(
+                f"{name.replace('_', ' ')}: {count}"
+                for name, count in topic["signal_counts"].items()
+            )
+            breadth = (
+                f"{topic['session_count']} sessions, {topic['date_count']} dates, "
+                f"{topic['project_count']} known projects"
+            )
+            if profile_contexts:
+                breadth += f", {profile_contexts} profile-only contexts"
+            sections.extend(
+                [
+                    f"## {sanitize_text(str(topic['label']), max_chars=160)}",
+                    "",
+                    f"- **Current state:** {LEARNING_STATE_LABELS.get(str(topic['current_state']), str(topic['current_state']).replace('_', ' ').title())}",
+                    f"- **Current assessment:** {sanitize_text(str(topic['assessment']), max_chars=1200)}",
+                    f"- **Evidence breadth:** {breadth}",
+                    f"- **Signal history:** {counts or 'No classified signals'}",
+                    f"- **Observed:** {str(topic['first_seen'])[:10]} to {str(topic['last_seen'])[:10]}",
+                ]
+            )
+            if topic["open_learning_edge"]:
+                sections.append(
+                    "- **Open edge:** Current evidence still shows an unresolved learning question; this is not treated as a permanent limitation."
+                )
+            sections.append("")
+        body = "\n".join(sections).rstrip()
+    update_generated_file(path, "learning", body)
+    all_refs = sorted(
+        {
+            evidence_ref
+            for topic in topics
+            for evidence_ref in topic["evidence_refs"]
+        }
+    )
+    if all_refs:
+        _update_frontmatter(path, evidence_refs=all_refs, confidence=0.8)
+    return path
+
+
+def _publish_learning_signals(
+    *,
+    vault: Path,
+    store: StateStore,
+    signals: list[dict[str, Any]],
+    evidence_ids: list[str],
+) -> dict[str, Any]:
+    if not signals:
+        path = vault / "Memory" / "Learning.md"
+        return {
+            "events_added": 0,
+            "topics_updated": 0,
+            "profile_only_events": 0,
+            "path": str(path) if path.exists() else None,
+        }
+    allowed_ids = set(evidence_ids)
+    updated_topics: set[str] = set()
+    events_added = 0
+    profile_only_events = 0
+    for signal in signals:
+        unknown_refs = set(signal["evidence_refs"]) - allowed_ids
+        if unknown_refs:
+            raise ValueError(
+                f"Model invented learning evidence references: {sorted(unknown_refs)}"
+            )
+        supporting_rows = store.evidence_by_ids(signal["evidence_refs"])
+        if not any(
+            row.get("kind") == "session_digest"
+            or row.get("source_type") == "interview"
+            for row in supporting_rows
+        ):
+            raise ValueError(
+                "Learning signals require new session or explicit interview evidence"
+            )
+        event = _learning_event_record(store, signal)
+        _event_id, added = store.add_learning_signal_event(event)
+        events_added += int(added)
+        profile_only_events += int(
+            bool(_profile_only_session_refs(store, event["evidence_refs"]))
+        )
+        updated_topics.add(str(signal["topic_key"]))
+    for topic_key in sorted(updated_topics):
+        topic = _rebuild_learning_topic(store, topic_key)
+        registry_payload = {
+            "topic_key": topic["topic_key"],
+            "label": topic["label"],
+            "current_state": topic["current_state"],
+            "assessment": topic["assessment"],
+            "session_count": topic["session_count"],
+            "date_count": topic["date_count"],
+            "project_count": topic["project_count"],
+            "context_count": topic["context_count"],
+            "signal_counts": topic["signal_counts"],
+            "open_learning_edge": topic["open_learning_edge"],
+            "first_seen": topic["first_seen"],
+            "last_seen": topic["last_seen"],
+        }
+        learning_evidence_id, _added = store.add_evidence(
+            source_type="learning-registry",
+            source_ref=(
+                f"learning-topic:{topic_key}:"
+                f"{canonical_hash(registry_payload)[:20]}"
+            ),
+            kind="learning_topic",
+            payload=registry_payload,
+        )
+        store.mark_evidence([learning_evidence_id], "processed")
+    path = _write_learning_tracker(vault, store)
+    return {
+        "events_added": events_added,
+        "topics_updated": len(updated_topics),
+        "profile_only_events": profile_only_events,
+        "path": str(path),
+    }
 
 
 def _upsert_generated_profile_bullet(path: Path, label: str, answer: str) -> None:
@@ -1214,6 +1637,11 @@ def publish_model_output(
     question_ids: list[str] | None = None,
     summary_period: str | None = None,
 ) -> dict[str, Any]:
+    _validate_evidence_lane_isolation(
+        store,
+        output,
+        evidence_ids=evidence_ids,
+    )
     promoted = 0
     pending = 0
     projects_written = 0
@@ -1225,6 +1653,12 @@ def publish_model_output(
         run_kind=run_kind,
         evidence_ids=evidence_ids,
         question_ids=question_ids or [],
+    )
+    learning_stats = _publish_learning_signals(
+        vault=vault,
+        store=store,
+        signals=output.get("learning_signals", []),
+        evidence_ids=evidence_ids,
     )
     pattern_stats = _publish_pattern_signals(
         vault=vault,
@@ -1396,6 +1830,11 @@ def publish_model_output(
             # Collection containers, duplicate identities, and empty folders
             # are scanner inventory concepts, not project dossiers.
             continue
+        update_projects = _evidence_project_ids(store, update["evidence_refs"])
+        if update_projects != {str(update["project_id"])}:
+            raise ValueError(
+                "Project updates must cite evidence attributed only to their project"
+            )
         project = known_projects[update["project_id"]]
         canonical_name = str(project.get("name") or update["name"])
         path = vault / "Projects" / f"{catalog_note_paths[update['project_id']]}.md"
@@ -1484,6 +1923,10 @@ def publish_model_output(
         "patterns_tracking": pattern_stats["tracking"],
         "patterns_promoted": pattern_stats["promoted"],
         "patterns_pending": pattern_stats["pending"],
+        "learning_events_added": learning_stats["events_added"],
+        "learning_topics_updated": learning_stats["topics_updated"],
+        "learning_profile_only_events": learning_stats["profile_only_events"],
+        "learning_path": learning_stats["path"],
         "questions_resolved": questions_resolved,
         "synthesis_path": str(synthesis_path),
         "journal_index_path": str(journal_index_path) if journal_index_path else None,

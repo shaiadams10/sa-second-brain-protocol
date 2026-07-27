@@ -123,6 +123,7 @@ def assert_usable_output(result: dict[str, Any], *, schema_name: str) -> None:
         collections = (
             result.get("observations", []),
             result.get("pattern_signals", []),
+            result.get("learning_signals", []),
             result.get("project_updates", []),
             result.get("skill_updates", []),
             result.get("voice_samples", []),
@@ -153,6 +154,7 @@ def assert_known_evidence_references(
     for collection_name in (
         "observations",
         "pattern_signals",
+        "learning_signals",
         "project_updates",
         "skill_updates",
         "review_items",

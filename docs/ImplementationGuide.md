@@ -125,6 +125,8 @@ Confirm and Remove also update a bounded implicit feedback profile. No reason pr
 
 The deck opens on **About the person**, not on a mixed chronological feed. Layer tabs separate personal identity, professional evidence, operating preferences, and project knowledge. Kind-based deterministic classification reorganizes existing observations immediately; daily and weekly prompts maintain the same boundary for future observations. Narrow technical instructions remain useful operating or project context without being presented as personality.
 
+`Memory/Learning.md` is the canonical longitudinal learning view. It is separate from stable identity and lists each tracked topic's current state, assessment, signal history, and breadth across sessions, dates, known projects, and profile-only contexts. Treat an open learning edge as temporary evidence, not a lasting limitation.
+
 Install the optional Windows launcher once through the dashboard install action. It deterministically generates a local `.ico`, creates Desktop and current-user Start-menu shortcuts, and points both at the root BAT. The Start-menu entry can then be right-clicked and pinned normally. The BAT uses ASCII-only source so Windows command-shell code pages cannot reinterpret decorative characters as commands. A vault may copy `templates/entrypoints/start-dashboard.bat` to its root and personalize the banner. Normal daily use is then a shortcut or BAT file, not a remembered terminal command.
 
 The launcher is deliberately on-demand; this protocol does not add a Windows-logon startup task. It first checks the loopback health endpoint. If the server is already running, it opens the browser immediately and exits. Otherwise the dashboard command reuses the existing hardened runtime and avoids repeating isolated-account configuration and Windows ACL setup before serving.
@@ -187,7 +189,7 @@ uv run --locked sb refresh-project "Project Name"
 uv run --locked sb health
 ```
 
-Keep public-facing claims under review. Let repeated work-style and voice observations accumulate across projects and dates before treating them as stable.
+Keep public-facing claims under review. Let repeated work-style and voice observations accumulate across independent contexts and dates before treating them as stable. Unmatched or ambiguous sessions may contribute only through the profile-only lane; publication must reject any attempt to turn them into project knowledge. Let topic-level learning events accumulate and evolve rather than converting a single question into a knowledge-gap claim.
 
 ## Recovery
 
