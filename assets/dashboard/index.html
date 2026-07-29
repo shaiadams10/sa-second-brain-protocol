@@ -407,6 +407,8 @@
     .summary-item-card:hover { transform: translateY(-2px); border-color: var(--purple); background: #fffbfd; }
     .summary-item-label { margin-bottom: 5px; color: var(--purple-deep); font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; }
     .summary-item-detail { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .historical-recovery-note { display: grid; gap: 4px; margin: 9px 0 11px; padding: 12px 14px; border: 1px dashed #8f8497; background: rgba(216, 208, 242, 0.28); color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .historical-recovery-note strong { color: var(--purple-deep); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
     .session-review-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
     .session-review-card { position: relative; min-width: 0; padding: 12px 13px 13px; border: 1px solid #c8c0cb; background: white; transition: transform var(--motion-fast) var(--ease-smooth), border-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth); }
     .session-review-card:hover { transform: translateY(-3px); border-color: var(--purple-deep); box-shadow: 3px 4px 0 var(--purple-soft); }
@@ -431,25 +433,24 @@
     .visual-group-head { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .visual-description { margin: 6px 0 10px; color: var(--muted); font-size: 12px; }
     .visual-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .visual-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: inherit; font-family: var(--mono); font-size: 9px; font-weight: 800; text-decoration: none; }
+    .visual-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: inherit; font-family: var(--mono); font-size: 9px; font-weight: 800; text-decoration: none; transition: transform var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), border-color var(--motion-fast) var(--ease-smooth); }
+    button.visual-chip, a.visual-chip { cursor: pointer; }
     a.visual-chip:hover, a.visual-chip:focus-visible, button.visual-chip:hover, button.visual-chip:focus-visible { transform: translate(-1px, -1px); background: var(--purple-soft); box-shadow: 2px 2px 0 var(--ink); outline: none; }
     .visual-chip-value { display: grid; place-items: center; min-width: 19px; height: 19px; padding: 0 4px; background: var(--purple-deep); color: white; font-size: 9px; }
     .summary-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
 
     .evidence-surface { position: relative; }
-    .evidence-affordance { position: absolute; top: 7px; right: 7px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: var(--purple-deep); cursor: help; font-family: var(--mono); font-size: 8px; font-weight: 950; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; box-shadow: 1px 1px 0 var(--ink); }
+    .evidence-affordance { position: absolute; top: 7px; right: 7px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border: 1px solid var(--ink); appearance: none; background: var(--paper-bright); color: var(--purple-deep); cursor: pointer; font-family: var(--mono); font-size: 8px; font-weight: 950; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; box-shadow: 1px 1px 0 var(--ink); transition: transform var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth), border-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth); }
     .evidence-affordance::before { content: ""; width: 6px; height: 6px; background: var(--pink); border-radius: 50%; }
     .evidence-affordance:hover, .evidence-affordance:focus-visible { transform: translate(-1px, -1px); border-color: var(--pink); background: var(--pink-soft); box-shadow: 2px 2px 0 var(--ink); outline: none; }
     .evidence-inline { position: relative; display: inline-flex; }
     .evidence-inline-link { cursor: pointer; }
     .evidence-inline-link:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
-    .evidence-popover { position: fixed; top: 0; left: 0; z-index: 80; display: none; width: min(390px, calc(100vw - 48px)); padding: 11px; border: 2px solid var(--ink); background: var(--paper-bright); color: var(--ink); box-shadow: 6px 6px 0 var(--purple-deep); cursor: default; }
-    .evidence-surface.evidence-transient > .evidence-popover,
-    .evidence-affordance:focus-visible ~ .evidence-popover,
-    .evidence-inline:hover > .evidence-popover,
-    .evidence-inline:focus-within > .evidence-popover,
-    .evidence-popover:focus-within,
-    .evidence-surface.evidence-pinned > .evidence-popover { display: grid; gap: 7px; }
+    .evidence-popover { position: fixed; top: 0; left: 0; z-index: 80; display: grid; visibility: hidden; width: min(390px, calc(100vw - 24px)); max-height: calc(100vh - 24px); gap: 7px; padding: 11px; border: 2px solid var(--ink); background: var(--paper-bright); color: var(--ink); box-shadow: 6px 6px 0 var(--purple-deep); cursor: default; opacity: 0; pointer-events: none; transform: translateY(8px) scale(0.985); transform-origin: top left; transition: visibility 0s linear var(--motion-fast), opacity 160ms var(--ease-smooth), transform var(--motion-fast) var(--ease-smooth); }
+    .evidence-popover[data-placement="top"] { transform: translateY(-8px) scale(0.985); transform-origin: bottom left; }
+    .evidence-popover[data-alignment="right"] { transform-origin: top right; }
+    .evidence-popover[data-placement="top"][data-alignment="right"] { transform-origin: bottom right; }
+    .evidence-popover.evidence-open { visibility: visible; opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); transition-delay: 0s; }
     .evidence-popover-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1.5px dashed #a49da7; }
     .evidence-popover-title { font-family: var(--mono); font-size: 10px; font-weight: 950; text-transform: uppercase; }
     .evidence-popover-count { color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; }
@@ -951,6 +952,25 @@
       const setLink = (id, value) => { const node = byId(id); if (node && value) node.href = value; };
       const make = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
       let evidencePopoverId = 0;
+      let evidencePositionFrame = 0;
+      const repositionOpenEvidence = () => {
+        evidencePositionFrame = 0;
+        document.querySelectorAll(".evidence-popover.evidence-open").forEach((popover) => {
+          if (typeof popover._alignEvidence === "function") popover._alignEvidence();
+        });
+      };
+      const scheduleEvidencePosition = () => {
+        if (!evidencePositionFrame) evidencePositionFrame = requestAnimationFrame(repositionOpenEvidence);
+      };
+      window.addEventListener("resize", scheduleEvidencePosition, { passive: true });
+      window.addEventListener("scroll", scheduleEvidencePosition, { passive: true, capture: true });
+      const removeEvidencePopoversWithin = (container) => {
+        if (!container) return;
+        container.querySelectorAll("[data-evidence-popover]").forEach((owner) => {
+          const popover = byId(owner.dataset.evidencePopover);
+          if (popover) popover.remove();
+        });
+      };
       const attachEvidence = (node, evidence, label = "Evidence", exactTrigger = null) => {
         const rows = Array.isArray(evidence) ? evidence.filter((item) => item && item.label) : [];
         if (!node || !rows.length) return node;
@@ -997,63 +1017,85 @@
         });
         popover.append(head, list);
         if (!exactTrigger) node.append(trigger);
-        node.append(popover);
+        node.dataset.evidencePopover = popoverId;
+        document.body.append(popover);
         const alignPopover = () => {
+          if (!trigger.isConnected || !popover.isConnected) return;
           const bounds = trigger.getBoundingClientRect();
-          const popoverWidth = Math.min(390, window.innerWidth - 48);
-          const priorDisplay = popover.style.display;
-          const priorVisibility = popover.style.visibility;
+          const margin = 12;
+          const gap = 10;
+          const popoverWidth = Math.min(390, window.innerWidth - (margin * 2));
           popover.style.width = `${popoverWidth}px`;
-          popover.style.display = "grid";
-          popover.style.visibility = "hidden";
           const popoverHeight = popover.getBoundingClientRect().height;
-          const alignRight = bounds.left + 8 + popoverWidth > window.innerWidth - 16;
-          let left = alignRight ? bounds.right - popoverWidth - 8 : bounds.left + 8;
-          left = Math.max(16, Math.min(left, window.innerWidth - popoverWidth - 16));
-          let top = bounds.bottom + 8;
-          if (top + popoverHeight > window.innerHeight - 16 && bounds.top - popoverHeight - 8 >= 16) {
-            top = bounds.top - popoverHeight - 8;
-          }
-          top = Math.max(16, Math.min(top, window.innerHeight - popoverHeight - 16));
+          const alignRight = bounds.left + popoverWidth > window.innerWidth - margin;
+          let left = alignRight ? bounds.right - popoverWidth : bounds.left;
+          left = Math.max(margin, Math.min(left, window.innerWidth - popoverWidth - margin));
+          const roomBelow = window.innerHeight - bounds.bottom - margin;
+          const roomAbove = bounds.top - margin;
+          const placement = roomBelow >= popoverHeight + gap || roomBelow >= roomAbove ? "bottom" : "top";
+          let top = placement === "bottom" ? bounds.bottom + gap : bounds.top - popoverHeight - gap;
+          top = Math.max(margin, Math.min(top, window.innerHeight - popoverHeight - margin));
           popover.style.left = `${left}px`;
           popover.style.top = `${top}px`;
-          popover.style.display = priorDisplay;
-          popover.style.visibility = priorVisibility;
-          node.classList.toggle("evidence-align-right", alignRight);
+          popover.dataset.placement = placement;
+          popover.dataset.alignment = alignRight ? "right" : "left";
+        };
+        popover._alignEvidence = alignPopover;
+        const syncOpenState = () => {
+          const open = node.classList.contains("evidence-transient")
+            || node.classList.contains("evidence-pinned")
+            || node.contains(document.activeElement)
+            || popover.contains(document.activeElement);
+          if (open) alignPopover();
+          popover.classList.toggle("evidence-open", open);
+          popover.setAttribute("aria-hidden", String(!open));
+        };
+        const setTransient = (transient) => {
+          node.classList.toggle("evidence-transient", transient);
+          syncOpenState();
         };
         const setPinned = (pinned) => {
           node.classList.toggle("evidence-pinned", pinned);
           if (!directLink) trigger.setAttribute("aria-expanded", String(pinned));
+          syncOpenState();
+        };
+        node._closeEvidence = () => {
+          setPinned(false);
+          setTransient(false);
         };
         const closeOtherPopovers = () => {
           document.querySelectorAll(".evidence-pinned").forEach((item) => {
-            if (item !== node) {
-              item.classList.remove("evidence-pinned");
-              item.querySelector(".evidence-affordance")?.setAttribute("aria-expanded", "false");
-            }
+            if (item !== node && typeof item._closeEvidence === "function") item._closeEvidence();
           });
         };
         let hoverCloseTimer;
+        const cancelHoverClose = () => clearTimeout(hoverCloseTimer);
+        const scheduleHoverClose = () => {
+          hoverCloseTimer = setTimeout(() => {
+            if (!node.classList.contains("evidence-pinned")) setTransient(false);
+          }, 160);
+        };
+        const releaseFocusTransient = () => {
+          setTimeout(() => {
+            if (
+              !node.classList.contains("evidence-pinned")
+              && !node.contains(document.activeElement)
+              && !popover.contains(document.activeElement)
+            ) setTransient(false);
+          }, 0);
+        };
         trigger.addEventListener("pointerenter", () => {
+          cancelHoverClose();
+          setTransient(true);
           alignPopover();
-          if (!exactTrigger) {
-            clearTimeout(hoverCloseTimer);
-            node.classList.add("evidence-transient");
-          }
         });
-        trigger.addEventListener("focusin", alignPopover);
-        if (!exactTrigger) {
-          trigger.addEventListener("pointerleave", () => {
-            hoverCloseTimer = setTimeout(() => node.classList.remove("evidence-transient"), 120);
-          });
-          popover.addEventListener("pointerenter", () => {
-            clearTimeout(hoverCloseTimer);
-            node.classList.add("evidence-transient");
-          });
-          popover.addEventListener("pointerleave", () => {
-            if (!node.classList.contains("evidence-pinned")) node.classList.remove("evidence-transient");
-          });
-        }
+        trigger.addEventListener("pointerleave", scheduleHoverClose);
+        trigger.addEventListener("focusin", () => { setTransient(true); alignPopover(); });
+        trigger.addEventListener("focusout", releaseFocusTransient);
+        popover.addEventListener("pointerenter", () => { cancelHoverClose(); setTransient(true); });
+        popover.addEventListener("pointerleave", scheduleHoverClose);
+        popover.addEventListener("focusin", () => { cancelHoverClose(); setTransient(true); });
+        popover.addEventListener("focusout", releaseFocusTransient);
         if (!directLink) trigger.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -1064,10 +1106,11 @@
         node.addEventListener("keydown", (event) => {
           if (event.key === "Escape") {
             setPinned(false);
-            node.classList.remove("evidence-transient");
+            setTransient(false);
             if (node.contains(document.activeElement)) document.activeElement.blur();
           }
         });
+        syncOpenState();
         return node;
       };
       const wrapEvidenceTrigger = (link, evidence, label) => {
@@ -1077,10 +1120,8 @@
       };
       document.addEventListener("click", (event) => {
         document.querySelectorAll(".evidence-pinned").forEach((node) => {
-          if (!node.contains(event.target)) {
-            node.classList.remove("evidence-pinned");
-            node.querySelector(".evidence-affordance")?.setAttribute("aria-expanded", "false");
-          }
+          const popover = byId(node.dataset.evidencePopover);
+          if (!node.contains(event.target) && !popover?.contains(event.target) && typeof node._closeEvidence === "function") node._closeEvidence();
         });
         document.querySelectorAll(".evidence-inline").forEach((node) => {
           if (!node.contains(event.target) && node.contains(document.activeElement)) document.activeElement.blur();
@@ -1282,6 +1323,7 @@
       let summaryKind = "daily";
       const renderSummaryLog = () => {
         const log = byId("summary-log");
+        removeEvidencePopoversWithin(log);
         log.replaceChildren();
         const entries = summaries[summaryKind] || [];
         if (!entries.length) {
@@ -1407,6 +1449,21 @@
             title.append(make("span", "summary-section-icon", sectionIcon(section.title)), make("span", "", section.title));
             attachEvidence(title, section.evidence, section.title);
             block.append(title);
+            const timeline = section.timeline_context || {};
+            if (timeline.historical_count) {
+              const note = make("div", "historical-recovery-note");
+              const start = timeline.earliest ? formatDate(`${timeline.earliest}T12:00:00`, { month: "short", day: "numeric", year: "numeric" }) : "an earlier date";
+              const end = timeline.latest ? formatDate(`${timeline.latest}T12:00:00`, { month: "short", day: "numeric", year: "numeric" }) : start;
+              note.append(
+                make("strong", "", timeline.all_historical ? "Historical recovery — not new work" : "Includes historical recovery"),
+                make("span", "", timeline.all_historical
+                  ? `This section came entirely from delayed evidence dated ${start}${end === start ? "" : ` to ${end}`}. It stays attached to those original work dates and is not treated as ${entry.period} learning. Old learning cards are hidden here and return only when newer evidence exists.`
+                  : timeline.learning_cards_hidden
+                    ? `${tokenNumber.format(timeline.historical_count)} delayed evidence item${timeline.historical_count === 1 ? "" : "s"} retain their original dates. To prevent older discoveries from looking new, mixed-date learning cards stay hidden here; verified same-day insights appear in Today.`
+                    : `${tokenNumber.format(timeline.historical_count)} delayed evidence item${timeline.historical_count === 1 ? "" : "s"} retain their original dates; only same-day evidence contributes to Today.`)
+              );
+              block.append(note);
+            }
             section.paragraphs.forEach((paragraph) => block.append(make("p", "", paragraph)));
             const isActivity = /activity|ledger|moved|work/i.test(section.title);
             if (isActivity && visuals.groups.length) {

@@ -10,6 +10,7 @@ from second_brain_protocol.dashboard import (
     _question_deck,
     _recent_activity,
     _summary_cost,
+    _summary_timeline_context,
     _summary_visuals,
     build_snapshot,
     default_knowledge_layer,
@@ -154,6 +155,74 @@ def test_learning_snapshot_separates_historical_recovery_from_same_day(
     assert snapshot["historical_count"] == 1
     assert snapshot["historical_dates"] == ["2026-04-01"]
     assert snapshot["evidence_ids"] == [current_id]
+
+
+def test_daily_summary_hides_stale_learning_cards_for_any_historical_backfill() -> None:
+    sections = [
+        {
+            "title": "Quick activity recap",
+            "items": ["the user — learning: old project signal."],
+            "paragraphs": [],
+        },
+        {
+            "title": "What the brain learned",
+            "items": [
+                "Learning - Any old project: This must stay on its original date."
+            ],
+            "paragraphs": [],
+        },
+    ]
+    context = _summary_timeline_context(
+        sections,
+        [
+            {
+                "occurred_at": "2026-05-12T10:00:00Z",
+                "payload": {"started_at": "2026-05-12T10:00:00Z"},
+            },
+            {
+                "occurred_at": "2026-06-01T10:00:00Z",
+                "payload": {"started_at": "2026-06-01T10:00:00Z"},
+            },
+        ],
+        kind="daily",
+        period="2026-07-29",
+    )
+
+    assert context == {
+        "current_count": 0,
+        "historical_count": 2,
+        "earliest": "2026-05-12",
+        "latest": "2026-06-01",
+        "all_historical": True,
+    }
+    assert sections[0]["timeline_context"]["all_historical"] is True
+    assert sections[1]["historical_item_count"] == 1
+    assert sections[1]["items"] == []
+
+
+def test_daily_summary_hides_mixed_date_learning_cards_but_keeps_today_separate() -> None:
+    sections = [
+        {
+            "title": "What the brain learned",
+            "items": ["Learning - Current: New evidence exists."],
+            "paragraphs": [],
+        }
+    ]
+    context = _summary_timeline_context(
+        sections,
+        [
+            {"occurred_at": "2026-06-01T10:00:00Z", "payload": {}},
+            {"occurred_at": "2026-07-29T10:00:00Z", "payload": {}},
+        ],
+        kind="daily",
+        period="2026-07-29",
+    )
+
+    assert context["all_historical"] is False
+    assert context["historical_count"] == 1
+    assert sections[0]["items"] == []
+    assert sections[0]["historical_item_count"] == 1
+    assert sections[0]["timeline_context"]["learning_cards_hidden"] is True
 
 
 def test_summary_cost_uses_exact_split_or_honest_legacy_range() -> None:
@@ -1045,9 +1114,14 @@ def test_summary_stats_carry_hoverable_clickable_canonical_evidence(
     assert sessions_stat["evidence"][0]["url"].startswith("obsidian://open")
     rendered = render_dashboard(snapshot)
     assert "evidence-popover" in rendered
-    assert "evidence-align-right" in rendered
+    assert 'popover.dataset.alignment = alignRight ? "right" : "left"' in rendered
     assert "wrapEvidenceTrigger" in rendered
     assert ".evidence-surface:hover > .evidence-popover" not in rendered
+    assert "document.body.append(popover)" in rendered
+    assert ".evidence-popover.evidence-open" in rendered
+    assert "cursor: help" not in rendered
+    assert "opacity: 0" in rendered
+    assert "transform: translateY(8px) scale(0.985)" in rendered
     assert 'make("button", "evidence-affordance"' in rendered
     assert "evidence-row" in rendered
     assert "Open ↗" in rendered

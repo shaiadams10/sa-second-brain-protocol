@@ -948,6 +948,58 @@ def _apply_canonical_evidence_details(
             card["detail"] = sanitize_text(match.split("—", 1)[1].strip(), max_chars=800)
 
 
+def _summary_timeline_context(
+    sections: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+    *,
+    kind: str,
+    period: str,
+) -> dict[str, Any]:
+    """Keep delayed evidence on its original timeline in the derived Daily view."""
+
+    if kind != "daily":
+        return {}
+    dates: list[str] = []
+    for row in evidence_rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        occurred = str(
+            payload.get("started_at")
+            or row.get("occurred_at")
+            or row.get("created_at")
+            or ""
+        )[:10]
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", occurred):
+            dates.append(occurred)
+    if not dates:
+        return {}
+    historical_dates = sorted(value for value in dates if value != period)
+    current_count = len(dates) - len(historical_dates)
+    context = {
+        "current_count": current_count,
+        "historical_count": len(historical_dates),
+        "earliest": historical_dates[0] if historical_dates else "",
+        "latest": historical_dates[-1] if historical_dates else "",
+        "all_historical": bool(historical_dates) and current_count == 0,
+    }
+    for section in sections:
+        title = str(section.get("title") or "").casefold()
+        if not any(
+            word in title
+            for word in ("activity", "recap", "learn", "synthesis", "reflection")
+        ):
+            continue
+        section_context = dict(context)
+        if context["historical_count"] and any(
+            word in title for word in ("learn", "synthesis", "reflection")
+        ):
+            section_context["learning_cards_hidden"] = True
+            section["historical_item_count"] = len(section.get("items") or [])
+            section["items"] = []
+            section["paragraphs"] = []
+        section["timeline_context"] = section_context
+    return context
+
+
 def _summary_entry(
     vault: Path,
     path: Path,
@@ -969,6 +1021,9 @@ def _summary_entry(
     )
     _apply_canonical_evidence_details(evidence, sections)
     _attach_section_evidence(sections, evidence, period=path.stem)
+    timeline_context = _summary_timeline_context(
+        sections, evidence_rows, kind=kind, period=path.stem
+    )
 
     synthesis = next(
         (
@@ -989,6 +1044,14 @@ def _summary_entry(
             for value in (*section["paragraphs"], *section["items"])
         ]
     summary = summary_candidates[0] if summary_candidates else ""
+    if timeline_context.get("historical_count"):
+        summary = (
+            "Historical recovery only: delayed evidence kept its original work dates, "
+            "and no same-day personal learning was claimed."
+            if timeline_context.get("all_historical")
+            else "This Daily includes delayed evidence kept on its original work dates; "
+            "verified same-day personal learning appears only in Today."
+        )
     highlights = [item for section in sections for item in section["items"]]
     if not highlights:
         highlights = [
@@ -1002,6 +1065,7 @@ def _summary_entry(
         "period": period,
         "title": f"{label} summary — {period}",
         "summary": summary,
+        "timeline_context": timeline_context,
         "highlights": highlights[:6],
         "sections": sections,
         "visuals": _summary_visuals(sections, evidence=evidence),
