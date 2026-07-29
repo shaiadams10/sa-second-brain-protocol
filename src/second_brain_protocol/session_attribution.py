@@ -98,6 +98,16 @@ class ProjectSessionResolver:
             for alias in aliases
             if str(alias.get("project_id") or "") in self.projects
         ]
+        leaf_values: dict[str, set[str]] = {}
+        for project_id, project in self.projects.items():
+            leaf = normalize_workspace_path(project["local_path"]).rsplit("/", 1)[-1]
+            if leaf:
+                leaf_values.setdefault(leaf, set()).add(project_id)
+        self.unique_current_leaves = {
+            leaf: next(iter(project_ids))
+            for leaf, project_ids in leaf_values.items()
+            if len(project_ids) == 1
+        }
         self.remote_index = self._unique_index("remote_url", _normalized_remote)
         commit_values: dict[str, set[str]] = {}
         for project_id, project in self.projects.items():
@@ -252,6 +262,17 @@ class ProjectSessionResolver:
         result = self._combine_authoritative(path_resolution, git_resolution)
         if result is None and normalized:
             result = self._git_resolution(_workspace_path_text(workspace))
+        if result is None and normalized:
+            raw_workspace = Path(_workspace_path_text(workspace))
+            leaf = normalized.rsplit("/", 1)[-1]
+            project_id = self.unique_current_leaves.get(leaf)
+            if project_id and not raw_workspace.exists():
+                result = SessionResolution(
+                    "matched",
+                    project_id,
+                    "unique_extinct_workspace_leaf",
+                    0.92,
+                )
         if result is not None:
             self._cache[cache_key] = result
             return result

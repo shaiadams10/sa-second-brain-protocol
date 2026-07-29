@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Separated evidence discovery date from original work date in the dashboard, limited “today” learning to same-day evidence, hid individual profile-only session cards behind compact aggregate coverage, collapsed summary archives by default, and added owner topic suppression that automatically expires when newer evidence appears.
+- Hardened the project/person boundary so project-scoped explicit facts normalize to project facts, clarified private Git stewardship states, and added smoother reduced-motion-aware dashboard transitions.
 - Added an isolated profile-only analysis lane for unmatched and ambiguous Codex/Antigravity sessions. Their visible interactions can improve personal, voice, preference, pattern, goal, and learning knowledge, while deterministic publication blocks project facts, updates, decisions, lessons, ownership, authorship, skill verification, validated outcomes, project summaries, and project-question resolution.
 - Added longitudinal topic-level learning evidence with dated events for learning edges, demonstrated understanding, applied learning, architectural judgment, operational capability, validated outcomes, and counterevidence. The derived state and cross-session/date/project/context breadth are visible in `Memory/Learning.md`.
 - Reframed daily and weekly synthesis as a dual-lens evaluation of both work outcomes and what the user's interactions demonstrate, and changed stable-pattern breadth from two known projects to two independent contexts without assigning projects to profile-only sessions.

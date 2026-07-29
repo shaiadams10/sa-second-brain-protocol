@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from jsonschema import Draft202012Validator
+
+from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_root
+from .model_runner import ModelRole, run_model, usage_from_receipt
 from .publisher import write_bootstrap_review_artifacts, write_review_artifacts
 from .review import build_review_groups
 from .security import sanitize_text
@@ -11,6 +15,94 @@ from .state import utc_now
 
 
 QUESTION_DISMISSAL_REASON = "Dismissed as not relevant by the vault owner"
+AnswerEvaluator = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+def _evaluate_owner_answer(
+    paths: RuntimePaths,
+    store: StateStore,
+    draft: dict[str, Any],
+) -> tuple[dict[str, Any], str, str]:
+    defaults = load_defaults(load_runtime_config(paths))
+    role = ModelRole(**defaults["models"]["escalation"])
+    evidence = [
+        {
+            "id": f"ev-{str(draft['question_id']).removeprefix('obs-')[:32]}",
+            "source_type": "owner-answer",
+            "project_id": (
+                draft["project_ids"][0]
+                if len(draft.get("project_ids", [])) == 1
+                else None
+            ),
+            "kind": "owner_answer_draft",
+            "occurred_at": utc_now(),
+            "payload": draft,
+        }
+    ]
+    run_id = store.start_run("answer-evaluation", role.name, role.reasoning)
+    try:
+        result, receipt = run_model(
+            paths=paths,
+            role=role,
+            prompt_name="question-answer.md",
+            evidence=evidence,
+            run_id=run_id,
+            max_packet_chars=12000,
+            max_evidence_chars=6000,
+            schema_name="question-answer-output.schema.json",
+            use_cache=False,
+            retain_failed_stage=False,
+        )
+    except Exception as error:
+        store.finish_run(run_id, "failed", evidence_count=1, error=str(error))
+        raise
+    return result, run_id, str(receipt)
+
+
+def _validated_answer_evaluation(
+    result: dict[str, Any],
+    *,
+    scope: str,
+    project_ids: set[str],
+) -> dict[str, Any]:
+    schema = protocol_root() / "schemas" / "question-answer-output.schema.json"
+    import json
+
+    Draft202012Validator(json.loads(schema.read_text(encoding="utf-8"))).validate(
+        result
+    )
+    normalized_answer = sanitize_text(
+        str(result["normalized_answer"]), max_chars=2000
+    ).strip()
+    claims: list[dict[str, Any]] = []
+    for raw in result["claims"]:
+        claim = dict(raw)
+        destination = str(claim["destination"])
+        project_id = claim.get("project_id")
+        if destination == "discard":
+            continue
+        if destination == "project_knowledge":
+            if (
+                scope != "project"
+                or project_id not in project_ids
+                or claim.get("scope") != "project"
+            ):
+                continue
+        else:
+            claim["project_id"] = None
+            if claim.get("scope") == "project":
+                claim["scope"] = "context"
+        claim["subject"] = sanitize_text(
+            str(claim["subject"]), max_chars=300
+        ).strip()
+        claim["claim"] = sanitize_text(str(claim["claim"]), max_chars=2000).strip()
+        # Public use is a separate owner approval, never an evaluator inference.
+        claim["public_claim"] = False
+        if claim["subject"] and claim["claim"]:
+            claims.append(claim)
+    if not claims:
+        raise ValueError("The answer did not produce a safe, durable claim")
+    return {"normalized_answer": normalized_answer, "claims": claims}
 
 
 def _set_review_feedback(
@@ -144,8 +236,11 @@ def answer_question(
     store: StateStore,
     observation_id: str,
     answer: str,
+    *,
+    paths: RuntimePaths | None = None,
+    evaluator: AnswerEvaluator | None = None,
 ) -> dict[str, Any]:
-    """Record one explicit owner answer and close its pending clarification."""
+    """Evaluate one owner answer, store normalized claims, and close the question."""
 
     clean_answer = sanitize_text(answer, max_chars=2000).strip()
     if not clean_answer:
@@ -179,29 +274,80 @@ def answer_question(
                 project_ids.add(str(row["project_id"]))
             project_ids.update(str(value) for value in row_payload.get("project_ids", []) if value)
     project_id = next(iter(project_ids)) if scope == "project" and len(project_ids) == 1 else None
-    store.add_evidence(
-        source_type="interview",
-        source_ref=f"review-resolution:{observation_id}",
-        kind="explicit_profile_answer" if scope == "profile" else "explicit_project_answer",
-        project_id=project_id,
-        payload={
-            "question_id": observation_id,
-            "question": question,
-            "answer": clean_answer,
-            "explicit": True,
-            "scope": scope,
-            "destination": "professional_profile" if scope == "profile" else "project_knowledge",
-            "project_ids": sorted(project_ids) if scope == "project" else [],
-        },
-    )
-    store.decide_observation(observation_id, "resolved", clean_answer)
-    with store.transaction() as connection:
-        previous = _set_review_feedback(connection, observation_id, "answered")
-        connection.execute(
-            """INSERT INTO review_feedback_events(
-            observation_id,action,previous_decision,previous_status,created_at
-            ) VALUES(?,?,?,?,?)""",
-            (observation_id, "answer", previous, "pending", utc_now()),
+    draft = {
+        "question_id": observation_id,
+        "question": question,
+        "answer": clean_answer,
+        "scope": scope,
+        "project_ids": sorted(project_ids) if scope == "project" else [],
+    }
+    model_run_id: str | None = None
+    receipt_path: str | None = None
+    if evaluator is not None:
+        raw_evaluation = evaluator(draft)
+    else:
+        if paths is None:
+            raise RuntimeError("Answer evaluation requires the configured model runtime")
+        raw_evaluation, model_run_id, receipt_path = _evaluate_owner_answer(
+            paths, store, draft
+        )
+    try:
+        evaluation = _validated_answer_evaluation(
+            raw_evaluation,
+            scope=scope,
+            project_ids=project_ids,
+        )
+        store.add_evidence(
+            source_type="interview",
+            source_ref=f"review-resolution:{observation_id}",
+            kind=(
+                "evaluated_profile_answer"
+                if scope == "profile"
+                else "evaluated_project_answer"
+            ),
+            project_id=project_id,
+            payload={
+                "question_id": observation_id,
+                "question": question,
+                "normalized_answer": evaluation["normalized_answer"],
+                "claims": evaluation["claims"],
+                "explicit": True,
+                "scope": scope,
+                "destinations": sorted(
+                    {str(claim["destination"]) for claim in evaluation["claims"]}
+                ),
+                "project_ids": sorted(project_ids) if scope == "project" else [],
+                "evaluation_model_run": model_run_id,
+            },
+        )
+        store.decide_observation(
+            observation_id, "resolved", evaluation["normalized_answer"]
+        )
+        with store.transaction() as connection:
+            previous = _set_review_feedback(connection, observation_id, "answered")
+            connection.execute(
+                """INSERT INTO review_feedback_events(
+                observation_id,action,previous_decision,previous_status,created_at
+                ) VALUES(?,?,?,?,?)""",
+                (observation_id, "answer", previous, "pending", utc_now()),
+            )
+    except Exception as error:
+        if model_run_id is not None:
+            store.finish_run(
+                model_run_id,
+                "failed",
+                evidence_count=1,
+                receipt_path=receipt_path,
+                error=f"Answer normalization was not stored: {error}",
+            )
+        raise
+    if model_run_id is not None:
+        store.finish_run(
+            model_run_id,
+            "completed",
+            evidence_count=1,
+            receipt_path=receipt_path,
+            usage=usage_from_receipt(receipt_path),
         )
 
     if store.bootstrap_state().get("state") == "awaiting_review":
@@ -211,5 +357,6 @@ def answer_question(
     return {
         "id": observation_id,
         "status": "resolved",
-        "answer_saved": True,
+        "answer_evaluated": True,
+        "claims_saved": len(evaluation["claims"]),
     }

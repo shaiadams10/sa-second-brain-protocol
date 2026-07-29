@@ -20,6 +20,7 @@ from .config import RuntimePaths, protocol_root
 from .dashboard import build_snapshot, render_dashboard
 from .knowledge import dislike_knowledge, like_knowledge, undo_last_dislike
 from .question_actions import (
+    AnswerEvaluator,
     answer_question,
     dismiss_question,
     undo_last_question_dismissal,
@@ -49,6 +50,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         vault: Path,
         *,
         reindexer: IndexRefresher = reindex_changed,
+        answer_evaluator: AnswerEvaluator | None = None,
     ):
         super().__init__(server_address, DashboardRequestHandler)
         self.paths = paths
@@ -56,6 +58,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.store = StateStore(paths.state)
         self.csrf_token = secrets.token_urlsafe(32)
         self.reindexer = reindexer
+        self.answer_evaluator = answer_evaluator
         self.action_lock = threading.Lock()
         self.refresh_event = threading.Event()
         self.stop_event = threading.Event()
@@ -224,6 +227,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         self.server.store,
                         parts[2],
                         payload["answer"],
+                        paths=self.server.paths,
+                        evaluator=self.server.answer_evaluator,
                     )
                 elif question_dismiss_route:
                     result = dismiss_question(
@@ -279,8 +284,15 @@ def create_dashboard_server(
     *,
     port: int = DASHBOARD_PORT,
     reindexer: IndexRefresher = reindex_changed,
+    answer_evaluator: AnswerEvaluator | None = None,
 ) -> DashboardHTTPServer:
-    return DashboardHTTPServer((DASHBOARD_HOST, port), paths, vault, reindexer=reindexer)
+    return DashboardHTTPServer(
+        (DASHBOARD_HOST, port),
+        paths,
+        vault,
+        reindexer=reindexer,
+        answer_evaluator=answer_evaluator,
+    )
 
 
 def server_is_running(port: int = DASHBOARD_PORT) -> bool:

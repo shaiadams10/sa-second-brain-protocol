@@ -24,6 +24,9 @@
       --border: 2px solid var(--ink);
       --shadow: 8px 8px 0 var(--ink);
       --shadow-small: 4px 4px 0 var(--ink);
+      --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+      --motion-fast: 220ms;
+      --motion-slow: 420ms;
       --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -48,6 +51,15 @@
 
     a { color: inherit; text-decoration: none; }
     button { font: inherit; color: inherit; }
+    a, button, summary {
+      transition:
+        color var(--motion-fast) var(--ease-smooth),
+        background-color var(--motion-fast) var(--ease-smooth),
+        border-color var(--motion-fast) var(--ease-smooth),
+        box-shadow var(--motion-fast) var(--ease-smooth),
+        transform var(--motion-fast) var(--ease-smooth),
+        opacity var(--motion-fast) var(--ease-smooth);
+    }
     button:focus-visible, a:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
     .skip-link { position: fixed; left: 16px; top: -70px; z-index: 100; padding: 10px 14px; background: var(--ink); color: white; }
     .skip-link:focus { top: 16px; }
@@ -170,7 +182,9 @@
     .metric-detail { color: var(--muted); font-size: 12px; }
 
     .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
-    .panel { position: relative; min-width: 0; padding: 24px; border: var(--border); background: rgba(255, 253, 247, 0.92); box-shadow: var(--shadow-small); }
+    .panel { position: relative; min-width: 0; padding: 24px; border: var(--border); background: rgba(255, 253, 247, 0.92); box-shadow: var(--shadow-small); animation: panel-arrive 480ms var(--ease-smooth) both; transition: background-color var(--motion-slow) var(--ease-smooth), box-shadow var(--motion-slow) var(--ease-smooth), transform var(--motion-slow) var(--ease-smooth); }
+    .panel:nth-child(2n) { animation-delay: 45ms; }
+    .panel:nth-child(3n) { animation-delay: 90ms; }
     .panel::before { content: attr(data-index); position: absolute; top: -13px; left: 18px; padding: 3px 8px; border: 1.5px solid var(--ink); background: var(--purple-soft); font-family: var(--mono); font-size: 10px; font-weight: 900; }
     .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
     .panel-title { margin: 4px 0 0; font-family: var(--mono); font-size: clamp(20px, 2.1vw, 28px); line-height: 1.08; letter-spacing: -0.045em; }
@@ -191,7 +205,7 @@
       background: var(--paper-bright);
       cursor: pointer;
       text-align: left;
-      transition: opacity 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+      transition: opacity var(--motion-fast) var(--ease-smooth), transform var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth);
     }
     .deck-layer:hover { background: var(--pink-soft); opacity: 1; }
     .deck-layer.active { transform: translate(-2px, -2px); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
@@ -234,7 +248,7 @@
       background: var(--paper-bright);
       box-shadow: 7px 7px 0 var(--purple-deep);
       touch-action: pan-y;
-      transition: transform 180ms ease, opacity 180ms ease;
+      transition: transform 260ms var(--ease-smooth), opacity 260ms var(--ease-smooth);
       user-select: none;
     }
     .knowledge-card.swipe-left { transform: translateX(-125%) rotate(-10deg); opacity: 0; }
@@ -280,7 +294,7 @@
     .deck-caption { margin: 14px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
     .deck-caption strong { color: var(--ink); }
 
-    .briefing-panel { grid-column: span 4; display: flex; flex-direction: column; min-height: 620px; background: var(--ink); color: var(--paper-bright); }
+    .briefing-panel { grid-column: span 4; display: flex; flex-direction: column; min-height: 560px; background: var(--ink); color: var(--paper-bright); }
     .briefing-panel::before { background: var(--pink); color: white; }
     .briefing-panel .panel-label { color: var(--pink-soft); }
     .briefing-title { margin: 8px 0 16px; font-family: var(--mono); font-size: clamp(27px, 2.8vw, 40px); line-height: 1.02; letter-spacing: -0.055em; }
@@ -305,6 +319,18 @@
     .briefing-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
     .briefing-list li { position: relative; padding-left: 17px; font-size: 13px; }
     .briefing-list li::before { content: "■"; position: absolute; left: 0; color: var(--pink); }
+    .learning-insights { display: grid; gap: 8px; }
+    .learning-insight { padding: 10px 11px; border: 1px solid #77707d; border-left: 4px solid var(--pink); background: rgba(255, 255, 255, 0.055); }
+    .learning-insight.capability { border-left-color: #78d3ad; }
+    .learning-insight.pattern { border-left-color: #c3a8ff; }
+    .learning-insight.context { border-left-color: #f2c86f; }
+    .learning-insight-kind { display: block; margin-bottom: 4px; color: var(--pink-soft); font-family: var(--mono); font-size: 8px; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; }
+    .learning-insight p { margin: 0; color: #eee9f0; font-size: 12px; line-height: 1.5; }
+    .learning-topic-list { display: grid; gap: 7px; }
+    .learning-topic-row { padding: 9px 10px; border: 1px solid #77707d; background: rgba(255, 255, 255, 0.045); }
+    .learning-topic-top { display: flex; justify-content: space-between; gap: 10px; color: #eee9f0; font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+    .learning-topic-state { color: var(--pink-soft); }
+    .learning-topic-assessment { margin: 5px 0 0; color: #bdb4c1; font-size: 11px; line-height: 1.45; }
     .briefing-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; font-family: var(--mono); font-size: 11px; }
     .briefing-foot a { color: var(--pink-soft); border-bottom: 1px solid currentColor; }
 
@@ -313,7 +339,8 @@
     .summary-tab { padding: 8px 11px; border: 1.5px solid var(--ink); background: var(--paper-bright); cursor: pointer; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
     .summary-tab.active { transform: translate(-2px, -2px); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
     .summary-log { display: grid; gap: 12px; }
-    .summary-entry { border: 1.5px solid var(--ink); background: white; }
+    .summary-entry { border: 1.5px solid var(--ink); background: white; transition: border-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-slow) var(--ease-smooth), transform var(--motion-fast) var(--ease-smooth); }
+    .summary-entry:not([open]):hover { transform: translateY(-2px); box-shadow: 3px 3px 0 var(--purple-soft); }
     .summary-entry[open] { box-shadow: 4px 4px 0 var(--purple-deep); }
     .summary-entry > summary { display: grid; grid-template-columns: minmax(175px, 0.32fr) minmax(0, 1fr) auto auto; gap: 16px; align-items: center; padding: 16px; cursor: pointer; list-style: none; }
     .summary-entry > summary::-webkit-details-marker { display: none; }
@@ -329,10 +356,11 @@
     .summary-toggle { font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; }
     .summary-entry[open] .summary-toggle::after { content: "Hide full log"; }
     .summary-entry:not([open]) .summary-toggle::after { content: "Full log"; }
-    .summary-body { display: grid; grid-template-columns: 1fr; gap: 16px; padding: 0 16px 18px; border-top: 1px dashed #a49da7; }
+    .summary-body { display: grid; grid-template-columns: 1fr; gap: 16px; padding: 0 16px 18px; border-top: 1px dashed #a49da7; animation: reveal-summary 320ms var(--ease-smooth) both; }
     .summary-snapshot { padding-top: 16px; }
     .summary-glance-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
-    .glance-card { position: relative; min-height: 116px; padding: 14px; overflow: hidden; border: 1.5px solid var(--ink); background: white; box-shadow: 3px 3px 0 var(--ink); }
+    .glance-card { position: relative; min-height: 116px; padding: 14px; overflow: hidden; border: 1.5px solid var(--ink); background: white; box-shadow: 3px 3px 0 var(--ink); transition: transform var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth); }
+    .glance-card:hover { transform: translateY(-3px); box-shadow: 4px 6px 0 var(--ink); background: #fffafb; }
     .glance-card::after { content: ""; position: absolute; right: -20px; bottom: -28px; width: 72px; height: 72px; border: 14px solid var(--purple-soft); border-radius: 50%; opacity: 0.5; }
     .glance-card.pink::after { border-color: var(--pink-soft); }
     .glance-card.green::after { border-color: #cceadc; }
@@ -375,11 +403,27 @@
     .summary-section ul { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
     .summary-section li { padding: 10px 12px; border: 1px solid #d4cdd7; background: white; }
     .summary-item-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
-    .summary-item-card { min-width: 0; padding: 11px 12px; border: 1px solid #d4cdd7; background: white; }
+    .summary-item-card { min-width: 0; padding: 11px 12px; border: 1px solid #d4cdd7; background: white; transition: transform var(--motion-fast) var(--ease-smooth), border-color var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth); }
+    .summary-item-card:hover { transform: translateY(-2px); border-color: var(--purple); background: #fffbfd; }
     .summary-item-label { margin-bottom: 5px; color: var(--purple-deep); font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; }
     .summary-item-detail { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .session-review-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+    .session-review-card { position: relative; min-width: 0; padding: 12px 13px 13px; border: 1px solid #c8c0cb; background: white; transition: transform var(--motion-fast) var(--ease-smooth), border-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth); }
+    .session-review-card:hover { transform: translateY(-3px); border-color: var(--purple-deep); box-shadow: 3px 4px 0 var(--purple-soft); }
+    .session-review-card[hidden] { display: none; }
+    .session-review-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-right: 78px; }
+    .session-review-kind { padding: 3px 6px; border: 1px solid var(--ink); background: var(--purple-soft); font-family: var(--mono); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+    .session-review-kind.profile { background: var(--pink-soft); }
+    .session-review-title { margin-top: 8px; font-family: var(--mono); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .session-review-meta { color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+    .session-review-detail { margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .session-coverage-note { grid-column: 1 / -1; display: grid; gap: 3px; padding: 11px 13px; border: 1px dashed #9c93a1; background: rgba(216, 208, 242, 0.28); color: var(--muted); font-size: 12px; }
+    .session-coverage-note strong { color: var(--purple-deep); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
+    .session-review-toggle { grid-column: 1 / -1; justify-self: center; padding: 8px 12px; border: 1.5px solid var(--ink); background: var(--paper-bright); font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; box-shadow: 2px 2px 0 var(--ink); cursor: pointer; }
+    .session-review-toggle:hover, .session-review-toggle:focus-visible { transform: translate(-1px, -1px); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); outline: none; }
     .summary-visual-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .visual-group { min-width: 0; padding: 13px; border: 1.5px solid var(--ink); background: white; }
+    .visual-group { min-width: 0; padding: 13px; border: 1.5px solid var(--ink); background: white; transition: transform var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth); }
+    .visual-group:hover { transform: translateY(-3px); box-shadow: 3px 4px 0 var(--ink); background: #fffbfd; }
     .visual-group.pink { box-shadow: inset 4px 0 0 var(--pink); }
     .visual-group.purple { box-shadow: inset 4px 0 0 var(--purple); }
     .visual-group.green { box-shadow: inset 4px 0 0 var(--green); }
@@ -420,6 +464,7 @@
     .questions-panel { grid-column: span 12; background: linear-gradient(120deg, rgba(248, 198, 220, 0.34), rgba(255, 253, 247, 0.96) 45%); }
     .question-progress { flex: 0 0 auto; padding: 6px 9px; border: 1.5px solid var(--ink); background: var(--pink-soft); font-family: var(--mono); font-size: 11px; font-weight: 900; }
     .question-card { position: relative; display: grid; grid-template-columns: minmax(250px, 0.78fr) minmax(360px, 1.22fr); gap: 22px; padding: clamp(18px, 3vw, 30px); border: 2px solid var(--ink); background: var(--paper-bright); box-shadow: 6px 6px 0 var(--ink); }
+    .question-card[hidden] { display: none; }
     .question-scope-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 15px; }
     .question-category { display: inline-flex; margin-bottom: 15px; padding: 5px 7px; border: 1.5px solid var(--ink); background: var(--purple-soft); font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; }
     .question-scope-row .question-category { margin-bottom: 0; }
@@ -433,13 +478,7 @@
     .question-destination { display: grid; gap: 3px; margin-bottom: 14px; padding: 10px 12px; border: 1.5px solid var(--ink); background: #f5f0ff; box-shadow: inset 5px 0 0 var(--purple); }
     .question-destination-title { font-family: var(--mono); font-size: 10px; font-weight: 950; text-transform: uppercase; }
     .question-destination-detail { color: var(--muted); font-size: 11px; }
-    .question-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-    .question-choice { padding: 7px 9px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font-family: var(--mono); font-size: 10px; font-weight: 850; }
-    .question-choice:hover:not(:disabled), .question-choice.active { transform: translate(-1px, -1px); background: var(--purple-soft); box-shadow: 2px 2px 0 var(--ink); }
-    .question-choice:disabled { cursor: not-allowed; opacity: 0.48; }
     .question-answer-wrap { position: relative; }
-    .question-suggestion-hint { margin-bottom: 7px; padding: 7px 9px; border: 1px dashed var(--purple); background: var(--purple-soft); color: var(--purple-deep); font-family: var(--mono); font-size: 10px; }
-    .question-suggestion-hint strong { color: var(--pink); text-transform: uppercase; }
     .question-answer { width: 100%; min-height: 122px; resize: vertical; padding: 12px; border: 2px solid var(--ink); background: white; font: 14px/1.5 var(--sans); }
     .question-answer:focus { outline: 3px solid var(--pink-soft); outline-offset: 2px; }
     .question-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-top: 12px; }
@@ -453,7 +492,8 @@
     .projects-panel { grid-column: span 7; }
     .pulse-panel { grid-column: span 5; }
     .project-list, .pattern-list, .run-list, .check-list { display: grid; gap: 10px; }
-    .project-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1.5px dashed #a49da7; }
+    .project-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) auto; gap: 14px; align-items: center; padding: 12px 8px; border-top: 1.5px dashed #a49da7; transition: transform var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth), padding var(--motion-fast) var(--ease-smooth); }
+    .project-row:hover { transform: translateX(4px); background: rgba(248, 198, 220, 0.22); }
     .project-row:hover .project-name { color: var(--pink); }
     .project-name { font-weight: 800; }
     .project-meta, .project-count { color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
@@ -479,13 +519,49 @@
     .review-number { font-family: var(--mono); font-size: clamp(54px, 6vw, 86px); font-weight: 900; line-height: 0.9; }
     .review-copy { margin: 8px 0 18px; color: var(--muted); }
     .review-legend { display: grid; gap: 8px; }
-    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding-top: 8px; border-top: 1px dashed #a49da7; }
+    .legend-row { display: grid; width: 100%; grid-template-columns: 12px 1fr auto auto; gap: 8px; align-items: center; padding: 9px 0 0; border: 0; border-top: 1px dashed #a49da7; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .legend-row:hover, .legend-row:focus-visible { color: var(--purple-deep); outline: none; }
+    .legend-row:focus-visible { box-shadow: 0 3px 0 var(--pink); }
     .legend-dot { width: 10px; height: 10px; border: 1.5px solid var(--ink); background: var(--purple); }
     .legend-row:nth-child(2) .legend-dot { background: var(--pink); }
     .legend-row:nth-child(3) .legend-dot { background: var(--yellow); }
     .legend-value { font-family: var(--mono); font-weight: 900; }
+    .legend-open { color: var(--muted); font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
 
-    .check { display: grid; grid-template-columns: 12px 1fr; gap: 10px; padding: 10px 0; border-top: 1px dashed #a49da7; }
+    .review-dialog { width: min(980px, calc(100vw - 32px)); max-height: min(880px, calc(100vh - 32px)); padding: 0; overflow: hidden; border: 3px solid var(--ink); background: var(--paper-bright); color: var(--ink); box-shadow: 9px 9px 0 var(--purple-deep); }
+    .review-dialog::backdrop { background: rgba(29, 27, 31, 0.68); backdrop-filter: blur(3px); }
+    .review-dialog-card { display: grid; grid-template-rows: auto auto minmax(0, 1fr); max-height: min(874px, calc(100vh - 38px)); }
+    .review-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 26px 18px; border-bottom: 1.5px dashed var(--muted); }
+    .review-dialog-kicker { color: var(--pink); font-family: var(--mono); font-size: 10px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+    .review-dialog-title { margin: 5px 0 0; font-family: var(--mono); font-size: clamp(24px, 4vw, 38px); line-height: 1; }
+    .review-dialog-close { flex: 0 0 auto; min-height: 36px; padding: 7px 10px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font-family: var(--mono); font-size: 10px; font-weight: 900; }
+    .review-dialog-close:hover, .review-dialog-close:focus-visible { background: var(--pink-soft); box-shadow: 3px 3px 0 var(--ink); outline: none; }
+    .review-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; padding: 16px 26px; border-bottom: 1.5px solid var(--ink); background: var(--paper-muted); }
+    .review-search-wrap { display: grid; gap: 5px; }
+    .review-search-label { color: var(--muted); font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+    .review-search { width: 100%; min-height: 39px; padding: 8px 10px; border: 1.5px solid var(--ink); background: white; color: var(--ink); font: 13px/1.3 var(--body); }
+    .review-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+    .review-tab { min-height: 39px; padding: 8px 10px; border: 1.5px solid var(--ink); background: white; color: var(--ink); cursor: pointer; font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+    .review-tab.active { background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .review-dialog-body { min-height: 0; overflow: auto; padding: 18px 26px 28px; }
+    .review-browser-copy { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .review-browser-count { margin-bottom: 10px; font-family: var(--mono); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+    .review-card-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .review-card { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 14px; border: 1.5px solid var(--ink); background: white; box-shadow: inset 4px 0 0 var(--purple); transition: transform var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth); }
+    .review-card:hover { transform: translateY(-3px); background: #fffbfd; box-shadow: inset 4px 0 0 var(--purple), 3px 4px 0 var(--ink); }
+    .review-card.private { box-shadow: inset 4px 0 0 var(--pink); }
+    .review-card-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .review-card-tag { padding: 3px 6px; border: 1px solid var(--ink); background: var(--purple-soft); font-family: var(--mono); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+    .review-card.private .review-card-tag { background: var(--pink-soft); }
+    .review-card-group { color: var(--muted); font-family: var(--mono); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+    .review-card-subject { font-family: var(--mono); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+    .review-card-claim { color: var(--muted); font-size: 13px; line-height: 1.52; }
+    .review-card-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--purple-deep); font-family: var(--mono); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+    .review-card-link { justify-self: start; color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+    .review-browser-empty { padding: 22px; border: 1.5px dashed var(--muted); color: var(--muted); text-align: center; }
+
+    .check { display: grid; grid-template-columns: 12px 1fr; gap: 10px; padding: 10px 6px; border-top: 1px dashed #a49da7; transition: transform var(--motion-fast) var(--ease-smooth), background-color var(--motion-fast) var(--ease-smooth); }
+    .check:hover { transform: translateX(3px); background: rgba(216, 208, 242, 0.22); }
     .check-dot { width: 11px; height: 11px; margin-top: 5px; border: 1.5px solid var(--ink); background: var(--green); }
     .check.attention .check-dot { background: var(--yellow); }
     .check.danger .check-dot { background: var(--pink); }
@@ -511,9 +587,9 @@
       cursor: pointer;
       font: inherit;
       text-align: left;
-      transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+      transition: background-color var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth), transform var(--motion-fast) var(--ease-smooth);
     }
-    .run::after { content: "OPEN ↗"; position: absolute; right: 10px; color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; opacity: 0; transform: translateX(-4px); transition: opacity 140ms ease, transform 140ms ease; }
+    .run::after { content: "OPEN ↗"; position: absolute; right: 10px; color: var(--purple-deep); font-family: var(--mono); font-size: 9px; font-weight: 900; opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-fast) var(--ease-smooth), transform var(--motion-fast) var(--ease-smooth); }
     .run:hover, .run:focus-visible { z-index: 1; background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); transform: translate(-2px, -2px); }
     .run:hover::after, .run:focus-visible::after { opacity: 1; transform: translateX(0); }
     .run:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
@@ -546,6 +622,15 @@
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: 390px; padding: 13px 16px; border: var(--border); background: var(--ink); color: white; box-shadow: 5px 5px 0 var(--pink); font-family: var(--mono); font-size: 12px; transform: translateY(140%); opacity: 0; transition: 180ms ease; }
     .toast.show { transform: translateY(0); opacity: 1; }
 
+    @keyframes panel-arrive {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes reveal-summary {
+      from { opacity: 0; transform: translateY(-7px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     @media (max-width: 1100px) {
       .hero { grid-template-columns: 1fr; }
       .hero-copy { border-right: 0; border-bottom: 2px dashed var(--muted); }
@@ -567,6 +652,8 @@
       .metric:nth-child(n+3) { border-top: 1.5px dashed var(--muted); }
       .knowledge-panel, .briefing-panel, .patterns-panel, .review-panel, .health-panel, .runs-panel, .focus-panel { grid-column: span 12; }
       .knowledge-panel, .panel { padding: 20px; }
+      .review-toolbar { grid-template-columns: 1fr; }
+      .review-card-list { grid-template-columns: 1fr; }
       .knowledge-panel, .briefing-panel { min-height: auto; }
       .deck-stage { min-height: 430px; padding-inline: 0; }
       .deck-stage::before, .deck-stage::after { width: calc(100% - 24px); height: 360px; }
@@ -590,7 +677,7 @@
       .footer { flex-direction: column; }
     }
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
     }
   </style>
 </head>
@@ -692,11 +779,11 @@
         </section>
 
         <section class="panel briefing-panel" id="today" data-index="02 // TODAY" aria-labelledby="briefing-title">
-          <div class="panel-label">Daily briefing</div>
-          <h2 class="briefing-title" id="briefing-title">Ready when you are.</h2>
+          <div class="panel-label">Personal learning</div>
+          <h2 class="briefing-title" id="briefing-title">What the brain understands about you.</h2>
           <div class="briefing-summary-card">
             <span class="briefing-summary-icon">🧠</span>
-            <div><div class="briefing-summary-label">In one glance</div><p class="briefing-summary" id="briefing-summary"></p></div>
+            <div><div class="briefing-summary-label">What we learned today</div><p class="briefing-summary" id="briefing-summary"></p></div>
           </div>
           <div class="briefing-glance" id="briefing-glance"></div>
           <div class="briefing-groups" id="briefing-groups"></div>
@@ -742,9 +829,9 @@
           <div class="pattern-list" id="pattern-list"></div>
         </section>
 
-        <section class="panel questions-panel" id="questions" data-index="07 // ANSWER OVER TIME" aria-labelledby="questions-title">
+        <section class="panel questions-panel" id="questions" data-index="07 // CLARIFY WHEN NEEDED" aria-labelledby="questions-title">
           <div class="panel-head">
-            <div><div class="panel-label">Open questions</div><h2 class="panel-title" id="questions-title">Teach the brain one answer at a time</h2></div>
+            <div><div class="panel-label">Open questions</div><h2 class="panel-title" id="questions-title">Only questions that require your judgment</h2></div>
             <span class="question-progress" id="question-progress">0 open</span>
           </div>
           <div id="question-stage">
@@ -767,19 +854,16 @@
                   <span class="question-destination-title" id="question-destination"></span>
                   <span class="question-destination-detail" id="question-destination-detail"></span>
                 </div>
-                <div class="mini-label">Choose an editable answer starter</div>
-                <div class="question-choices" id="question-choices"></div>
                 <div class="question-answer-wrap">
-                  <div class="question-suggestion-hint" id="question-suggestion-hint"><strong>Tab</strong> to insert the suggested answer, then edit it.</div>
-                  <textarea class="question-answer" id="question-answer" maxlength="2000" placeholder="A tailored example answer will appear here."></textarea>
+                  <textarea class="question-answer" id="question-answer" maxlength="2000" placeholder="Answer naturally. The brain will evaluate and normalize the meaning before anything is saved."></textarea>
                 </div>
                 <div class="question-actions">
                   <button class="question-action" id="question-skip" type="button">Answer later</button>
                   <button class="question-action dismiss" id="question-dismiss" type="button">Not relevant</button>
                   <button class="question-action undo" id="question-undo" type="button">Undo dismissal</button>
-                  <button class="question-action save" id="question-save" type="button">Save answer</button>
+                  <button class="question-action save" id="question-save" type="button">Evaluate answer</button>
                 </div>
-                <p class="question-caption" id="question-caption">Answer later is neutral. Not relevant removes the question and teaches the relevance filter.</p>
+                <p class="question-caption" id="question-caption">Your raw response is not stored as memory. A structured LLM evaluation routes only normalized claims to the correct private destination.</p>
               </div>
             </article>
           </div>
@@ -832,6 +916,29 @@
         <span class="run-detail-label" id="run-detail-error-label">Full error</span>
         <pre class="run-detail-error" id="run-detail-error"></pre>
       </section>
+    </div>
+  </dialog>
+  <dialog class="review-dialog" id="review-dialog" aria-labelledby="review-dialog-title">
+    <div class="review-dialog-card">
+      <div class="review-dialog-head">
+        <div>
+          <div class="review-dialog-kicker">Owner-only review browser</div>
+          <h2 class="review-dialog-title" id="review-dialog-title">Claims awaiting judgment</h2>
+        </div>
+        <button class="review-dialog-close" id="review-dialog-close" type="button">Close ×</button>
+      </div>
+      <div class="review-toolbar">
+        <label class="review-search-wrap" for="review-search">
+          <span class="review-search-label">Search pending claims</span>
+          <input class="review-search" id="review-search" type="search" placeholder="Search subject, claim, kind, or group">
+        </label>
+        <div class="review-tabs" id="review-tabs" aria-label="Review claim category"></div>
+      </div>
+      <div class="review-dialog-body">
+        <p class="review-browser-copy">Each card is one pending observation—not a session and not a duplicate source bundle. These claims remain quarantined until you approve or reject them in the review note.</p>
+        <div class="review-browser-count" id="review-browser-count"></div>
+        <div class="review-card-list" id="review-card-list"></div>
+      </div>
     </div>
   </dialog>
 
@@ -1080,74 +1187,72 @@
         byId("metrics").append(card);
       });
 
-      const briefingIcon = (title) => {
-        const value = String(title || "").toLowerCase();
-        if (value.includes("project") || value.includes("work")) return "🚀";
-        if (value.includes("change") || value.includes("signal")) return "🧩";
-        if (value.includes("session") || value.includes("agent")) return "🤖";
-        if (value.includes("pattern") || value.includes("theme")) return "🔁";
-        if (value.includes("learn") || value.includes("synthesis")) return "🧠";
-        return "✦";
-      };
       const daily = data.briefing.daily;
+      const learning = data.learning || { today: [], historical_count: 0, evidence_ids: [], topics: [], quiet: true };
       if (daily.available) {
-        setText("briefing-title", `${formatDate(`${daily.period}T12:00:00`, { month: "short", day: "numeric" })} at a glance.`);
-        setText("briefing-summary", daily.summary);
-        setText("briefing-source", "Latest daily synthesis");
-        attachEvidence(document.querySelector(".briefing-summary-card"), daily.evidence, "Daily evidence");
-        const visuals = daily.visuals || { stats: [], groups: [] };
-        visuals.stats.slice(0, 4).forEach((stat) => {
+        const dailyLabel = formatDate(`${daily.period}T12:00:00`, { month: "short", day: "numeric" });
+        setText("briefing-title", learning.today.length
+          ? `What your ${dailyLabel} work taught the brain about you.`
+          : `No new same-day personal learning for ${dailyLabel}.`);
+        setText("briefing-summary", learning.today.length
+          ? `${learning.today.length} evidence-backed insight${learning.today.length === 1 ? "" : "s"} moved the brain's understanding of your judgment, capabilities, preferences, or work style.`
+          : learning.historical_count
+            ? `${learning.historical_count} knowledge signal${learning.historical_count === 1 ? " was" : "s were"} recovered from older evidence. They remain on their original dates and are not presented as current work or repeated as new learning.`
+            : "No new durable personal claim cleared the evidence gates in the latest synthesis. Work activity is still retained as context.");
+        setText("briefing-source", learning.historical_count && !learning.today.length
+          ? "Historical recovery kept separate from today"
+          : "Latest validated personal synthesis");
+        const learningEvidenceIds = new Set(learning.evidence_ids || []);
+        const learningEvidence = (daily.evidence || []).filter((item) => learningEvidenceIds.has(item.evidence_id));
+        attachEvidence(document.querySelector(".briefing-summary-card"), learningEvidence, "Personal learning evidence");
+        [
+          { value: learning.today.length, label: "New personal insights", icon: "🧠" },
+          { value: learning.topics.length, label: "Learning threads", icon: "↗" },
+        ].forEach((stat) => {
           const node = make("article", "briefing-stat");
           node.append(
-            make("span", "briefing-stat-icon", stat.icon || "✦"),
+            make("span", "briefing-stat-icon", stat.icon),
             make("span", "briefing-stat-value", String(stat.value || 0)),
             make("span", "briefing-stat-label", stat.label)
           );
-          attachEvidence(node, stat.evidence, stat.label);
           byId("briefing-glance").append(node);
         });
-        if (visuals.groups.length) {
-          visuals.groups.slice(0, 3).forEach((visual) => {
-            const group = make("section", "briefing-group");
-            const title = make("div", "briefing-group-title");
-            title.append(make("span", "", visual.icon || briefingIcon(visual.title)), make("span", "", visual.title));
-            group.append(title);
-            if (visual.description) group.append(make("p", "briefing-group-description", visual.description));
-            const chips = make("div", "briefing-chips");
-            (visual.chips || []).slice(0, 5).forEach((chip) => {
-              const hasEvidence = Array.isArray(chip.evidence) && chip.evidence.length > 0;
-              const linked = hasEvidence && chip.evidence.length === 1 && chip.evidence[0].url;
-              const node = make(linked ? "a" : hasEvidence ? "button" : "span", "briefing-chip", chip.label);
-              if (linked) node.href = chip.evidence[0].url;
-              if (chip.value !== undefined) node.append(make("strong", "", String(chip.value)));
-              chips.append(hasEvidence ? wrapEvidenceTrigger(node, chip.evidence, chip.label) : node);
-            });
-            if ((visual.chips || []).length > 5) chips.append(make("span", "briefing-chip", `+${visual.chips.length - 5} more`));
-            group.append(chips);
-            attachEvidence(group, visual.evidence, visual.title);
-            byId("briefing-groups").append(group);
+        if (learning.today.length) {
+          const insights = make("section", "learning-insights");
+          learning.today.slice(0, 5).forEach((item) => {
+            const insight = make("article", `learning-insight ${item.tone || "person"}`);
+            insight.append(
+              make("span", "learning-insight-kind", item.kind),
+              make("p", "", item.detail)
+            );
+            insights.append(insight);
           });
-        } else {
-          daily.sections.slice(0, 3).forEach((section) => {
-            const group = make("section", "briefing-group");
-            const title = make("div", "briefing-group-title");
-            title.append(make("span", "", briefingIcon(section.title)), make("span", "", section.title));
-            group.append(title);
-            if (section.items.length) {
-              const list = make("ul", "briefing-list");
-              section.items.slice(0, 3).forEach((item) => list.append(make("li", "", item)));
-              group.append(list);
-            }
-            if (section.items.length) byId("briefing-groups").append(group);
+          byId("briefing-groups").append(insights);
+        }
+        if (learning.topics.length) {
+          const group = make("section", "briefing-group");
+          const title = make("div", "briefing-group-title");
+          title.append(make("span", "", "↗"), make("span", "", "Learning trajectory"));
+          group.append(title);
+          const topics = make("div", "learning-topic-list");
+          learning.topics.slice(0, 3).forEach((topic) => {
+            const row = make("article", "learning-topic-row");
+            const top = make("div", "learning-topic-top");
+            top.append(make("span", "", topic.label), make("span", "learning-topic-state", topic.state));
+            row.append(top);
+            if (topic.assessment) row.append(make("p", "learning-topic-assessment", topic.assessment));
+            topics.append(row);
           });
+          group.append(topics);
+          byId("briefing-groups").append(group);
         }
       } else {
         const waiting = data.briefing.pending_evidence;
-        setText("briefing-title", waiting ? `${waiting} signals wait for tonight.` : "Everything is quiet.");
+        setText("briefing-title", waiting ? `The next learning pass is queued for 10:30 PM.` : "The learning queue is clear.");
         setText("briefing-summary", waiting
-          ? "New project and agent-session activity is safely queued for the next validated daily synthesis."
-          : "No new evidence is waiting. An empty daily check will not spend model usage.");
-        setText("briefing-source", "Awaiting next synthesis");
+          ? `${waiting} safe evidence signal${waiting === 1 ? "" : "s"} will be evaluated for what they reveal about you; project changes remain supporting context.`
+          : "No new evidence is waiting. The scheduler will check again at 10:30 PM without creating a manual retry.");
+        setText("briefing-source", "Scheduler-only learning loop");
       }
 
       const summaries = data.summaries || { daily: [], weekly: [], counts: { daily: 0, weekly: 0 } };
@@ -1183,9 +1288,8 @@
           log.append(make("div", "empty", summaryKind === "weekly" ? "No weekly synthesis has run yet." : "No completed daily synthesis is available yet."));
           return;
         }
-        entries.forEach((entry, index) => {
+        entries.forEach((entry) => {
           const details = make("details", "summary-entry");
-          if (index === 0) details.open = true;
           const heading = make("summary", "");
           const usage = entry.usage || { available: false };
           const impact = usage.codex_impact || { available: false };
@@ -1329,15 +1433,77 @@
                 groups.append(visual);
               });
               block.append(groups);
+            } else if (/session/i.test(section.title)) {
+              const sessions = (section.evidence || []).filter((item) => item.category === "session");
+              const coverage = section.session_coverage || { reviewed: sessions.length, linked: sessions.length, profile_only: 0 };
+              const board = make("div", "session-review-board");
+              let expanded = false;
+              if (coverage.profile_only) {
+                const note = make("div", "session-coverage-note");
+                const historicalBacklog = coverage.historical_profile_only === coverage.profile_only;
+                note.append(
+                  make("strong", "", `${tokenNumber.format(coverage.profile_only)} ${historicalBacklog ? "historical " : ""}profile-only session${coverage.profile_only === 1 ? "" : "s"} kept out of this project timeline`),
+                  make("span", "", historicalBacklog
+                    ? "This is delayed backlog coverage, not current work. It was checked once for person-level signals; individual unattributed cards stay hidden because they do not establish project history."
+                    : "They were safely checked for person-level signals, but individual unattributed cards are hidden because they do not establish project history.")
+                );
+                board.append(note);
+              }
+              const sessionCards = sessions.map((session, sessionIndex) => {
+                const card = make("article", "session-review-card");
+                card.hidden = sessionIndex >= 4;
+                const top = make("div", "session-review-top");
+                const occurredDate = String(session.occurred_at || "").slice(0, 10);
+                const historical = occurredDate && occurredDate !== entry.period;
+                top.append(
+                  make("span", "session-review-kind", historical ? "Project-linked · Historical" : "Project-linked session"),
+                  make("span", "session-review-meta", session.meta || "Agent session")
+                );
+                card.append(
+                  top,
+                  make("div", "session-review-title", session.label || "Session"),
+                  make("div", "session-review-detail", session.detail || "Session reviewed.")
+                );
+                attachEvidence(card, [session], `${session.label || "Session"} source`);
+                board.append(card);
+                return card;
+              });
+              if (sessions.length > 4) {
+                const toggle = make("button", "session-review-toggle");
+                toggle.type = "button";
+                const syncToggle = () => {
+                  sessionCards.forEach((card, cardIndex) => { card.hidden = !expanded && cardIndex >= 4; });
+                  toggle.textContent = expanded
+                    ? "Show fewer sessions"
+                    : `Read ${sessions.length - 4} more project session${sessions.length - 4 === 1 ? "" : "s"}`;
+                  toggle.setAttribute("aria-expanded", String(expanded));
+                };
+                toggle.addEventListener("click", () => { expanded = !expanded; syncToggle(); });
+                syncToggle();
+                board.append(toggle);
+              }
+              block.append(board);
             } else if (section.items.length) {
               const board = make("div", "summary-item-board");
               section.items.forEach((item) => {
-                const parts = String(item).split(":");
-                const label = parts.length > 1 ? parts.shift() : "Detail";
-                const detail = parts.length ? parts.join(":").trim() : String(item);
+                const match = String(item).match(/^([^:]{1,80}):\s+([\s\S]+)$/);
+                const label = match ? match[1] : "Detail";
+                const detail = match ? match[2] : String(item);
                 const card = make("article", "summary-item-card");
                 card.append(make("div", "summary-item-label", label), make("div", "summary-item-detail", detail.replace(/_/g, " ")));
-                attachEvidence(card, section.evidence, section.title);
+                const normalizedItem = String(item).toLowerCase();
+                const projectChangeItem = /project changes|projects with detected changes/i.test(`${section.title} ${label}`);
+                const itemEvidence = (section.evidence || []).filter((evidence) => {
+                  const evidenceLabel = String(evidence.label || "").toLowerCase();
+                  return evidenceLabel
+                    && normalizedItem.includes(evidenceLabel)
+                    && (!projectChangeItem || evidence.category === "project_change");
+                });
+                if (itemEvidence.length) {
+                  attachEvidence(card, itemEvidence, label);
+                } else if ((section.evidence || []).length === 1) {
+                  attachEvidence(card, section.evidence, label);
+                }
                 board.append(card);
               });
               block.append(board);
@@ -1400,25 +1566,115 @@
         });
       }
 
+      const reviewDialog = byId("review-dialog");
+      const reviewCards = [...((data.review && data.review.cards) || [])];
+      let reviewSection = "all";
+      const reviewSearch = byId("review-search");
+      const closeReviewDialog = () => {
+        if (!reviewDialog) return;
+        if (typeof reviewDialog.close === "function") reviewDialog.close();
+        else reviewDialog.removeAttribute("open");
+      };
+      const renderReviewBrowser = () => {
+        const query = String(reviewSearch?.value || "").trim().toLowerCase();
+        const visible = reviewCards.filter((card) => {
+          if (reviewSection !== "all" && card.section !== reviewSection) return false;
+          if (!query) return true;
+          return [card.subject, card.claim, card.kind, card.group, card.section].some((value) => String(value || "").toLowerCase().includes(query));
+        });
+        setText("review-browser-count", `${visible.length} claim${visible.length === 1 ? "" : "s"} shown`);
+        const list = byId("review-card-list");
+        list.replaceChildren();
+        if (!visible.length) {
+          list.append(make("div", "review-browser-empty", "No pending claims match this view."));
+          return;
+        }
+        visible.forEach((card) => {
+          const article = make("article", `review-card ${card.section || ""}`);
+          const top = make("div", "review-card-top");
+          top.append(
+            make("span", "review-card-tag", card.section === "public" ? "Public claim" : "Private observation"),
+            make("span", "review-card-group", card.group || "Review")
+          );
+          const meta = make("div", "review-card-meta");
+          meta.append(
+            make("span", "", `${card.confidence || 0}% confidence`),
+            make("span", "", `${card.source_count || 0} source${card.source_count === 1 ? "" : "s"}`),
+            make("span", "", `${card.project_count || 0} project${card.project_count === 1 ? "" : "s"}`)
+          );
+          const link = make("a", "review-card-link", "Open review note ↗");
+          link.href = card.url || data.review.url || "#";
+          article.append(
+            top,
+            make("div", "review-card-subject", card.subject || "Pending observation"),
+            make("div", "review-card-claim", card.claim || ""),
+            meta,
+            link
+          );
+          list.append(article);
+        });
+      };
+      const openReviewDialog = (section = "all") => {
+        reviewSection = section;
+        byId("review-tabs")?.querySelectorAll(".review-tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.section === reviewSection));
+        renderReviewBrowser();
+        if (!reviewDialog) return;
+        if (typeof reviewDialog.showModal === "function") reviewDialog.showModal();
+        else reviewDialog.setAttribute("open", "");
+      };
+      byId("review-dialog-close")?.addEventListener("click", closeReviewDialog);
+      reviewDialog?.addEventListener("click", (event) => {
+        if (event.target === reviewDialog) closeReviewDialog();
+      });
+      reviewSearch?.addEventListener("input", renderReviewBrowser);
+      [
+        { section: "all", label: `All (${reviewCards.length})` },
+        { section: "public", label: `Public (${data.review.public || 0})` },
+        { section: "private", label: `Private (${data.review.private || 0})` }
+      ].forEach((item) => {
+        const tab = make("button", `review-tab${item.section === "all" ? " active" : ""}`, item.label);
+        tab.type = "button";
+        tab.dataset.section = item.section;
+        tab.addEventListener("click", () => {
+          reviewSection = item.section;
+          byId("review-tabs").querySelectorAll(".review-tab").forEach((candidate) => candidate.classList.toggle("active", candidate === tab));
+          renderReviewBrowser();
+        });
+        byId("review-tabs").append(tab);
+      });
+
       setText("review-number", String(data.review.pending));
-      [{ label: "Questions", value: data.review.questions }, { label: "Public claims", value: data.review.public }, { label: "Private observations", value: data.review.private }].forEach((item) => {
-        const row = make("div", "legend-row"); row.append(make("span", "legend-dot"), make("span", "", item.label), make("span", "legend-value", String(item.value))); byId("review-legend").append(row);
+      [
+        { label: "Questions", value: data.review.questions, section: "questions" },
+        { label: "Public claims", value: data.review.public, section: "public" },
+        { label: "Private observations", value: data.review.private, section: "private" }
+      ].forEach((item) => {
+        const row = make("button", "legend-row");
+        row.type = "button";
+        if (item.section === "questions") {
+          row.setAttribute("aria-label", `Go to ${item.value} open questions`);
+        } else {
+          row.setAttribute("aria-haspopup", "dialog");
+          row.setAttribute("aria-controls", "review-dialog");
+          row.setAttribute("aria-label", `Browse ${item.value} ${item.label.toLowerCase()}`);
+        }
+        row.append(
+          make("span", "legend-dot"),
+          make("span", "", item.label),
+          make("span", "legend-value", String(item.value)),
+          make("span", "legend-open", "View ↗")
+        );
+        row.addEventListener("click", () => {
+          if (item.section === "questions") window.location.hash = "questions";
+          else openReviewDialog(item.section);
+        });
+        byId("review-legend").append(row);
       });
 
       let questionCards = [...((data.questions && data.questions.cards) || [])];
       let questionIndex = 0;
       let questionBusy = false;
-      let questionSuggestion = "";
       const questionAnswer = byId("question-answer");
-      const renderQuestionSuggestion = () => {
-        const hint = byId("question-suggestion-hint");
-        const typed = questionAnswer.value.trim();
-        const canComplete = questionSuggestion && (!typed || questionSuggestion.toLowerCase().startsWith(typed.toLowerCase()));
-        hint.hidden = !canComplete;
-        if (canComplete) {
-          hint.replaceChildren(make("strong", "", "Tab"), document.createTextNode(` to insert: ${questionSuggestion}`));
-        }
-      };
       const renderQuestion = () => {
         const card = questionCards[questionIndex] || null;
         byId("question-card").hidden = !card;
@@ -1441,30 +1697,11 @@
         setText("question-destination", `Saves to ${card.destination}`);
         setText("question-destination-detail", card.destination_detail);
         questionAnswer.value = "";
-        questionAnswer.placeholder = `Example: ${card.placeholder}`;
-        questionSuggestion = card.placeholder || "";
+        questionAnswer.placeholder = "Answer naturally. The brain will evaluate and normalize the meaning before anything is saved.";
         questionAnswer.disabled = !actionEnabled || questionBusy;
-        const choices = byId("question-choices"); choices.replaceChildren();
-        (card.suggestions || []).forEach((suggestion) => {
-          const button = make("button", "question-choice", suggestion.label); button.type = "button";
-          button.disabled = !actionEnabled || questionBusy;
-          button.addEventListener("click", () => {
-            if (questionBusy || !actionEnabled) return;
-            questionSuggestion = suggestion.text;
-            questionAnswer.value = suggestion.text;
-            choices.querySelectorAll(".question-choice").forEach((item) => item.classList.toggle("active", item === button));
-            byId("question-save").disabled = false;
-            renderQuestionSuggestion();
-            questionAnswer.focus();
-          });
-          choices.append(button);
-        });
         setText("question-caption", !actionEnabled
           ? "This static fallback is read-only. Open the root BAT launcher to answer questions privately."
-          : card.scope === "project"
-            ? "Save creates explicit project evidence. Answer later is neutral; Not relevant teaches the question filter."
-            : "Save creates explicit profile evidence. Answer later is neutral; Not relevant teaches the question filter.");
-        renderQuestionSuggestion();
+          : "Your raw response is not stored as memory. A structured LLM evaluation routes only normalized claims to the correct private destination.");
         byId("question-save").disabled = !actionEnabled || questionBusy || !questionAnswer.value.trim();
         byId("question-skip").disabled = questionBusy || questionCards.length < 2;
         byId("question-dismiss").disabled = !actionEnabled || questionBusy;
@@ -1472,17 +1709,6 @@
       };
       questionAnswer.addEventListener("input", () => {
         byId("question-save").disabled = !actionEnabled || questionBusy || !questionAnswer.value.trim();
-        byId("question-choices").querySelectorAll(".question-choice").forEach((item) => item.classList.remove("active"));
-        renderQuestionSuggestion();
-      });
-      questionAnswer.addEventListener("keydown", (event) => {
-        if (event.key !== "Tab" || event.shiftKey || !questionSuggestion) return;
-        const typed = questionAnswer.value;
-        if (typed && !questionSuggestion.toLowerCase().startsWith(typed.toLowerCase())) return;
-        event.preventDefault();
-        questionAnswer.value = questionSuggestion;
-        questionAnswer.setSelectionRange(questionSuggestion.length, questionSuggestion.length);
-        questionAnswer.dispatchEvent(new Event("input", { bubbles: true }));
       });
       byId("question-skip").addEventListener("click", () => {
         if (questionBusy || questionCards.length < 2) return;
@@ -1527,7 +1753,7 @@
         byId("question-dismiss").disabled = true;
         byId("question-undo").disabled = true;
         let restoreAnswer = false;
-        toast("Saving your answer as explicit private evidence…");
+        toast("Evaluating your answer and routing normalized claims…");
         try {
           await postAction(`/api/questions/${encodeURIComponent(card.id)}/answer`, { answer });
           questionCards.splice(questionIndex, 1);
@@ -1537,7 +1763,7 @@
           setText("review-number", String(data.review.pending));
           const legendValues = byId("review-legend").querySelectorAll(".legend-value");
           if (legendValues[0]) legendValues[0].textContent = String(data.review.questions);
-          toast("Answer saved. The question is now resolved.");
+          toast("Answer evaluated. Only normalized private claims were saved.");
         } catch (error) { restoreAnswer = true; toast(error.message); }
         finally {
           questionBusy = false; renderQuestion();

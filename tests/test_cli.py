@@ -48,6 +48,28 @@ def test_question_attribution_command_requires_explicit_ids() -> None:
     assert args.project_id == "project-portfolio"
 
 
+def test_owner_correction_commands_are_explicit() -> None:
+    reclassify = _parser().parse_args(
+        [
+            "review",
+            "reclassify",
+            "obs-project-detail",
+            "--kind",
+            "project_fact",
+            "--reason",
+            "Project-scoped detail.",
+        ]
+    )
+    suppress = _parser().parse_args(
+        ["learning", "suppress", "windows-system-troubleshooting"]
+    )
+
+    assert reclassify.action == "reclassify"
+    assert reclassify.kind == "project_fact"
+    assert suppress.action == "suppress"
+    assert suppress.topic == "windows-system-troubleshooting"
+
+
 def test_forget_project_requires_explicit_confirmation_and_protection() -> None:
     preview = _parser().parse_args(["forget-project", "Angel"])
     confirmed = _parser().parse_args(
@@ -163,3 +185,15 @@ def test_protocol_publish_supports_scheduled_change_detection() -> None:
 
     assert manual.if_changed is False
     assert scheduled.if_changed is True
+
+
+def test_daily_parser_requires_explicit_flags_for_owner_test_run() -> None:
+    default = _parser().parse_args(["daily"])
+    requested_test = _parser().parse_args(
+        ["daily", "--owner-requested", "--test"]
+    )
+
+    assert default.owner_requested is False
+    assert default.test is False
+    assert requested_test.owner_requested is True
+    assert requested_test.test is True

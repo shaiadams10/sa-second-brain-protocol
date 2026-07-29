@@ -17,7 +17,7 @@ from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_r
 from .markdown import slugify
 from .model_runner import TOKEN_USAGE_FIELDS, usage_from_receipt
 from .notifications import obsidian_uri
-from .project_catalog import catalog_groups, project_catalog_health
+from .project_catalog import project_catalog_health
 from .review import build_review_groups, review_summary
 from .scheduler import task_details
 from .security import sanitize_text
@@ -329,7 +329,11 @@ def _summary_visuals(
     groups: list[dict[str, Any]] = []
     evidence = evidence or []
     project_evidence = _evidence_for(evidence, "project_change")
-    session_evidence = _evidence_for(evidence, "session")
+    session_evidence = [
+        item
+        for item in _evidence_for(evidence, "session")
+        if str(item.get("lane")) == "full"
+    ]
     pattern_evidence = _evidence_for(evidence, "pattern")
     items = [str(item) for section in sections for item in section.get("items", [])]
     for item in items:
@@ -784,9 +788,16 @@ def _summary_evidence_cards(
             )
         elif row.get("kind") == "session_digest":
             project_ids = [str(value) for value in payload.get("project_ids") or []]
+            if row.get("project_id") and str(row["project_id"]) not in project_ids:
+                project_ids.append(str(row["project_id"]))
             name = next(
                 (projects[value] for value in project_ids if value in projects),
                 "Unattributed session",
+            )
+            lane = (
+                "full"
+                if project_ids or row.get("project_id")
+                else str(payload.get("analysis_lane") or "profile_only")
             )
             occurred = _parse_datetime(
                 str(payload.get("started_at") or row.get("occurred_at") or "")
@@ -801,10 +812,20 @@ def _summary_evidence_cards(
             source = str(payload.get("source") or "agent").title()
             cards.append(
                 {
+                    "evidence_id": str(row.get("id") or ""),
                     "category": "session",
                     "label": name,
+                    "occurred_at": str(
+                        payload.get("started_at") or row.get("occurred_at") or ""
+                    ),
                     "meta": f"{source} · {time_label}",
                     "detail": session_recap(payload),
+                    "attribution": (
+                        "Project-linked session"
+                        if lane == "full" and project_ids
+                        else "Profile-only session"
+                    ),
+                    "lane": lane,
                     "signals": [],
                     "url": obsidian_uri(vault, _project_note(vault, name)),
                 }
@@ -836,7 +857,11 @@ def _summary_evidence_cards(
     unique: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for card in cards:
-        key = (str(card["category"]), str(card["label"]), str(card["meta"]))
+        key = (
+            str(card["category"]),
+            str(card.get("evidence_id") or card["label"]),
+            "" if card.get("evidence_id") else str(card["meta"]),
+        )
         if key not in seen:
             unique.append(card)
             seen.add(key)
@@ -844,14 +869,37 @@ def _summary_evidence_cards(
 
 
 def _attach_section_evidence(
-    sections: list[dict[str, Any]], evidence: list[dict[str, Any]]
+    sections: list[dict[str, Any]],
+    evidence: list[dict[str, Any]],
+    *,
+    period: str | None = None,
 ) -> None:
+    session_evidence = _evidence_for(evidence, "session")
+    linked_sessions = [
+        item for item in session_evidence if str(item.get("lane")) == "full"
+    ]
+    profile_only_count = len(session_evidence) - len(linked_sessions)
+    historical_profile_only = len(
+        [
+            item
+            for item in session_evidence
+            if str(item.get("lane")) != "full"
+            and period
+            and str(item.get("occurred_at") or "")[:10] != period
+        ]
+    )
     for section in sections:
         title = str(section.get("title") or "").casefold()
         if "session" in title:
-            selected = _evidence_for(evidence, "session")
+            selected = linked_sessions
+            section["session_coverage"] = {
+                "reviewed": len(session_evidence),
+                "linked": len(linked_sessions),
+                "profile_only": profile_only_count,
+                "historical_profile_only": historical_profile_only,
+            }
         elif "project" in title or "change" in title or "activity" in title:
-            selected = _evidence_for(evidence, "project_change", "session")
+            selected = _evidence_for(evidence, "project_change") + linked_sessions
         elif "pattern" in title or "learn" in title:
             selected = _evidence_for(evidence, "pattern")
         elif "steward" in title or "system" in title:
@@ -870,14 +918,32 @@ def _apply_canonical_evidence_details(
         if "session" in str(section.get("title") or "").casefold()
         for item in section.get("items", [])
     ]
+    used_items: set[int] = set()
     for card in evidence:
         if card.get("category") != "session":
             continue
         label = str(card.get("label") or "")
-        match = next(
-            (item for item in session_items if item.casefold().startswith(label.casefold())),
+        occurred_date = str(card.get("occurred_at") or "")[:10]
+        time_match = re.search(r"\b\d{2}:\d{2}\b", str(card.get("meta") or ""))
+        occurred_time = time_match.group(0) if time_match else ""
+        match_index = next(
+            (
+                index
+                for index, item in enumerate(session_items)
+                if index not in used_items
+                and label.casefold() in item.casefold()
+                and (not occurred_time or occurred_time in item)
+                and (
+                    not occurred_date
+                    or f"backfill from {occurred_date}" in item
+                    or "backfill from" not in item
+                )
+            ),
             None,
         )
+        match = session_items[match_index] if match_index is not None else None
+        if match_index is not None:
+            used_items.add(match_index)
         if match and "—" in match:
             card["detail"] = sanitize_text(match.split("—", 1)[1].strip(), max_chars=800)
 
@@ -902,7 +968,7 @@ def _summary_entry(
         vault, store, evidence_rows, kind=kind
     )
     _apply_canonical_evidence_details(evidence, sections)
-    _attach_section_evidence(sections, evidence)
+    _attach_section_evidence(sections, evidence, period=path.stem)
 
     synthesis = next(
         (
@@ -940,6 +1006,11 @@ def _summary_entry(
         "sections": sections,
         "visuals": _summary_visuals(sections, evidence=evidence),
         "evidence": evidence,
+        "evidence_ids": [
+            str(row.get("id"))
+            for row in evidence_rows
+            if row.get("id")
+        ],
         "usage": usage or {"available": False, "iterations": []},
         "url": obsidian_uri(vault, path),
     }
@@ -1472,154 +1543,6 @@ def _question_is_owner_worthy(
     return False
 
 
-def _question_suggestions(
-    group_key: str,
-    *,
-    subject: str,
-    question: str,
-    project_names: list[str],
-) -> list[dict[str, str]]:
-    """Create editable, question-specific answer starters."""
-
-    project = project_names[0] if len(project_names) == 1 else "[project name]"
-    text = f"{subject} {question}".casefold()
-    if group_key == "questions-profile-privacy":
-        return [
-            {
-                "label": "Career-safe",
-                "text": f"Safe for career use: [verified capability]. Supporting project: {project}. Date or period: [month/year]. Keep [private detail] private.",
-            },
-            {
-                "label": "Private only",
-                "text": "Private only. Remember the corrected fact as: [correction]. Do not use it in resumes, LinkedIn, or public bios.",
-            },
-            {
-                "label": "Public-safe",
-                "text": f"Safe to share publicly: [approved wording]. Supporting project: {project}. Remove or generalize [sensitive detail].",
-            },
-        ]
-    if "boundar" in text or "belong" in text or "separate" in text:
-        return [
-            {
-                "label": "Map workstreams",
-                "text": "[Workstream A] belongs to [canonical project]. [Workstream B] should be tracked separately as [project name] because [reason].",
-            },
-            {
-                "label": "Keep together",
-                "text": f"Keep these workstreams together under {project}. They are parts of the same project because [reason].",
-            },
-        ]
-    if any(
-        term in text for term in ("contribution", "direct", "implement", "components")
-    ):
-        return [
-            {
-                "label": "My contribution",
-                "text": f"For {project}, I directed [features/decisions] and implemented [components]. [Person/tool] handled [other parts].",
-            },
-            {
-                "label": "Collaboration",
-                "text": f"{project} was collaborative. My responsibility was [scope]; collaborators or generated code covered [scope].",
-            },
-            {
-                "label": "Not my work",
-                "text": f"{project} is a third-party reference or experiment. Do not credit me as the original author; only retain [specific adaptation, if any].",
-            },
-        ]
-    if group_key == "questions-attribution":
-        return [
-            {
-                "label": "First-party",
-                "text": f"{project} is first-party work. I directed [scope] and implemented [parts]. Public attribution is [allowed/not allowed].",
-            },
-            {
-                "label": "Modified fork",
-                "text": f"{project} is a modified fork of [upstream]. Credit me only for [changes]; retain upstream attribution for the rest.",
-            },
-            {
-                "label": "Third-party",
-                "text": f"{project} is a third-party reference. Do not treat it as evidence of my authorship or original work.",
-            },
-        ]
-    if group_key == "questions-project-state" and any(
-        term in text for term in ("portfolio-ready", "shipped", "experimental")
-    ):
-        return [
-            {
-                "label": "Classify demos",
-                "text": f"For {project}: shipped demos: [names]. Portfolio-ready demos: [names]. Experimental demos: [names]. Archived demos: [names].",
-            },
-            {
-                "label": "Portfolio-ready only",
-                "text": f"For {project}, the demos ready to include are [names] because [reason]. Keep [names] experimental, and archive [names].",
-            },
-            {
-                "label": "Needs verification",
-                "text": f"For {project}, no demo classification is final yet. Verify [demos/checks], then classify each as shipped, portfolio-ready, experimental, or archived.",
-            },
-        ]
-    if group_key == "questions-project-state" and any(
-        term in text for term in ("architecture", "milestone", "phase")
-    ):
-        return [
-            {
-                "label": "Describe current state",
-                "text": f"{project} phase: [phase]. Canonical architecture: [short description]. Production status: [local/deployed/prototype]. Next milestone: [milestone].",
-            },
-            {
-                "label": "Still a prototype",
-                "text": f"{project} is still a prototype. Working now: [parts]. Architecture still changing: [parts]. The next milestone is [milestone].",
-            },
-            {
-                "label": "Production-ready",
-                "text": f"{project} is production-ready as of [month/year]. Canonical architecture: [description]. Next milestone: [milestone].",
-            },
-        ]
-    if group_key == "questions-project-state" and "timeline" in text:
-        return [
-            {
-                "label": "Add timeline",
-                "text": f"{project} started around [month/year]. Major milestone: [event/date]. Current status: [status]. Last meaningful work: [month/year].",
-            },
-            {
-                "label": "Dates uncertain",
-                "text": f"{project} is [current status]. I do not remember the exact dates; use repository evidence to reconstruct the timeline.",
-            },
-        ]
-    if group_key == "questions-project-state" and "validation" in text:
-        return [
-            {
-                "label": "Validated",
-                "text": f"{project} was validated in [environment] on [month/year]. Verified: [checks]. Not yet verified: [remaining checks].",
-            },
-            {
-                "label": "Not validated",
-                "text": f"{project} has not been fully validated. Last known working state: [state]. Required verification: [checks].",
-            },
-        ]
-    if group_key == "questions-project-state":
-        return [
-            {
-                "label": "Working locally",
-                "text": f"{project} is working locally as of [month/year]. Verified: [what works]. Still incomplete: [remaining work].",
-            },
-            {
-                "label": "Deployed",
-                "text": f"{project} is deployed as of [month/year] at [private/public location]. Verified: [checks]. Current limitation: [limitation].",
-            },
-            {
-                "label": "Prototype / paused",
-                "text": f"{project} is currently a [prototype/paused/archived] project. Last meaningful state: [state] in [month/year].",
-            },
-        ]
-    return [
-        {
-            "label": "Answer with context",
-            "text": f"For {project}: [direct answer]. Evidence or date: [context]. Anything still uncertain: [unknowns].",
-        }
-    ]
-
-
 def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
     pending = store.observations("pending")
     groups = build_review_groups(pending)
@@ -1709,12 +1632,6 @@ def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
                 project_stamp = "Professional profile"
                 destination = "Professional profile"
                 destination_detail = "This answer supports verified profile facts; it does not become a personality trait."
-            suggestions = _question_suggestions(
-                group["key"],
-                subject=subject,
-                question=question,
-                project_names=project_names,
-            )
             category_counts[group["title"]] += 1
             cards.append(
                 {
@@ -1729,8 +1646,6 @@ def _question_deck(store: StateStore, vault: Path) -> dict[str, Any]:
                     "project_stamp": project_stamp,
                     "destination": destination,
                     "destination_detail": destination_detail,
-                    "suggestions": suggestions,
-                    "placeholder": suggestions[0]["text"],
                     "url": obsidian_uri(vault, group_path),
                 }
             )
@@ -2038,13 +1953,38 @@ def _git_summary(vault: Path) -> dict[str, Any]:
     )
     if result.returncode != 0:
         return {"state": "unknown", "detail": "Git status unavailable"}
-    changes = len([line for line in result.stdout.splitlines() if line.strip()])
-    if changes:
+    remote = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=vault,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if remote.returncode != 0 or not remote.stdout.strip():
+        return {"state": "attention", "detail": "Private Git remote is not configured"}
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    tracked = [line for line in lines if not line.startswith("??")]
+    untracked = [line for line in lines if line.startswith("??")]
+    if tracked:
         return {
             "state": "attention",
-            "detail": f"{changes} local edit{'s' if changes != 1 else ''}",
+            "detail": (
+                f"{len(tracked)} tracked edit{'s are' if len(tracked) != 1 else ' is'} "
+                "awaiting the next scoped, privacy-scanned private snapshot"
+            ),
         }
-    return {"state": "good", "detail": "Working tree clean"}
+    if untracked:
+        return {
+            "state": "neutral",
+            "detail": (
+                "Private remote connected; "
+                f"{len(untracked)} untracked owner file{'s remain' if len(untracked) != 1 else ' remains'} "
+                "local until a privacy-scanned snapshot includes them"
+            ),
+        }
+    return {"state": "good", "detail": "Private remote connected; working tree clean"}
 
 
 def _cached_search_health(paths: RuntimePaths, store: StateStore) -> dict[str, Any]:
@@ -2156,6 +2096,214 @@ def _system_status(
     }
 
 
+def _learning_snapshot(
+    store: StateStore,
+    daily: dict[str, Any],
+) -> dict[str, Any]:
+    period = str(daily.get("period") or "")
+    evidence_ids = {
+        str(value) for value in daily.get("evidence_ids") or [] if value
+    }
+    visible_topics = store.visible_learning_topics()
+    personal_topic_keys = {
+        str(topic.get("topic_key") or "")
+        for topic in visible_topics
+        if int(topic.get("context_count") or 0) >= 2
+        or str(topic.get("current_state") or "") == "verified"
+    }
+    evidence_cache: dict[str, dict[str, Any]] = {}
+
+    def observed_date(refs: list[str]) -> str:
+        missing = [ref for ref in refs if ref not in evidence_cache]
+        for row in store.evidence_by_ids(missing):
+            evidence_cache[str(row["id"])] = row
+        dates = [
+            str(
+                evidence_cache[ref].get("occurred_at")
+                or evidence_cache[ref].get("created_at")
+                or ""
+            )[:10]
+            for ref in refs
+            if ref in evidence_cache
+        ]
+        return max((value for value in dates if value), default="")
+
+    candidates: list[dict[str, str]] = []
+    today_evidence_ids: set[str] = set()
+    historical_count = 0
+    historical_dates: set[str] = set()
+    for event in store.learning_signal_events():
+        refs = [str(value) for value in event.get("evidence_refs") or []]
+        if not evidence_ids or not (set(refs) & evidence_ids):
+            continue
+        signal_type = str(event.get("signal_type") or "")
+        if signal_type in {"learning_edge", "counterevidence"}:
+            continue
+        occurred = observed_date(refs) or str(event.get("occurred_at") or "")[:10]
+        if occurred != period:
+            historical_count += 1
+            if occurred:
+                historical_dates.add(occurred)
+            continue
+        if str(event.get("topic_key") or "") not in personal_topic_keys:
+            continue
+        label = {
+            "demonstrated_understanding": "Demonstrated understanding",
+            "applied_learning": "Applied learning",
+            "architectural_judgment": "Architectural judgment",
+            "operational_capability": "Operational capability",
+            "validated_outcome": "Validated capability",
+        }.get(signal_type, "Learning movement")
+        candidates.append(
+            {
+                "kind": label,
+                "tone": "capability"
+                if signal_type in {"operational_capability", "validated_outcome"}
+                else "learning",
+                "detail": _clean_markdown(
+                    str(event.get("claim") or ""), max_chars=700
+                ),
+                "observed_at": occurred,
+            }
+        )
+        today_evidence_ids.update(refs)
+
+    personal_kinds = {
+        "explicit_fact",
+        "goal",
+        "personality",
+        "preference",
+        "voice_style",
+        "work_style",
+    }
+    for observation in store.observations():
+        if observation.get("status") not in {"approved", "promoted"}:
+            continue
+        if str(observation.get("kind") or "") not in personal_kinds:
+            continue
+        payload = (
+            observation.get("payload")
+            if isinstance(observation.get("payload"), dict)
+            else {}
+        )
+        if payload.get("scope") == "project":
+            continue
+        refs = [str(value) for value in observation.get("evidence_refs") or []]
+        if not evidence_ids or not (set(refs) & evidence_ids):
+            continue
+        occurred = observed_date(refs)
+        if occurred != period:
+            historical_count += 1
+            if occurred:
+                historical_dates.add(occurred)
+            continue
+        candidates.append(
+            {
+                "kind": "About the user",
+                "tone": "person",
+                "detail": _clean_markdown(
+                    str(observation.get("claim") or ""), max_chars=700
+                ),
+                "observed_at": occurred,
+            }
+        )
+        today_evidence_ids.update(refs)
+
+    learned_items: list[dict[str, str]] = []
+    seen_details: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate.get("detail") or "").casefold()
+        if not key or key in seen_details:
+            continue
+        learned_items.append(candidate)
+        seen_details.add(key)
+
+    topics = []
+    eligible_topics = [
+        topic
+        for topic in visible_topics
+        if str(topic.get("current_state") or "exploring") != "exploring"
+        and str(topic.get("topic_key") or "") in personal_topic_keys
+    ]
+    for topic in sorted(
+        eligible_topics,
+        key=lambda item: str(item.get("last_seen") or ""),
+        reverse=True,
+    )[:6]:
+        topics.append(
+            {
+                "label": _clean_markdown(
+                    str(topic.get("label") or topic.get("topic_key") or "Learning"),
+                    max_chars=120,
+                ),
+                "state": str(topic.get("current_state") or "exploring").replace(
+                    "_", " "
+                ),
+                "assessment": _clean_markdown(
+                    str(topic.get("assessment") or ""), max_chars=420
+                ),
+                "sessions": int(topic.get("session_count") or 0),
+                "projects": int(topic.get("project_count") or 0),
+                "last_seen": topic.get("last_seen"),
+            }
+        )
+    return {
+        "today": learned_items[:8],
+        "historical_count": historical_count,
+        "historical_dates": sorted(historical_dates),
+        "evidence_ids": sorted(today_evidence_ids),
+        "topics": topics,
+        "quiet": not learned_items,
+    }
+
+
+def _review_browser(
+    store: StateStore,
+    vault: Path,
+    pending: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build an owner-only, sanitized view of claims awaiting judgment."""
+
+    display_name = vault.name.removesuffix(" Second Brain").strip() or "Second Brain"
+    first_name = display_name.split()[0]
+    cards: list[dict[str, Any]] = []
+    for group in build_review_groups(pending):
+        if group["section"] not in {"public", "private"}:
+            continue
+        group_note = vault / "Inbox" / "Review" / "Groups" / group["filename"]
+        if not group_note.is_file():
+            group_note = vault / "Inbox" / "Review" / "Index.md"
+        for item in group["items"]:
+            claim = _clean_markdown(str(item.get("claim") or ""), max_chars=520)
+            if not claim:
+                continue
+            cards.append(
+                {
+                    "section": group["section"],
+                    "group": group["title"],
+                    "kind": KIND_LABELS.get(
+                        str(item.get("kind") or ""),
+                        str(item.get("kind") or "Observation")
+                        .replace("_", " ")
+                        .title(),
+                    ),
+                    "subject": _clean_markdown(
+                        str(item.get("subject") or "Pending observation"),
+                        max_chars=120,
+                    ),
+                    "claim": personalize_knowledge_text(claim, first_name),
+                    "confidence": round(float(item.get("confidence") or 0) * 100),
+                    "source_count": int(
+                        item.get("source_count")
+                        or len(item.get("evidence_refs") or [])
+                    ),
+                    "project_count": int(item.get("project_count") or 0),
+                    "url": obsidian_uri(vault, group_note),
+                }
+            )
+    return cards
+
+
 def build_snapshot(
     paths: RuntimePaths,
     vault: Path,
@@ -2216,18 +2364,7 @@ def build_snapshot(
     status = _system_status(store, schedule, now=now)
 
     runtime_projects = store.present_projects()
-    catalog_projects, _catalog_collections, _catalog_folders = catalog_groups(
-        runtime_projects
-    )
     catalog_health = project_catalog_health(vault, runtime_projects)
-    present_projects = len(catalog_projects)
-    first_party_projects = len(
-        [
-            project
-            for project in catalog_projects
-            if project.get("classification") == "first-party"
-        ]
-    )
 
     latest_review = _latest_note(vault / "Inbox" / "Review", "Review-*.md")
     dashboard_links = {
@@ -2251,22 +2388,35 @@ def build_snapshot(
     cached_search = _cached_search_health(paths, store)
     git = _git_summary(vault)
     schedule_state = str(schedule.get("state") or "unknown")
-    scheduler_failed = (
-        status.get("tone") == "danger"
-        and "run failed" in str(status.get("label", "")).casefold()
-    )
     scheduler_good = (
         bool(schedule.get("installed"))
         and schedule_state.casefold() in {"ready", "running"}
-        and not scheduler_failed
     )
+    next_scheduled = _parse_datetime(schedule.get("next_run"))
     scheduler_detail = (
         "Installed; first run pending"
         if not schedule.get("last_run") and scheduler_good
         else schedule_state.title()
     )
-    if scheduler_failed:
-        scheduler_detail = status["detail"]
+    if scheduler_good and next_scheduled:
+        next_label = next_scheduled.astimezone(now.tzinfo).strftime("%b %d, %I:%M %p")
+        scheduler_detail = f"{schedule_state.title()}; next {next_label.replace(' 0', ' ')}"
+    latest_pipeline = next(iter(store.pipeline_runs(limit=1)), None)
+    if latest_pipeline and latest_pipeline.get("status") == "failed":
+        daily_outcome = {
+            "state": "attention",
+            "detail": status["detail"],
+        }
+    elif latest_pipeline and latest_pipeline.get("status") == "completed":
+        daily_outcome = {
+            "state": "good",
+            "detail": "Latest pipeline completed and published",
+        }
+    else:
+        daily_outcome = {
+            "state": "neutral",
+            "detail": "No completed pipeline receipt yet",
+        }
     checks = [
         {"label": "Vault", "state": "good", "detail": "Canonical notes available"},
         {
@@ -2274,6 +2424,7 @@ def build_snapshot(
             "state": "good" if scheduler_good else "attention",
             "detail": scheduler_detail,
         },
+        {"label": "Last Daily outcome", **daily_outcome},
         {"label": "Search", **cached_search},
         {"label": "Private Git", **git},
         {
@@ -2320,6 +2471,7 @@ def build_snapshot(
             "weekly": weekly,
             "pending_evidence": store.evidence_count(status="new"),
         },
+        "learning": _learning_snapshot(store, daily),
         "summaries": {
             "daily": daily_history,
             "weekly": weekly_history,
@@ -2328,9 +2480,9 @@ def build_snapshot(
         },
         "metrics": [
             {
-                "label": "Projects mapped",
-                "value": present_projects,
-                "detail": f"{first_party_projects} first-party",
+                "label": "Learning topics",
+                "value": len(store.learning_topics()),
+                "detail": "Understanding tracked over time",
             },
             {
                 "label": "Skills evidenced",
@@ -2369,6 +2521,7 @@ def build_snapshot(
             "questions": reviews["needs_answers"],
             "public": reviews["public_claims"],
             "private": reviews["private_review"],
+            "cards": _review_browser(store, vault, pending),
             "groups": [
                 {
                     "title": group["title"],

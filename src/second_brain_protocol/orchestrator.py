@@ -41,6 +41,7 @@ from .notifications import notify
 from .profile import create_interview, import_linkedin_export, interview_status
 from .project_catalog import publish_project_catalog
 from .project_rebuild import rebuild_project_subsystem
+from .question_actions import answer_question
 from .question_followup import pending_question_context
 from .publisher import (
     promote_approved_observation,
@@ -706,7 +707,9 @@ def _synthesize(
     defaults: dict[str, Any],
     evidence_override: list[dict[str, Any]] | None = None,
     summary_period: str | None = None,
+    model_kind: str | None = None,
 ) -> dict[str, Any]:
+    model_kind = model_kind or kind
     if evidence_override is None:
         compact_session_evidence(store)
     if evidence_override is not None:
@@ -781,11 +784,12 @@ def _synthesize(
         )
         if store.get_meta("weekly-evidence-fingerprint") == weekly_fingerprint:
             return {"status": "empty", "evidence_count": 0, "model_called": False, "reason": "weekly evidence unchanged"}
-    max_calls = int(defaults["limits"][f"max_model_calls_{kind}"])
+    max_calls = int(defaults["limits"][f"max_model_calls_{model_kind}"])
     remaining = list(evidence)
     processed: list[dict[str, Any]] = []
     outputs: list[dict[str, Any]] = []
     run_ids: list[str] = []
+    run_receipts: dict[str, tuple[Path, int, dict[str, Any] | None]] = {}
     for _batch_number in range(max_calls):
         selected = select_evidence_for_packet(
             remaining,
@@ -796,13 +800,17 @@ def _synthesize(
         )
         if not selected:
             break
-        run_id = store.start_run(kind, _role(defaults, kind).name, _role(defaults, kind).reasoning)
+        run_id = store.start_run(
+            kind,
+            _role(defaults, model_kind).name,
+            _role(defaults, model_kind).reasoning,
+        )
         run_ids.append(run_id)
         try:
             output, receipt = run_model(
                 paths=paths,
-                role=_role(defaults, kind),
-                prompt_name=f"{kind}.md",
+                role=_role(defaults, model_kind),
+                prompt_name=f"{model_kind}.md",
                 evidence=selected,
                 run_id=run_id,
                 max_packet_chars=int(defaults["limits"]["max_packet_chars"]),
@@ -836,12 +844,14 @@ def _synthesize(
             processed.extend(selected)
             selected_ids = {item["id"] for item in selected}
             remaining = [item for item in remaining if item["id"] not in selected_ids]
+            usage = usage_from_receipt(receipt)
+            run_receipts[run_id] = (receipt, len(selected), usage)
             store.finish_run(
                 run_id,
-                "validated",
+                "awaiting_publication",
                 evidence_count=len(selected),
                 receipt_path=str(receipt),
-                usage=usage_from_receipt(receipt),
+                usage=usage,
             )
         except Exception as error:
             store.finish_run(run_id, "failed", evidence_count=len(selected), error=str(error))
@@ -946,15 +956,28 @@ def _synthesize(
             "check the model receipt and retry without advancing checkpoints."
         )
     processed_ids = [item["id"] for item in processed]
-    published = publish_model_output(
-        vault=vault_root(),
-        store=store,
-        output=merged,
-        run_kind=kind,
-        evidence_ids=processed_ids,
-        question_ids=[item["id"] for item in pending_questions],
-        summary_period=summary_period,
-    )
+    try:
+        published = publish_model_output(
+            vault=vault_root(),
+            store=store,
+            output=merged,
+            run_kind=kind,
+            evidence_ids=processed_ids,
+            question_ids=[item["id"] for item in pending_questions],
+            summary_period=summary_period,
+        )
+    except Exception as error:
+        for run_id in run_ids:
+            receipt, evidence_count, usage = run_receipts[run_id]
+            store.finish_run(
+                run_id,
+                "failed",
+                evidence_count=evidence_count,
+                receipt_path=str(receipt),
+                error=f"Publication failed: {type(error).__name__}: {error}",
+                usage=usage,
+            )
+        raise
     if kind in {"daily", "weekly"}:
         store.replace_summary_runs(
             kind,
@@ -1002,8 +1025,22 @@ def _bootstrap_synthesis_step(
 
 
 def incremental(
-    kind: str, *, trigger: str = "manual", summary_period: str | None = None
+    kind: str,
+    *,
+    trigger: str = "manual",
+    summary_period: str | None = None,
+    manual_authorized: bool = False,
+    publish_git: bool = True,
 ) -> dict[str, Any]:
+    if kind == "daily" and trigger != "scheduled" and not manual_authorized:
+        raise RuntimeError(
+            "Daily runs at 10:30 PM by default. A manual Daily requires one explicit "
+            "owner request and the --owner-requested authorization."
+        )
+    if not publish_git and (kind != "daily" or trigger == "scheduled" or not manual_authorized):
+        raise RuntimeError(
+            "Local test publication is available only for an explicitly owner-requested manual Daily."
+        )
     paths, config, defaults, store = context()
     if store.bootstrap_state()["state"] != "completed":
         raise RuntimeError("Complete and approve bootstrap before incremental runs.")
@@ -1016,8 +1053,12 @@ def incremental(
 
     try:
         with single_instance(paths.locks / "pipeline.lock"):
-            stage("snapshot_manual_notes")
-            snapshot_manual_markdown(vault_root())
+            previous_projects = store.present_projects()
+            if publish_git:
+                stage("snapshot_manual_notes")
+                snapshot_manual_markdown(vault_root())
+            else:
+                stage("local_test_no_git")
             stage("collect_projects")
             project_result = collect_projects(
                 store,
@@ -1029,8 +1070,27 @@ def incremental(
             )
             stage("publish_project_catalog")
             publish_project_catalog(vault_root(), project_result["projects"])
+            stage("reconcile_project_paths")
+            current_projects = [
+                project
+                for project in store.present_projects()
+                if project.get("classification") not in {"collection", "duplicate"}
+                and project.get("local_path")
+            ]
+            register_current_project_paths(
+                store,
+                current_projects,
+                previous_projects=previous_projects,
+            )
+            seed_project_paths_from_backups(
+                store,
+                paths.runs / "backups",
+                current_projects,
+            )
             stage("collect_sessions")
             collect_sessions(store, config)
+            stage("reconcile_sessions")
+            reconcile_existing_session_attribution(store)
             stage("update_code_graphs")
             _update_graphs(
                 store,
@@ -1055,25 +1115,42 @@ def incremental(
                     vault=vault_root(),
                 )
                 store.finish_pipeline_run(pipeline_run_id, "completed")
-                return result
+                return {
+                    **result,
+                    "trigger": trigger,
+                    "publication": "private-git" if publish_git else "local-test",
+                    "git_commit_created": False,
+                    "git_push_attempted": False,
+                }
             stage("reindex")
             reindex(paths, vault_root())
-            stage("commit")
-            commit_if_changed(
-                vault_root(), f"Second brain {kind} update {date.today().isoformat()}"
-            )
-            stage("push")
-            safe_push_private(vault_root())
+            git_commit_created = False
+            if publish_git:
+                stage("commit")
+                git_commit_created = commit_if_changed(
+                    vault_root(), f"Second brain {kind} update {date.today().isoformat()}"
+                )
+                stage("push")
+                safe_push_private(vault_root())
             review = Path(result["review_path"]) if result.get("review_path") else None
             stage("notify")
             notify(
-                "Second brain updated",
-                f"{result.get('promoted', 0)} promoted, {result.get('pending', 0)} need review",
+                "Second brain test updated" if not publish_git else "Second brain updated",
+                (
+                    f"{result.get('promoted', 0)} promoted, "
+                    f"{result.get('pending', 0)} need review"
+                ),
                 vault=vault_root(),
                 note=review,
             )
             store.finish_pipeline_run(pipeline_run_id, "completed")
-            return result
+            return {
+                **result,
+                "trigger": trigger,
+                "publication": "private-git" if publish_git else "local-test",
+                "git_commit_created": git_commit_created,
+                "git_push_attempted": bool(publish_git),
+            }
     except Exception as error:
         store.finish_pipeline_run(
             pipeline_run_id,
@@ -1164,7 +1241,14 @@ def refresh_project(identifier: str) -> dict[str, Any]:
         evidence = [item for item in store.evidence(status="new") if item.get("project_id") == project["id"]]
         if not evidence:
             return {"status": "empty", "project_id": project["id"], "model_called": False}
-        result = _synthesize("daily", store=store, paths=paths, defaults=defaults, evidence_override=evidence)
+        result = _synthesize(
+            f"project-refresh:{project['id']}",
+            store=store,
+            paths=paths,
+            defaults=defaults,
+            evidence_override=evidence,
+            model_kind="daily",
+        )
         reindex(paths, vault_root())
         commit_if_changed(vault_root(), f"Refresh second-brain project {project['name']}")
         safe_push_private(vault_root())
@@ -1286,19 +1370,13 @@ def decide_review(observation_id: str, decision: str, *, reason: str | None = No
     if decision == "resolved":
         if not reason:
             raise ValueError("A resolution answer is required")
-        matches = [item for item in store.observations("pending") if item["id"] == observation_id]
-        if not matches:
-            raise KeyError(observation_id)
-        item = matches[0]
-        store.add_evidence(
-            source_type="interview",
-            source_ref=f"review-resolution:{observation_id}",
-            kind="explicit_profile_answer",
-            payload={"question": item["claim"], "answer": reason, "explicit": True},
+        return answer_question(
+            vault_root(),
+            store,
+            observation_id,
+            reason,
+            paths=paths,
         )
-        store.decide_observation(observation_id, "resolved", reason)
-        _refresh_review_artifacts(store)
-        return {"id": observation_id, "status": "resolved", "answer_saved": True}
     raise ValueError(decision)
 
 

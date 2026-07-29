@@ -81,10 +81,10 @@ def test_public_export_preserves_full_author_name_from_shorter_redaction(tmp_pat
     assert "the user Adams" not in exported
 
 
-def test_scheduler_is_interactive_missed_run_safe_and_single_instance() -> None:
+def test_scheduler_is_interactive_exact_time_and_single_instance() -> None:
     xml = task_xml(task_name="Personal Brain", script_path=Path("C:/safe/scheduled-run.ps1"), username="DOMAIN\\user")
     assert "InteractiveToken" in xml
-    assert "StartWhenAvailable>true" in xml
+    assert "StartWhenAvailable>false" in xml
     assert "MultipleInstancesPolicy>IgnoreNew" in xml
     assert "22:30:00" in xml
 

@@ -108,3 +108,36 @@ def test_codex_git_header_recovers_moved_path_and_rejects_conflicts(
     assert moved.resolver == "session_git_identity"
     assert conflict.status == "ambiguous"
     assert conflict.project_id is None
+
+
+def test_unique_extinct_workspace_leaf_recovers_reorganized_project(
+    tmp_path: Path,
+) -> None:
+    current = tmp_path / "Projects" / "Collection" / "Portfolio"
+    current.mkdir(parents=True)
+    old = tmp_path / "Old Projects" / "Portfolio"
+    resolver = ProjectSessionResolver(
+        [_project("project-portfolio", current)],
+        [],
+    )
+
+    resolution = resolver.resolve(old)
+
+    assert resolution.status == "matched"
+    assert resolution.project_id == "project-portfolio"
+    assert resolution.resolver == "unique_extinct_workspace_leaf"
+
+
+def test_existing_duplicate_workspace_is_not_recovered_by_leaf_name(
+    tmp_path: Path,
+) -> None:
+    current = tmp_path / "Projects" / "Portfolio"
+    duplicate = tmp_path / "Archive" / "Portfolio"
+    current.mkdir(parents=True)
+    duplicate.mkdir(parents=True)
+    resolver = ProjectSessionResolver(
+        [_project("project-portfolio", current)],
+        [],
+    )
+
+    assert resolver.resolve(duplicate).status == "unmatched"

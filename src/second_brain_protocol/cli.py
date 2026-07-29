@@ -37,8 +37,13 @@ from .orchestrator import (
 )
 from .profile import QUESTIONS, answer_interview, create_interview, interview_status
 from .project_forgetting import forget_projects
-from .publisher import write_bootstrap_review_artifacts, write_review_artifacts
+from .publisher import (
+    refresh_learning_tracker,
+    write_bootstrap_review_artifacts,
+    write_review_artifacts,
+)
 from .question_actions import (
+    answer_question,
     attribute_question,
     dismiss_question,
     undo_last_question_dismissal,
@@ -80,7 +85,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     boot.add_argument("--approve", action="store_true")
     boot.add_argument("--refresh-evidence", action="store_true")
-    sub.add_parser("daily")
+    daily = sub.add_parser("daily")
+    daily.add_argument(
+        "--owner-requested",
+        action="store_true",
+        help="Authorize this one manual Daily because the vault owner explicitly requested it.",
+    )
+    daily.add_argument(
+        "--test",
+        action="store_true",
+        help="Publish the Daily locally without snapshotting, committing, or pushing Git.",
+    )
     sub.add_parser("weekly")
     sub.add_parser("scheduled")
     refresh = sub.add_parser("refresh-project")
@@ -106,6 +121,10 @@ def _parser() -> argparse.ArgumentParser:
     reject = review_sub.add_parser("reject")
     reject.add_argument("id")
     reject.add_argument("--reason", required=True)
+    reclassify = review_sub.add_parser("reclassify")
+    reclassify.add_argument("id")
+    reclassify.add_argument("--kind", required=True)
+    reclassify.add_argument("--reason", required=True)
     dismiss = review_sub.add_parser("dismiss")
     dismiss.add_argument("id")
     review_sub.add_parser("undo-dismiss")
@@ -156,6 +175,10 @@ def _parser() -> argparse.ArgumentParser:
     remember_skill.add_argument("claim")
     remember_skill.add_argument("--evidence", action="append", default=[])
     remember_skill.add_argument("--successful-implementation", action="store_true")
+    learning = sub.add_parser("learning")
+    learning_sub = learning.add_subparsers(dest="action", required=True)
+    learning_suppress = learning_sub.add_parser("suppress")
+    learning_suppress.add_argument("topic")
     writer = sub.add_parser("write-as-me")
     writer.add_argument("request")
     career = sub.add_parser("career")
@@ -282,8 +305,16 @@ def main(argv: list[str] | None = None) -> int:
                 _json(refresh_bootstrap_evidence())
             else:
                 _json(bootstrap(linkedin_export=args.linkedin_export))
-        elif args.command in {"daily", "weekly"}:
-            _json(incremental(args.command))
+        elif args.command == "daily":
+            _json(
+                incremental(
+                    "daily",
+                    manual_authorized=args.owner_requested,
+                    publish_git=not args.test,
+                )
+            )
+        elif args.command == "weekly":
+            _json(incremental("weekly"))
         elif args.command == "scheduled":
             _json(scheduled())
         elif args.command == "refresh-project":
@@ -336,6 +367,17 @@ def main(argv: list[str] | None = None) -> int:
             reindex(paths, vault_root())
             build_dashboard(paths, vault_root())
             _json(result)
+        elif args.command == "learning":
+            paths, _config, _defaults, store = _common()
+            result = store.suppress_learning_topic_until_new(args.topic)
+            result["path"] = str(refresh_learning_tracker(vault_root(), store))
+            build_dashboard(paths, vault_root())
+            try:
+                reindex(paths, vault_root())
+                result["search_refresh"] = "completed"
+            except Exception as error:
+                result["search_refresh"] = f"deferred: {type(error).__name__}"
+            _json(result)
         elif args.command == "review":
             paths, _config, _defaults, store = _common()
             pending = store.observations("pending")
@@ -358,8 +400,35 @@ def main(argv: list[str] | None = None) -> int:
                     _json(find_review_group(pending, args.id))
             elif args.action == "approve":
                 _json(decide_review(args.id, "approved"))
+            elif args.action == "reclassify":
+                replacement_id = store.reclassify_observation(
+                    args.id,
+                    kind=args.kind,
+                    reason=args.reason,
+                )
+                if store.bootstrap_state()["state"] == "awaiting_review":
+                    write_bootstrap_review_artifacts(vault_root(), store)
+                else:
+                    write_review_artifacts(vault_root(), store)
+                build_dashboard(paths, vault_root())
+                _json(
+                    {
+                        "id": args.id,
+                        "status": "reclassified",
+                        "replacement_id": replacement_id,
+                        "kind": args.kind,
+                    }
+                )
             elif args.action == "resolve":
-                _json(decide_review(args.id, "resolved", reason=args.answer))
+                _json(
+                    answer_question(
+                        vault_root(),
+                        store,
+                        args.id,
+                        args.answer,
+                        paths=paths,
+                    )
+                )
             elif args.action == "answer":
                 group = find_review_group(pending, args.group)
                 if group["mode"] != "answer":
@@ -369,7 +438,15 @@ def main(argv: list[str] | None = None) -> int:
                         f"Question number must be between 1 and {group['count']}"
                     )
                 observation_id = group["items"][args.item - 1]["id"]
-                _json(decide_review(observation_id, "resolved", reason=args.answer))
+                _json(
+                    answer_question(
+                        vault_root(),
+                        store,
+                        observation_id,
+                        args.answer,
+                        paths=paths,
+                    )
+                )
             elif args.action == "attribute-question":
                 _json(attribute_question(vault_root(), store, args.id, args.project_id))
             elif args.action == "dismiss":

@@ -1440,6 +1440,40 @@ class StateStore:
             None,
         )
 
+    def suppress_learning_topic_until_new(self, topic_key: str) -> dict[str, Any]:
+        """Hide one topic at its current evidence boundary until newer work appears."""
+
+        topic = self.learning_topic(topic_key)
+        if topic is None:
+            raise KeyError(topic_key)
+        boundary = str(topic.get("last_seen") or "")
+        if not boundary:
+            raise ValueError(f"Learning topic has no observation boundary: {topic_key}")
+        self.set_meta(f"learning_topic_suppressed:{topic_key}", boundary)
+        return {
+            "topic_key": topic_key,
+            "label": topic.get("label") or topic_key,
+            "suppressed_through": boundary,
+        }
+
+    def learning_topic_is_suppressed(self, topic: dict[str, Any]) -> bool:
+        """Return true while a topic has no evidence newer than its owner boundary."""
+
+        topic_key = str(topic.get("topic_key") or "")
+        if not topic_key:
+            return False
+        boundary = self.get_meta(f"learning_topic_suppressed:{topic_key}")
+        if not boundary:
+            return False
+        return str(topic.get("last_seen") or "") <= boundary
+
+    def visible_learning_topics(self) -> list[dict[str, Any]]:
+        return [
+            topic
+            for topic in self.learning_topics()
+            if not self.learning_topic_is_suppressed(topic)
+        ]
+
     def clear_current_project_paths(self) -> None:
         with self.connect() as connection:
             connection.execute("UPDATE project_path_aliases SET is_current=0")
@@ -1926,6 +1960,55 @@ class StateStore:
         item["evidence_refs"] = json.loads(item.pop("evidence_refs_json"))
         item["payload"] = json.loads(item.pop("payload_json"))
         return item
+
+    def reclassify_observation(
+        self,
+        observation_id: str,
+        *,
+        kind: str,
+        reason: str,
+    ) -> str:
+        """Replace a pending observation with an owner-corrected knowledge kind."""
+
+        item = self.observation(observation_id)
+        if item is None:
+            raise KeyError(observation_id)
+        if item["status"] != "pending":
+            raise RuntimeError("Only pending observations can be reclassified")
+        normalized_kind = str(kind).strip()
+        if not normalized_kind:
+            raise ValueError("A replacement observation kind is required")
+        payload = dict(item.get("payload") or {})
+        for generated_field in ("id", "status", "rejection_reason"):
+            payload.pop(generated_field, None)
+        payload.update(
+            {
+                "kind": normalized_kind,
+                "reclassified_from": observation_id,
+                "owner_correction": reason,
+            }
+        )
+        replacement_id = self.add_observation(
+            {
+                "kind": normalized_kind,
+                "subject": item["subject"],
+                "claim": item["claim"],
+                "evidence_refs": item["evidence_refs"],
+                "confidence": item["confidence"],
+                "source_count": item["source_count"],
+                "project_count": item["project_count"],
+                "sensitivity": item["sensitivity"],
+                "promotion_tier": item["promotion_tier"],
+                "status": "pending",
+                **payload,
+            }
+        )
+        self.decide_observation(
+            observation_id,
+            "rejected",
+            f"Reclassified as {normalized_kind}: {reason}",
+        )
+        return replacement_id
 
     def set_observation_project_override(
         self, observation_id: str, project_ids: list[str]

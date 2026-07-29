@@ -173,6 +173,7 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb search <query>` | Search canonical personal knowledge |
 | `sb sessions latest` | Read a bounded local view of recent Codex or Antigravity sessions |
 | `sb sessions reconcile` | Re-evaluate session attribution from current and historical project metadata |
+| `sb learning suppress <topic-key>` | Hide a stale learning topic at its current evidence boundary until newer evidence appears |
 | `sb sessions link` | Preview and confirm one exact machine-local session-to-project correction |
 | `sb forget-project <project>` | Preview and explicitly confirm project-only forgetting without touching the source folder |
 | `sb write-as-me <request>` | Draft from verified voice and identity context |
@@ -184,7 +185,7 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb dashboard install` | Generate the local icon and install Desktop plus Start-menu shortcuts |
 | `sb protocol publish` | Test, sanitize, and update the public draft PR |
 
-The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers.
+The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers. Daily archives default closed, show only project-linked session cards, and keep historical discoveries separate from same-day personal learning.
 
 ## 🛡️ Safety by design
 

@@ -99,6 +99,13 @@ def _write_synthesis_summary(
         note_id = f"project-history-{project_id}"
         title = f"Project session analysis — {project_id}"
         note_type = "project-session-analysis"
+    elif run_kind.startswith("project-refresh:"):
+        project_id = slugify(run_kind.split(":", 1)[1])
+        path = vault / "System" / "Audits" / "ProjectRefresh" / f"{project_id}.md"
+        section = "project-refresh"
+        note_id = f"project-refresh-{project_id}"
+        title = f"Project refresh — {project_id}"
+        note_type = "project-refresh"
     else:
         week = datetime.now().isocalendar()
         week_id = period or f"{week.year}-W{week.week:02d}"
@@ -899,7 +906,7 @@ def _write_learning_tracker(vault: Path, store: StateStore) -> Path:
         section="learning",
         tags="memory, learning, second-brain",
     )
-    topics = store.learning_topics()
+    topics = store.visible_learning_topics()
     if not topics:
         body = "Learning signals will appear here as sessions are evaluated over time."
     else:
@@ -946,6 +953,12 @@ def _write_learning_tracker(vault: Path, store: StateStore) -> Path:
     if all_refs:
         _update_frontmatter(path, evidence_refs=all_refs, confidence=0.8)
     return path
+
+
+def refresh_learning_tracker(vault: Path, store: StateStore) -> Path:
+    """Rebuild the canonical topic view after an explicit owner correction."""
+
+    return _write_learning_tracker(vault, store)
 
 
 def _publish_learning_signals(

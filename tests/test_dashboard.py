@@ -4,7 +4,9 @@ from pathlib import Path
 from second_brain_protocol.config import RuntimePaths
 from second_brain_protocol.codex_account import normalize_rate_limits
 from second_brain_protocol.dashboard import (
+    _attach_section_evidence,
     _knowledge_deck,
+    _learning_snapshot,
     _question_deck,
     _recent_activity,
     _summary_cost,
@@ -52,6 +54,106 @@ def test_daily_activity_bullets_become_visual_stats_and_chips() -> None:
         "label": "Profile-only sessions",
         "value": 1,
     }
+
+
+def test_session_sections_hide_profile_only_cards_but_keep_coverage() -> None:
+    sections = [{"title": "Sessions reviewed", "paragraphs": [], "items": []}]
+    evidence = [
+        {"category": "session", "lane": "full", "label": "Demo"},
+        {"category": "session", "lane": "profile_only", "label": "Unattributed session"},
+        {"category": "session", "lane": "profile_only", "label": "Unattributed session"},
+    ]
+
+    _attach_section_evidence(sections, evidence)
+
+    assert [item["label"] for item in sections[0]["evidence"]] == ["Demo"]
+    assert sections[0]["session_coverage"] == {
+        "reviewed": 3,
+        "linked": 1,
+        "profile_only": 2,
+        "historical_profile_only": 0,
+    }
+
+
+def test_learning_snapshot_separates_historical_recovery_from_same_day(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    historical_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="historical",
+        kind="session_digest",
+        occurred_at="2026-04-01T10:00:00Z",
+        payload={"analysis_lane": "profile_only"},
+    )
+    current_id, _ = store.add_evidence(
+        source_type="session-digest",
+        source_ref="current",
+        kind="session_digest",
+        occurred_at="2026-07-29T10:00:00Z",
+        payload={"analysis_lane": "profile_only"},
+    )
+    for evidence_id, occurred_at, claim in (
+        (historical_id, "2026-04-01T10:00:00Z", "Old capability evidence."),
+        (current_id, "2026-07-29T10:00:00Z", "Current capability evidence."),
+    ):
+        store.add_learning_signal_event(
+            {
+                "topic_key": f"topic-{evidence_id}",
+                "label": "Capability",
+                "signal_type": "operational_capability",
+                "claim": claim,
+                "evidence_refs": [evidence_id],
+                "confidence": 0.9,
+                "occurred_at": occurred_at,
+            }
+        )
+    store.upsert_learning_topic(
+        {
+            "topic_key": f"topic-{current_id}",
+            "label": "Current capability",
+            "current_state": "applied",
+            "assessment": "Current capability evidence.",
+            "evidence_refs": [current_id],
+            "confidence": 0.9,
+            "session_count": 2,
+            "date_count": 1,
+            "project_count": 0,
+            "context_count": 2,
+            "signal_counts": {"operational_capability": 1},
+            "open_learning_edge": False,
+            "first_seen": "2026-07-29T10:00:00Z",
+            "last_seen": "2026-07-29T10:00:00Z",
+            "last_progress_at": "2026-07-29T10:00:00Z",
+        }
+    )
+    store.add_observation(
+        {
+            "kind": "explicit_fact",
+            "subject": "Project detail",
+            "claim": "A project-specific numeric constraint.",
+            "scope": "project",
+            "evidence_refs": [current_id],
+            "confidence": 0.95,
+            "status": "promoted",
+        }
+    )
+
+    snapshot = _learning_snapshot(
+        store,
+        {
+            "available": True,
+            "period": "2026-07-29",
+            "evidence_ids": [historical_id, current_id],
+        },
+    )
+
+    assert [item["detail"] for item in snapshot["today"]] == [
+        "Current capability evidence."
+    ]
+    assert snapshot["historical_count"] == 1
+    assert snapshot["historical_dates"] == ["2026-04-01"]
+    assert snapshot["evidence_ids"] == [current_id]
 
 
 def test_summary_cost_uses_exact_split_or_honest_legacy_range() -> None:
@@ -155,6 +257,17 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
     assert snapshot["runs"][0]["status"] == "failed"
     assert snapshot["runs"][0]["stage"] == "Collect Sessions"
     assert snapshot["runs"][0]["source"] == "Pipeline"
+    scheduler_check = next(
+        item for item in snapshot["health"]["checks"] if item["label"] == "Scheduler"
+    )
+    outcome_check = next(
+        item
+        for item in snapshot["health"]["checks"]
+        if item["label"] == "Last Daily outcome"
+    )
+    assert scheduler_check["state"] == "good"
+    assert scheduler_check["detail"].startswith("Ready; next ")
+    assert outcome_check["state"] == "attention"
     assert "[TRUNCATED]" in snapshot["runs"][0]["error_summary"]
     assert "[TRUNCATED]" not in snapshot["runs"][0]["error"]
     rendered = render_dashboard(snapshot)
@@ -282,6 +395,35 @@ The dashboard work was completed and verified.
             },
         }
     )
+    store.add_observation(
+        {
+            "kind": "experience",
+            "subject": "Public role claim",
+            "claim": "Example led a verified product integration.",
+            "evidence_refs": [evidence_id],
+            "confidence": 0.91,
+            "source_count": 2,
+            "project_count": 1,
+            "sensitivity": "normal",
+            "promotion_tier": "review",
+            "status": "pending",
+            "public_claim": True,
+        }
+    )
+    store.add_observation(
+        {
+            "kind": "project_fact",
+            "subject": "Private project boundary",
+            "claim": "A private integration remains local until validation is complete.",
+            "evidence_refs": [evidence_id],
+            "confidence": 0.82,
+            "source_count": 1,
+            "project_count": 1,
+            "sensitivity": "normal",
+            "promotion_tier": "review",
+            "status": "pending",
+        }
+    )
     store.upsert_pattern_signal(
         {
             "pattern_key": "clear-outcomes",
@@ -345,6 +487,12 @@ The dashboard work was completed and verified.
     assert snapshot["status"]["label"] == "Brain is up to date"
     assert snapshot["activity"]["projects"][0]["name"] == "Private Project"
     assert snapshot["review"]["questions"] == 1
+    assert snapshot["review"]["public"] == 1
+    assert snapshot["review"]["private"] == 1
+    assert [card["section"] for card in snapshot["review"]["cards"]] == [
+        "public",
+        "private",
+    ]
     assert snapshot["insights"][0]["subject"] == "Outcome ownership"
     assert snapshot["knowledge"]["counts"] == {
         "new": 1,
@@ -391,6 +539,10 @@ The dashboard work was completed and verified.
     )
     assert snapshot["actions"] == {"enabled": False, "csrf_token": ""}
     assert "PENDING-RAW-SECRET" not in rendered
+    assert "Example led a verified product integration." in rendered
+    assert "A private integration remains local until validation is complete." in rendered
+    assert 'aria-labelledby="review-dialog-title"' in rendered
+    assert "review-card-list" in rendered
     assert (
         "Should this profile claim remain private or be safe for career use?"
         in rendered
@@ -599,7 +751,7 @@ def test_routine_project_inventory_does_not_become_a_curate_card(
     assert _knowledge_deck(store, vault)["cards"] == []
 
 
-def test_project_question_shows_destination_and_tailored_answer_starter(
+def test_project_question_shows_destination_without_invented_answer_starter(
     tmp_path: Path,
 ) -> None:
     vault = tmp_path / "Example Person Second Brain"
@@ -637,8 +789,8 @@ def test_project_question_shows_destination_and_tailored_answer_starter(
     assert card["project_stamp"] == "First Party Project With Existing Brain"
     assert card["destination"] == "Project knowledge"
     assert "not saved as personality" in card["destination_detail"]
-    assert "First Party Project With Existing Brain" in card["placeholder"]
-    assert card["suggestions"][0]["label"] == "My contribution"
+    assert "placeholder" not in card
+    assert "suggestions" not in card
 
 
 def test_portfolio_word_outweighs_generic_agent_evidence_attribution(
@@ -682,10 +834,8 @@ def test_portfolio_word_outweighs_generic_agent_evidence_attribution(
 
     assert card["project_names"] == ["Contrasting First Party Project"]
     assert card["project_stamp"] == "Contrasting First Party Project"
-    assert "Contrasting First Party Project" in card["placeholder"]
-    assert card["suggestions"][0]["label"] == "Classify demos"
-    assert "shipped demos" in card["placeholder"]
-    assert "experimental demos" in card["placeholder"].casefold()
+    assert "placeholder" not in card
+    assert "suggestions" not in card
 
 
 def test_knowledge_deck_batches_project_and_evidence_reads(
@@ -902,3 +1052,5 @@ def test_summary_stats_carry_hoverable_clickable_canonical_evidence(
     assert "evidence-row" in rendered
     assert "Open ↗" in rendered
     assert "title=" not in rendered
+    assert "details.open = true" not in rendered
+    assert "kept out of this project timeline" in rendered
