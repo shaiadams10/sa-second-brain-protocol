@@ -10,6 +10,7 @@ The user should never need to remember a command, skill name, workflow name, or 
 4. Preserve approval boundaries. Natural language does not imply approval of public claims, review items, bootstrap completion, publication, model substitution, conflict resolution, or destructive actions.
 5. Distinguish reading from updating. A question such as “What did I work on this week?” reads canonical activity; it does not rerun weekly synthesis. A request such as “Update the brain with this week’s work” explicitly asks for an update.
 6. If multiple operations are plausible and the choice would materially change state or cost, ask one narrow clarification. Otherwise choose the safest read-only interpretation.
+7. Treat a clearly stated, reusable personal preference as an explicit reviewed-note update even when it appears inside another task and the user does not say “update the brain.” Save it in the appropriate canonical identity note when it is non-conflicting and sufficiently specific. Ask before saving when its scope, meaning, sensitivity, or durability is ambiguous.
 
 ## Intent map
 
@@ -19,12 +20,19 @@ The user should never need to remember a command, skill name, workflow name, or 
 | Write a message, post, biography, or explanation in my voice | Write as me | Use verified voice and identity context; never send automatically. |
 | What do you know about me, a skill, or a project? | Search | Answer from canonical notes with provenance and acknowledge gaps. |
 | What changed recently or what did I work on? | Search and recent activity | Read existing daily, weekly, and project knowledge without starting ingestion. |
-| Update the brain with today’s work | Daily | Run the incremental daily pipeline. |
+| What was my latest Codex or Antigravity session or last message? | Recent sessions | Query the bounded local session view by surface, project, timestamp, and user role without publishing raw conversations. |
+| Reconcile agent sessions with the project index, including older moved folders | Project-session reconciliation | Read bounded session metadata first and match at most one known leaf project by current path, historical path, or unique Git identity. Matched sessions enter the full lane; unmatched or ambiguous sessions may enter the isolated profile-only lane without creating project knowledge. Reconciliation itself makes no model call or publication. |
+| This Codex or Antigravity session belongs to a named project | Session attribution correction | Preview one exact session-to-project change, require confirmation, persist the stable project mapping in machine-local configuration, and reconcile without using conversational keyword guesses. |
+| Analyze the accepted historical sessions project by project | Project-session analysis | Send one known project's indexed digests per bounded model packet, publish only that project's dossier and audit note, and discard personal-profile, skill, voice, and question output. |
+| Update the brain with today’s work | Daily | A direct request authorizes one manual Daily. Use the explicit owner-request authorization; if the owner calls it a test, publish locally without Git snapshot, commit, or push. Otherwise the 10:30 PM schedule remains the default. |
 | Synthesize or update this week | Weekly | Run weekly synthesis after the daily evidence is current. |
 | Refresh what we know about a named project | Project refresh | Resolve the known project and scan it read-only. |
+| Refresh, repair, or reconcile the project index | Project catalog sync | Re-scan configured project roots, rebuild the generated project index from scanner truth, and refresh local search without a model call or Git publication. |
+| Forget or remove everything about a named project | Project forgetting | Preview exact matches, protect similarly named projects, back up active state, remove project-specific canonical/state/derived knowledge, and ignore the source path so it is not re-ingested. Source repositories remain untouched. |
 | Show or open the dashboard | Dashboard | Start or reuse the private loopback dashboard and open it. No knowledge changes occur without an explicit card action. |
 | What needs my approval? | Review | Start with the short grouped review dashboard, never the machine ledger. |
 | Correct or add a fact about me | Interview or reviewed note update | Capture the explicit fact without inventing missing details. |
+| State a clear reusable preference during normal work | Reviewed note update | Save the non-conflicting preference in the appropriate canonical identity note without requiring a separate update command. |
 | Is the brain healthy or did the schedule run? | Health | Diagnose first and use the recovery runbook only when needed. |
 | Publish the reusable protocol | Protocol publish | Create or update a sanitized draft PR; never merge automatically. |
 

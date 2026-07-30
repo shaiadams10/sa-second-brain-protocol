@@ -3,7 +3,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from second_brain_protocol.activity import (
+    activity_markdown,
+    build_project_delta,
+    session_recap,
+)
 from second_brain_protocol.collector import collect_projects
+from second_brain_protocol.scanner import relevant_manifest
 from second_brain_protocol.state import StateStore
 
 
@@ -107,3 +113,84 @@ def test_project_classification_override_persists_explicit_user_answer(
     assert updated["projects"][0]["classification_reasons"] == [
         "Explicit user confirmation."
     ]
+
+
+def test_remote_migration_keeps_project_identity_at_same_source_directory(
+    tmp_path: Path,
+) -> None:
+    projects_root = tmp_path / "Projects"
+    repo = _repo(projects_root / "First Party Project With Existing Brain")
+    store = StateStore(tmp_path / "state.sqlite")
+    initial = collect_projects(store, projects_root=projects_root, defaults=DEFAULTS)
+    project_id = initial["projects"][0]["id"]
+    subprocess.run(["git", "remote", "remove", "origin"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/The-Angel-Way/angel-ai-mvp.git",
+        ],
+        cwd=repo,
+        check=True,
+    )
+
+    migrated = collect_projects(store, projects_root=projects_root, defaults=DEFAULTS)
+
+    assert migrated["projects"][0]["id"] == project_id
+    assert migrated["projects"][0]["classification"] == "review"
+    assert len(store.projects()) == 1
+
+
+def test_gitlink_directory_stats_do_not_create_false_file_changes(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "Repo"
+    gitlink = repo / "nested-gitlink"
+    gitlink.mkdir(parents=True)
+
+    manifest = relevant_manifest(repo, ["nested-gitlink"])
+    assert manifest == {"nested-gitlink": (0, 0)}
+
+    previous = {
+        "id": "project-demo",
+        "name": "Demo",
+        "classification": "first-party",
+        "manifest": {"nested-gitlink": (4096, 123456)},
+        "tech_stack": [],
+        "second_brain_files": [],
+        "git_history": {"working_tree": [], "recent_commits": []},
+        "head_commit": "abc",
+    }
+    current = dict(previous, manifest=manifest)
+    assert build_project_delta(previous, current, was_present=True) is None
+
+
+def test_session_ledger_keeps_connectivity_tests_and_labels_backfill() -> None:
+    payload = {
+        "source": "antigravity",
+        "project_ids": ["project-demo"],
+        "started_at": "2026-07-19T23:20:28Z",
+        "user_messages": [{"text": "<USER_REQUEST>test</USER_REQUEST>"}],
+        "assistant_results": [{"text": "I successfully loaded the workspace."}],
+        "tool_usage": {"list_dir": 1},
+    }
+    assert session_recap(payload) == (
+        "Connectivity test completed; the workspace loaded successfully."
+    )
+    markdown = activity_markdown(
+        [
+            {
+                "id": "ev-session",
+                "kind": "session_digest",
+                "occurred_at": "2026-07-19T23:20:28Z",
+                "payload": payload,
+            }
+        ],
+        project_names_by_id={"project-demo": "Demo"},
+        period="2026-07-20",
+    )
+    assert "[[Projects/demo|Demo]]" in markdown
+    assert "Connectivity test completed" in markdown
+    assert "backfill from 2026-07-19" in markdown

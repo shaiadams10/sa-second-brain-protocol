@@ -4,6 +4,7 @@ from pathlib import Path
 from second_brain_protocol.gitops import (
     GITHUB_ED25519_KNOWN_HOST,
     _ensure_github_known_hosts,
+    _run_exported_protocol_tests,
     commit_if_changed,
     export_public_protocol,
 )
@@ -81,10 +82,32 @@ def test_public_export_preserves_full_author_name_from_shorter_redaction(tmp_pat
     assert "the user Adams" not in exported
 
 
-def test_scheduler_is_interactive_missed_run_safe_and_single_instance() -> None:
+def test_sanitized_export_tests_run_from_the_export_root(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    calls = []
+
+    def fake_run(cwd: Path, *args: str, **kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append((cwd, args, kwargs))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("second_brain_protocol.gitops._run", fake_run)
+
+    _run_exported_protocol_tests(tmp_path)
+
+    assert calls == [
+        (
+            tmp_path,
+            ("uv", "run", "pytest"),
+            {"timeout": 900, "check": False},
+        )
+    ]
+
+
+def test_scheduler_is_interactive_exact_time_and_single_instance() -> None:
     xml = task_xml(task_name="Personal Brain", script_path=Path("C:/safe/scheduled-run.ps1"), username="DOMAIN\\user")
     assert "InteractiveToken" in xml
-    assert "StartWhenAvailable>true" in xml
+    assert "StartWhenAvailable>false" in xml
     assert "MultipleInstancesPolicy>IgnoreNew" in xml
     assert "22:30:00" in xml
 

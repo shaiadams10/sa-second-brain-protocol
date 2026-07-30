@@ -109,3 +109,51 @@ def test_large_derivation_uses_chunked_sql_updates(tmp_path: Path) -> None:
     store.publish_checkpoint_candidates(expanded)
     store.mark_evidence(expanded, "processed")
     assert len(store.evidence(status="processed")) == 1201
+
+
+def test_unattributed_session_digest_is_explicitly_profile_only(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.replace_session_project_index(
+        [
+            {
+                "surface": "codex",
+                "session_id": "unknown-session",
+                "project_id": None,
+                "status": "unmatched",
+                "resolver": "missing_or_unmatched_workspace",
+                "confidence": 0.0,
+                "workspace_count": 1,
+                "source_record_count": 2,
+            }
+        ]
+    )
+    for index, role, text in (
+        (0, "user", "Explain the boundary, then I will apply it."),
+        (1, "assistant", "Here is the explanation."),
+    ):
+        store.add_evidence(
+            source_type="codex",
+            source_ref=f"codex:unknown-session:{index}",
+            kind="visible_message",
+            payload={
+                "session_id": "unknown-session",
+                "role": role,
+                "text": text,
+                "analysis_lane": "profile_only",
+            },
+            occurred_at=f"2026-01-01T10:0{index}:00Z",
+        )
+
+    compact_session_evidence(store)
+
+    digest = next(
+        item
+        for item in store.evidence(status="new")
+        if item["kind"] == "session_digest"
+    )
+    assert digest["project_id"] is None
+    assert digest["payload"]["project_ids"] == []
+    assert digest["payload"]["analysis_lane"] == "profile_only"
+    assert digest["payload"]["attribution_status"] == "unmatched"

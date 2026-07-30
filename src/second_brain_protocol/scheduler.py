@@ -15,7 +15,7 @@ def task_xml(*, task_name: str, script_path: Path, username: str) -> str:
   <RegistrationInfo><Description>Evidence-backed personal second-brain daily and weekly pipeline.</Description></RegistrationInfo>
   <Triggers><CalendarTrigger><StartBoundary>2026-01-01T22:30:00</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger></Triggers>
   <Principals><Principal id="Author"><UserId>{html.escape(username)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
-  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><Enabled>true</Enabled><Hidden>false</Hidden><ExecutionTimeLimit>PT4H</ExecutionTimeLimit></Settings>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>false</StartWhenAvailable><Enabled>true</Enabled><Hidden>false</Hidden><ExecutionTimeLimit>PT4H</ExecutionTimeLimit></Settings>
   <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>{html.escape(arguments)}</Arguments><WorkingDirectory>{html.escape(str(script_path.parent))}</WorkingDirectory></Exec></Actions>
 </Task>"""
 

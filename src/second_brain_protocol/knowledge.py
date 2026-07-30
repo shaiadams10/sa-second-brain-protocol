@@ -246,6 +246,7 @@ def dislike_knowledge(
         "decision": "disliked",
         "removed_occurrences": len(occurrences),
         "search_refresh_queued": len(refresh_paths),
+        "learning_updated": True,
     }
 
 

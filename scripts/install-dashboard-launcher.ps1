@@ -22,8 +22,8 @@ if (-not $batPath -or -not (Test-Path -LiteralPath $batPath -PathType Leaf)) {
 }
 
 $assetDirectory = Join-Path $VaultRoot "System\Assets"
-$iconPath = Join-Path $assetDirectory "SA-Second-Brain.ico"
-$previewPath = Join-Path $assetDirectory "SA-Second-Brain.png"
+$iconPath = Join-Path $assetDirectory "SA-Second-Brain-Pink.ico"
+$previewPath = Join-Path $assetDirectory "SA-Second-Brain-Pink.png"
 New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
 
 Add-Type -AssemblyName System.Drawing
@@ -34,6 +34,9 @@ using System.Runtime.InteropServices;
 public static class SecondBrainNativeMethods {
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern bool DestroyIcon(IntPtr handle);
+
+    [DllImport("shell32.dll")]
+    public static extern void SHChangeNotify(uint eventId, uint flags, IntPtr item1, IntPtr item2);
 }
 "@
 }
@@ -49,9 +52,11 @@ $purple = [System.Drawing.ColorTranslator]::FromHtml("#8C7BD0")
 $purpleDeep = [System.Drawing.ColorTranslator]::FromHtml("#322B5B")
 $pink = [System.Drawing.ColorTranslator]::FromHtml("#ED3F91")
 
-$graphics.Clear($ink)
-$framePen = New-Object System.Drawing.Pen $paper, 7
-$graphics.DrawRectangle($framePen, 12, 12, 231, 231)
+$graphics.Clear($pink)
+$panelBrush = New-Object System.Drawing.SolidBrush $ink
+$graphics.FillRectangle($panelBrush, 24, 24, 207, 207)
+$framePen = New-Object System.Drawing.Pen $paper, 6
+$graphics.DrawRectangle($framePen, 14, 14, 227, 227)
 
 $brainBrush = New-Object System.Drawing.SolidBrush $purple
 $brainPen = New-Object System.Drawing.Pen $purpleDeep, 7
@@ -84,11 +89,11 @@ $format.Alignment = [System.Drawing.StringAlignment]::Center
 $format.LineAlignment = [System.Drawing.StringAlignment]::Center
 $graphics.DrawString($Initials.ToUpperInvariant(), $font, $textBrush, ([System.Drawing.RectangleF]::new(51, 91, 154, 82)), $format)
 
-$nodeBrush = New-Object System.Drawing.SolidBrush $pink
-$graphics.FillRectangle($nodeBrush, 29, 29, 15, 15)
-$graphics.FillRectangle($nodeBrush, 212, 30, 15, 15)
-$graphics.FillRectangle($nodeBrush, 29, 212, 15, 15)
-$graphics.FillRectangle($nodeBrush, 212, 212, 15, 15)
+$nodeBrush = New-Object System.Drawing.SolidBrush $paper
+$graphics.FillRectangle($nodeBrush, 31, 31, 15, 15)
+$graphics.FillRectangle($nodeBrush, 210, 31, 15, 15)
+$graphics.FillRectangle($nodeBrush, 31, 210, 15, 15)
+$graphics.FillRectangle($nodeBrush, 210, 210, 15, 15)
 
 $bitmap.Save($previewPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $handle = $bitmap.GetHicon()
@@ -111,6 +116,7 @@ finally {
     $brainPen.Dispose()
     $brainBrush.Dispose()
     $framePen.Dispose()
+    $panelBrush.Dispose()
     $nodeBrush.Dispose()
     $graphics.Dispose()
     $bitmap.Dispose()
@@ -141,6 +147,7 @@ if ((Test-Path -LiteralPath $legacyShortcut) -and $legacyShortcut -ne $desktopSh
 
 Write-SecondBrainShortcut $desktopShortcut
 Write-SecondBrainShortcut $startMenuShortcut
+[SecondBrainNativeMethods]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
 
 [pscustomobject]@{
     Icon = $iconPath
