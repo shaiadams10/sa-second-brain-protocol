@@ -7,11 +7,14 @@ $logDir = Join-Path $runtime "runs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $log = Join-Path $logDir "scheduled-$stamp.log"
+New-Item -ItemType File -Force -Path $log | Out-Null
+"Scheduled run started at $((Get-Date).ToString('o'))." | Tee-Object -FilePath $log -Append
 Push-Location $protocol
 try {
     $command = if ($Canary) { "health" } else { "scheduled" }
-    & uv run --locked sb $command *>&1 | Tee-Object -FilePath $log
+    & uv run --locked sb $command *>&1 | Tee-Object -FilePath $log -Append
     $pipelineExit = $LASTEXITCODE
+    "Pipeline exit code: $pipelineExit" | Tee-Object -FilePath $log -Append
     $finalExit = $pipelineExit
     if (-not $Canary) {
         & uv run --locked sb dashboard build *>&1 | Tee-Object -FilePath $log -Append

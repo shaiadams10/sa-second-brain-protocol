@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from second_brain_protocol.markdown import GeneratedSectionError, replace_generated_section

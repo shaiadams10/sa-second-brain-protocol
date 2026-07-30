@@ -70,7 +70,7 @@ The model never writes the vault directly. It receives only a sanitized evidence
 | Machine-local runtime | Operational state outside Git | Credentials, SQLite checkpoints, raw evidence, staging, logs, indexes, code graphs |
 | Public protocol | Reusable implementation | Generic code, schemas, prompts, templates, tests, docs, and runbooks |
 
-See [Architecture](docs/Architecture.md) for the trust boundaries, [Natural-language interface](docs/NaturalLanguageInterface.md) for agent routing, [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior, and the [Roadmap](docs/Roadmap.md) for the dashboard and read-only MCP phases.
+See [Architecture](docs/Architecture.md) for the trust boundaries, [Natural-language interface](docs/NaturalLanguageInterface.md) for agent routing, [Project and session lifecycle](docs/ProjectSessionLifecycle.md) for catalog, question, deletion, ownership, and attribution rules, [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior, and the [Roadmap](docs/Roadmap.md) for the dashboard and read-only MCP phases.
 
 ## 🔁 How it stays current
 
@@ -100,7 +100,7 @@ Identity/                 Persona, voice, values, preferences, work style
 Experience/               Employment, education, military, career timeline
 Projects/                 Evidence-backed project dossiers
 Skills/                   Skills with proof, confidence, and verification dates
-Memory/                   Decisions, lessons, patterns, long-term memories
+Memory/                   Decisions, lessons, patterns, learning, long-term memories
 Goals/                    Active and archived goals
 Journal/Daily/            Incremental activity summaries
 Journal/Weekly/           Cross-project synthesis and reflection
@@ -165,11 +165,17 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb bootstrap --approve` | Close bootstrap after explicit final review |
 | `sb daily` / `sb weekly` | Process incremental evidence |
 | `sb refresh-project <project>` | Refresh one known dossier and derived code graph |
+| `sb sync-project-index` | Re-scan and deterministically rebuild the project catalog without a model call or Git publication |
 | `sb review digest` | Generate the short Obsidian review dashboard |
 | `sb review show <token>` | Inspect one grouped decision or observation |
 | `sb review approve-group <token>` | Approve the exact visible snapshot of a group |
 | `sb review answer <token> <number>` | Answer one clarification without handling machine IDs |
 | `sb search <query>` | Search canonical personal knowledge |
+| `sb sessions latest` | Read a bounded local view of recent Codex or Antigravity sessions |
+| `sb sessions reconcile` | Re-evaluate session attribution from current and historical project metadata |
+| `sb learning suppress <topic-key>` | Hide a stale learning topic at its current evidence boundary until newer evidence appears |
+| `sb sessions link` | Preview and confirm one exact machine-local session-to-project correction |
+| `sb forget-project <project>` | Preview and explicitly confirm project-only forgetting without touching the source folder |
 | `sb write-as-me <request>` | Draft from verified voice and identity context |
 | `sb career <request>` | Draft review-required career material |
 | `sb reindex` | Rebuild local search from canonical Markdown |
@@ -179,7 +185,7 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb dashboard install` | Generate the local icon and install Desktop plus Start-menu shortcuts |
 | `sb protocol publish` | Test, sanitize, and update the public draft PR |
 
-The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers.
+The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers. Daily archives default closed, show only project-linked session cards, and keep historical discoveries separate from same-day personal learning.
 
 ## 🛡️ Safety by design
 
@@ -203,6 +209,13 @@ The reusable templates provide thin entrypoints for:
 - **Antigravity** — shared rules, skills, and workflows.
 
 All real behavior remains in the common `sb` package so wrappers cannot drift into separate protocols. Natural language is the normal human interface; agents choose these internal operations without requiring users to remember commands or skill names. This repository intentionally contains no Claude-native files, hooks, commands, SDKs, or workflows.
+
+### Antigravity IDE workspace attribution
+
+> [!WARNING]
+> Antigravity IDE on Windows has an upstream workspace-association issue that can leave locally stored conversations without usable project metadata, especially around drive-letter URI handling. The protocol recovers attribution from Antigravity database and aggregate-hub metadata, unique Git identity, and unanimous exact project-facing tool paths; it deliberately refuses chat-text guesses and conflicting multi-project matches.
+
+For reliable future attribution, register the actual leaf folder as a Project in the standalone Antigravity application, start the conversation from that Project, use Local Mode for the existing checkout, and open the IDE from the Project when needed. Opening an old folder may restore conversations whose workspace metadata survived, but cannot repair sessions that Antigravity recorded without a project. See [Project and session lifecycle](docs/ProjectSessionLifecycle.md#antigravity-ide-limitation) for the complete behavior and safe recovery boundary.
 
 ## 🔌 Read-only MCP future
 

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["normalized_answer", "claims"],
+  "additionalProperties": false,
+  "properties": {
+    "normalized_answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "destination",
+          "kind",
+          "subject",
+          "claim",
+          "scope",
+          "project_id",
+          "public_claim",
+          "confidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "enum": [
+              "identity",
+              "operating_preferences",
+              "professional_profile",
+              "project_knowledge",
+              "discard"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "explicit_fact",
+              "project_fact",
+              "decision",
+              "lesson",
+              "preference",
+              "work_style",
+              "voice_style",
+              "personality",
+              "experience",
+              "education",
+              "military",
+              "goal"
+            ]
+          },
+          "subject": {"type": "string", "minLength": 1, "maxLength": 300},
+          "claim": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "scope": {"enum": ["global", "project", "context"]},
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"
+              },
+              {"type": "null"}
+            ]
+          },
+          "public_claim": {"type": "boolean"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    }
+  }
+}

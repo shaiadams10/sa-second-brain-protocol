@@ -24,6 +24,44 @@
       "reasoning": "high"
     }
   },
+  "model_policies": {
+    "chatgpt-direct-v1": {
+      "daily": {
+        "name": "gpt-5.6-luna",
+        "reasoning": "medium"
+      },
+      "weekly": {
+        "name": "gpt-5.6-terra",
+        "reasoning": "medium"
+      },
+      "bootstrap": {
+        "name": "gpt-5.6-sol",
+        "reasoning": "high"
+      },
+      "escalation": {
+        "name": "gpt-5.6-sol",
+        "reasoning": "high"
+      }
+    },
+    "openrouter-hybrid-v1": {
+      "daily": {
+        "name": "deepseek/deepseek-v4-flash",
+        "reasoning": "high"
+      },
+      "weekly": {
+        "name": "openai/gpt-5.6-sol",
+        "reasoning": "high"
+      },
+      "bootstrap": {
+        "name": "openai/gpt-5.6-sol",
+        "reasoning": "high"
+      },
+      "escalation": {
+        "name": "openai/gpt-5.6-sol",
+        "reasoning": "high"
+      }
+    }
+  },
   "limits": {
     "max_evidence_text_chars": 6000,
     "max_packet_chars": 180000,
