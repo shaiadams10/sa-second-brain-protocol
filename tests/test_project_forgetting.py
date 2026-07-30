@@ -20,38 +20,38 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
     paths = setup_runtime(RuntimePaths.from_root(tmp_path / "runtime"))
     vault = tmp_path / "vault"
     store = StateStore(paths.state)
-    legacy_path = tmp_path / "Projects" / "Angel"
-    protected_path = tmp_path / "Projects" / "First Party Project With Existing Brain"
+    legacy_path = tmp_path / "Projects" / "Legacy App"
+    protected_path = tmp_path / "Projects" / "Legacy App Rebuild"
     legacy_path.mkdir(parents=True)
     protected_path.mkdir()
     store.upsert_project(
         {
-            "id": "project-angel",
-            "name": "Angel",
+            "id": "project-legacy",
+            "name": "Legacy App",
             "local_path": str(legacy_path),
             "classification": "first-party",
         }
     )
     store.upsert_project(
         {
-            "id": "project-angel-v2",
-            "name": "First Party Project With Existing Brain",
+            "id": "project-legacy-rebuild",
+            "name": "Legacy App Rebuild",
             "local_path": str(protected_path),
             "classification": "first-party",
         }
     )
     evidence_id, _ = store.add_evidence(
         source_type="codex",
-        source_ref="session:legacy-angel",
+        source_ref="session:legacy-app",
         kind="visible_message",
-        project_id="project-angel",
-        payload={"project_ids": ["project-angel"], "text": "legacy Angel details"},
+        project_id="project-legacy",
+        payload={"project_ids": ["project-legacy"], "text": "legacy app details"},
     )
     project_observation_id = store.add_observation(
         {
             "kind": "project_fact",
-            "subject": "Angel deployment",
-            "claim": "Angel used the legacy deployment.",
+            "subject": "Legacy App deployment",
+            "claim": "Legacy App used the old deployment.",
             "evidence_refs": [evidence_id],
             "confidence": 0.9,
             "status": "promoted",
@@ -61,7 +61,7 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
         {
             "kind": "experience",
             "subject": "Unrelated role",
-            "claim": "the user has a verified unrelated role.",
+            "claim": "The owner has a verified unrelated role.",
             "evidence_refs": [evidence_id],
             "confidence": 0.9,
             "status": "promoted",
@@ -76,42 +76,43 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
     orphaned_question_id = store.add_observation(
         {
             "kind": "clarification",
-            "subject": "Legacy Angel status",
-            "claim": "Is Angel still an active project?",
+            "subject": "Legacy App status",
+            "claim": "Is Legacy App still an active project?",
             "evidence_refs": [unrelated_evidence_id],
             "confidence": 0.9,
             "status": "pending",
         }
     )
     _generated_note(
-        vault / "Projects" / "angel.md",
-        "Angel",
-        f"- Legacy Angel fact. ^{project_observation_id}",
+        vault / "Projects" / "legacy-app.md",
+        "Legacy App",
+        f"- Legacy App fact. ^{project_observation_id}",
     )
     _generated_note(
-        vault / "Projects" / "angel-version-2.md",
-        "First Party Project With Existing Brain",
-        "First Party Project With Existing Brain remains protected.",
+        vault / "Projects" / "legacy-app-rebuild.md",
+        "Legacy App Rebuild",
+        "Legacy App Rebuild remains protected.",
     )
     _generated_note(
         vault / "Experience" / "Employment.md",
         "Employment",
-        f"- the user has a verified unrelated role. ^{profile_observation_id}",
+        f"- The owner has a verified unrelated role. ^{profile_observation_id}",
     )
     _generated_note(
         vault / "Projects" / "Index.md",
         "Projects",
-        "- [[Projects/angel|Angel]]\n- [[Projects/angel-version-2|First Party Project With Existing Brain]]",
+        "- [[Projects/legacy-app|Legacy App]]\n"
+        "- [[Projects/legacy-app-rebuild|Legacy App Rebuild]]",
     )
     _generated_note(
         vault / "Journal" / "Daily" / "2026-07-17.md",
         "Daily",
-        "- Project activity: Angel\n- Project activity: First Party Project With Existing Brain",
+        "- Project activity: Legacy App\n- Project activity: Legacy App Rebuild",
     )
     review = vault / "Inbox" / "Review" / "Review-2026-07-17.md"
     review.parent.mkdir(parents=True)
     review.write_text("generated review\n", encoding="utf-8")
-    graph = paths.graphify / "project-angel"
+    graph = paths.graphify / "project-legacy"
     graph.mkdir(parents=True)
     (graph / "graph.json").write_text("{}\n", encoding="utf-8")
 
@@ -119,8 +120,8 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
         paths,
         vault,
         store,
-        identifiers=["Angel"],
-        protected_identifiers=["First Party Project With Existing Brain"],
+        identifiers=["Legacy App"],
+        protected_identifiers=["Legacy App Rebuild"],
     )
     assert preview["status"] == "preview"
     assert preview["project_observations"] == 2
@@ -130,8 +131,8 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
         paths,
         vault,
         store,
-        identifiers=["Angel"],
-        protected_identifiers=["First Party Project With Existing Brain"],
+        identifiers=["Legacy App"],
+        protected_identifiers=["Legacy App Rebuild"],
         confirm=True,
         reindexer=lambda _paths, _vault: None,
         dashboard_builder=lambda _paths, _vault: None,
@@ -146,13 +147,14 @@ def test_forget_project_is_previewed_backed_up_and_preserves_protected_project(
     retained = store.evidence_by_ids([evidence_id])[0]
     assert retained["project_id"] is None
     assert retained["kind"] == "redacted_support"
-    assert {project["name"] for project in store.projects()} == {"First Party Project With Existing Brain"}
-    assert not (vault / "Projects" / "angel.md").exists()
-    assert (vault / "Projects" / "angel-version-2.md").exists()
+    assert {project["name"] for project in store.projects()} == {"Legacy App Rebuild"}
+    assert not (vault / "Projects" / "legacy-app.md").exists()
+    assert (vault / "Projects" / "legacy-app-rebuild.md").exists()
     assert (
-        "[[Projects/angel|Angel]]" not in (vault / "Projects" / "Index.md").read_text()
+        "[[Projects/legacy-app|Legacy App]]"
+        not in (vault / "Projects" / "Index.md").read_text()
     )
-    assert "First Party Project With Existing Brain" in (vault / "Projects" / "Index.md").read_text()
+    assert "Legacy App Rebuild" in (vault / "Projects" / "Index.md").read_text()
     assert not graph.exists()
     config = json.loads(paths.config.read_text(encoding="utf-8"))
     assert str(legacy_path.resolve()) in config["ignored_project_paths"]

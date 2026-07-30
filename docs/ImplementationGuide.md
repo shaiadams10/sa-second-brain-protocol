@@ -153,7 +153,7 @@ Public publication must:
 - genericize private configuration;
 - scan personal names, paths, secrets, and private project identifiers;
 - fingerprint the sanitized export and skip all GitHub access when it is unchanged;
-- run the protocol test suite before publishing a changed tree;
+- run the canonical protocol tests, then run the exact sanitized export's tests from inside its own root before any GitHub access;
 - push an automation branch;
 - open or update a draft pull request;
 - retain the previous fingerprint and retry after test, privacy, authentication, network, or push failures;

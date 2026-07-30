@@ -871,7 +871,7 @@ def test_portfolio_word_outweighs_generic_agent_evidence_attribution(
     for project_id, name in (
         ("project-agents", "AgentSkillsHub"),
         ("project-remotion", "Remotion"),
-        ("project-portfolio", "Contrasting First Party Project"),
+        ("project-portfolio", "Portfolio Showcase"),
     ):
         store.upsert_project(
             {"id": project_id, "name": name, "classification": "first-party"}
@@ -901,8 +901,8 @@ def test_portfolio_word_outweighs_generic_agent_evidence_attribution(
 
     card = _question_deck(store, vault)["cards"][0]
 
-    assert card["project_names"] == ["Contrasting First Party Project"]
-    assert card["project_stamp"] == "Contrasting First Party Project"
+    assert card["project_names"] == ["Portfolio Showcase"]
+    assert card["project_stamp"] == "Portfolio Showcase"
     assert "placeholder" not in card
     assert "suggestions" not in card
 

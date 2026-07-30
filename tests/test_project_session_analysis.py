@@ -24,16 +24,16 @@ def _output(project_id: str, evidence_refs: list[str]) -> dict:
 
 
 def test_project_history_validation_enforces_one_project_and_session_evidence() -> None:
-    project = {"id": "project-angel", "name": "First Party Project With Existing Brain"}
+    project = {"id": "project-example", "name": "Example App Rebuild"}
     validated = _validated_project_history_update(
-        _output("project-angel", ["inventory", "session"]),
+        _output("project-example", ["inventory", "session"]),
         project=project,
         allowed_evidence_ids={"inventory", "session"},
         session_evidence_ids={"session"},
     )
 
-    assert validated["project_id"] == "project-angel"
-    assert validated["name"] == "First Party Project With Existing Brain"
+    assert validated["project_id"] == "project-example"
+    assert validated["name"] == "Example App Rebuild"
     with pytest.raises(RuntimeError, match="cross-project"):
         _validated_project_history_update(
             _output("project-ernie", ["session"]),
@@ -43,7 +43,7 @@ def test_project_history_validation_enforces_one_project_and_session_evidence() 
         )
     with pytest.raises(RuntimeError, match="session digest"):
         _validated_project_history_update(
-            _output("project-angel", ["inventory"]),
+            _output("project-example", ["inventory"]),
             project=project,
             allowed_evidence_ids={"inventory"},
             session_evidence_ids={"session"},
@@ -51,8 +51,8 @@ def test_project_history_validation_enforces_one_project_and_session_evidence() 
 
 
 def test_project_history_validation_rejects_shallow_protocol_boilerplate() -> None:
-    project = {"id": "project-angel", "name": "First Party Project With Existing Brain"}
-    output = _output("project-angel", ["session"])
+    project = {"id": "project-example", "name": "Example App Rebuild"}
+    output = _output("project-example", ["session"])
     output["summary"] = (
         "## Summary\n\n- Indexed session history synthesized.\n"
         "- Nothing else.\n\n## Status\n\n- Complete."
@@ -72,31 +72,31 @@ def test_project_history_publication_writes_only_project_scoped_files(
 ) -> None:
     store = StateStore(tmp_path / "state.sqlite")
     project = {
-        "id": "project-angel",
-        "name": "First Party Project With Existing Brain",
+        "id": "project-example",
+        "name": "Example App Rebuild",
         "classification": "first-party",
         "tracked_file_count": 1,
     }
     store.upsert_project(project)
     evidence_id, _ = store.add_evidence(
         source_type="session-digest",
-        source_ref="session-digest:codex:angel",
+        source_ref="session-digest:codex:example",
         kind="session_digest",
         payload={
             "source": "codex",
-            "session_id": "angel",
-            "project_ids": ["project-angel"],
+            "session_id": "example",
+            "project_ids": ["project-example"],
         },
-        project_id="project-angel",
+        project_id="project-example",
     )
     output = {
-        "summary": "- First Party Project With Existing Brain: history synthesized.",
+        "summary": "- Example App Rebuild: history synthesized.",
         "observations": [],
         "pattern_signals": [],
         "project_updates": [
             {
-                "project_id": "project-angel",
-                "name": "First Party Project With Existing Brain",
+                "project_id": "project-example",
+                "name": "Example App Rebuild",
                 "summary": "Verified project history.",
                 "evidence_refs": [evidence_id],
             }
@@ -111,13 +111,13 @@ def test_project_history_publication_writes_only_project_scoped_files(
         vault=tmp_path,
         store=store,
         output=output,
-        run_kind="project-history:project-angel",
+        run_kind="project-history:project-example",
         evidence_ids=[evidence_id],
     )
 
     assert result["projects_written"] == 1
     assert "Verified project history" in (
-        tmp_path / "Projects" / "angel-version-2.md"
+        tmp_path / "Projects" / "example-app-rebuild.md"
     ).read_text(encoding="utf-8")
     assert Path(result["synthesis_path"]).parent.name == "ProjectSessions"
     assert not (tmp_path / "Identity").exists()

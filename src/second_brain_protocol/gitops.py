@@ -460,6 +460,24 @@ def _run_protocol_tests(vault: Path) -> None:
         raise GitPolicyError("Protocol tests failed before public publishing: " + (result.stdout + result.stderr)[-4000:])
 
 
+def _run_exported_protocol_tests(export_root: Path) -> None:
+    """Validate the exact sanitized tree from its own working directory."""
+
+    result = _run(
+        export_root,
+        "uv",
+        "run",
+        "pytest",
+        timeout=900,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise GitPolicyError(
+            "Sanitized protocol tests failed before public publishing: "
+            + (result.stdout + result.stderr)[-4000:]
+        )
+
+
 def _protocol_commit_message() -> str:
     message = os.environ.get("SB_PROTOCOL_COMMIT_MESSAGE", "Publish sanitized protocol update").strip()
     if not message or "\n" in message or "\r" in message or len(message) > 120:
@@ -469,10 +487,11 @@ def _protocol_commit_message() -> str:
 
 def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) -> str:
     config = load_runtime_config(paths)
-    _ensure_account(repository.split("/", 1)[0])
     export_root = paths.protocol_publish
     source_export = paths.root / "protocol-export-next"
     export_public_protocol(vault / "Protocol", source_export)
+    _run_exported_protocol_tests(source_export)
+    _ensure_account(repository.split("/", 1)[0])
     exists = _run(vault, "gh", "repo", "view", repository, "--json", "name", check=False)
     if exists.returncode != 0:
         _run(vault, "gh", "repo", "create", repository, "--public", "--add-readme", "--description", "Reusable evidence-backed personal second-brain protocol")
