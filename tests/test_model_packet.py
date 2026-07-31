@@ -121,7 +121,7 @@ def test_session_digest_uses_strict_external_allowlist_and_redaction() -> None:
     packet = build_evidence_packet(evidence, max_chars=10000)
     encoded = json.dumps(packet, ensure_ascii=False)
 
-    assert packet["privacy_contract"]["policy"] == "sanitized-lane-isolated-v3"
+    assert packet["privacy_contract"]["policy"] == "sanitized-lane-isolated-v5"
     assert "raw-session-identifier" not in encoded
     assert "artifacts" not in packet["evidence"][0]["payload"]
     assert "person@example.com" not in encoded
@@ -282,6 +282,84 @@ def test_daily_policy_discards_unsolicited_question_resolutions() -> None:
     assert dropped["question_resolutions"] == 1
 
 
+def test_daily_policy_discards_items_that_reference_unknown_evidence() -> None:
+    result = {
+        "summary": "Model-authored summary that may include unsupported claims.",
+        "observations": [
+            {
+                "kind": "work_style",
+                "claim": "Supported observation.",
+                "evidence_refs": ["ev-valid"],
+            },
+            {
+                "kind": "work_style",
+                "claim": "Observation with a hallucinated citation.",
+                "evidence_refs": ["ev-valid", "ev-hallucinated"],
+            },
+        ],
+        "pattern_signals": [],
+        "learning_signals": [],
+        "project_updates": [],
+        "session_summaries": [
+            {
+                "evidence_ref": "ev-valid",
+                "summary": "Supported session summary.",
+            },
+            {
+                "evidence_ref": "ev-hallucinated",
+                "summary": "Unsupported session summary.",
+            },
+        ],
+        "skill_updates": [],
+        "voice_samples": [
+            {
+                "excerpt": "Supported voice sample.",
+                "evidence_ref": "ev-valid",
+                "safe_for_private_git": True,
+            },
+            {
+                "excerpt": "Unsupported voice sample.",
+                "evidence_ref": "ev-hallucinated",
+                "safe_for_private_git": True,
+            },
+        ],
+        "review_items": [],
+        "question_resolutions": [],
+    }
+
+    normalized, dropped = enforce_evidence_lane_policy(
+        result,
+        evidence=[
+            {
+                "id": "ev-valid",
+                "kind": "visible_message",
+                "project_id": None,
+                "payload": {},
+            }
+        ],
+        schema_name="model-output.schema.json",
+    )
+
+    assert [item["claim"] for item in normalized["observations"]] == [
+        "Supported observation."
+    ]
+    assert "hallucinated citation" not in normalized["summary"]
+    assert dropped["observations"] == 1
+    assert [item["summary"] for item in normalized["session_summaries"]] == [
+        "Supported session summary."
+    ]
+    assert [item["excerpt"] for item in normalized["voice_samples"]] == [
+        "Supported voice sample."
+    ]
+    assert dropped["session_summaries"] == 1
+    assert dropped["voice_samples"] == 1
+    assert_known_evidence_references(
+        normalized,
+        evidence_ids={"ev-valid"},
+        schema_name="model-output.schema.json",
+    )
+
+
 def test_project_scoped_explicit_fact_is_normalized_to_project_knowledge() -> None:
     result = {
         "summary": "Project context.",
@@ -440,6 +518,40 @@ def test_pending_objective_questions_are_bounded_quoted_context() -> None:
     assert packet["pending_questions"][0]["id"] == "obs-12345678"
     assert "C:\\Users" not in str(packet)
     assert packet["evidence"][0]["id"] == "ev-one"
+
+
+def test_session_message_with_bare_drive_root_is_safely_redacted() -> None:
+    packet = build_evidence_packet(
+        [
+            {
+                "id": "ev-drive-root",
+                "source_type": "session-digest",
+                "project_id": None,
+                "kind": "session_digest",
+                "occurred_at": "2026-07-29T01:00:00+00:00",
+                "payload": {
+                    "source": "codex",
+                    "analysis_lane": "profile_only",
+                    "project_ids": [],
+                    "user_messages": [
+                        {
+                            "occurred_at": "2026-07-29T01:00:00+00:00",
+                            "text": "Use the C:\\ drive root for local work.",
+                        }
+                    ],
+                    "assistant_results": [],
+                },
+            }
+        ],
+        max_chars=10000,
+    )
+
+    encoded = json.dumps(packet, ensure_ascii=False)
+    assert "C:\\" not in encoded
+    assert "[LOCAL_PATH]" in encoded
+    assert packet["evidence"][0]["payload"]["privacy_summary"]["policy"] == (
+        "sanitized-session-digest-v4"
+    )
 
 
 def test_structured_output_objects_require_every_declared_property() -> None:

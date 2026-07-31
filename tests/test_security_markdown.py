@@ -1,7 +1,12 @@
 import pytest
 
 from second_brain_protocol.markdown import GeneratedSectionError, replace_generated_section
-from second_brain_protocol.security import repair_mojibake, sanitize_text, scan_text
+from second_brain_protocol.security import (
+    assert_model_packet_safe,
+    repair_mojibake,
+    sanitize_text,
+    scan_text,
+)
 
 
 def test_secret_and_path_sanitization() -> None:
@@ -11,6 +16,24 @@ def test_secret_and_path_sanitization() -> None:
     assert "C:\\Users" not in sanitized
     assert "[REDACTED_SECRET]" in sanitized
     assert scan_text(text, "fixture")
+
+
+def test_drive_roots_are_redacted_before_json_transport() -> None:
+    for drive_root in ("C:\\", "D:/"):
+        sanitized = sanitize_text(f"Use {drive_root} for local work")
+        assert drive_root not in sanitized
+        assert "[LOCAL_PATH]" in sanitized
+        assert_model_packet_safe({"text": sanitized})
+
+
+def test_model_packet_preflight_reports_safe_field_location() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"absolute-path at external-model-packet\.evidence\[0\]\.payload\.text",
+    ):
+        assert_model_packet_safe(
+            {"evidence": [{"payload": {"text": "Read C:\\private\\note.txt"}}]}
+        )
 
 
 def test_generated_section_preserves_manual_prose() -> None:
