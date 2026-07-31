@@ -14,6 +14,11 @@ from typing import Any
 from .activity import session_recap
 from .codex_account import read_codex_rate_limits
 from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_root
+from .curate import (
+    KNOWLEDGE_LAYER_KINDS,
+    KNOWLEDGE_LAYER_NOTES,
+    KNOWLEDGE_LAYER_ORDER,
+)
 from .markdown import slugify
 from .model_runner import TOKEN_USAGE_FIELDS, usage_from_receipt
 from .notifications import obsidian_uri
@@ -70,24 +75,6 @@ KIND_LABELS = {
     "voice_style": "Voice",
     "work_style": "Work style",
 }
-KNOWLEDGE_LAYER_ORDER = (
-    "about_shai",
-    "professional_profile",
-    "operating_preferences",
-    "project_knowledge",
-)
-KNOWLEDGE_LAYER_KINDS = {
-    "about_shai": {"explicit_fact", "goal", "personality", "voice_style", "work_style"},
-    "professional_profile": {"education", "experience", "military", "skill"},
-    "operating_preferences": {"preference"},
-    "project_knowledge": {"decision", "lesson", "project_fact"},
-}
-KNOWLEDGE_LAYER_NOTES = {
-    "about_shai": "Identity/Persona.md",
-    "professional_profile": "Skills/Index.md",
-    "operating_preferences": "Identity/Preferences.md",
-    "project_knowledge": "Projects/Index.md",
-}
 PERSONAL_PATTERN_KINDS = {"personality", "preference", "voice_style", "work_style"}
 PROJECT_CONTEXT_MARKERS = (
     "this demo",
@@ -133,6 +120,612 @@ IMPORTANT_PROJECT_FACT_TERMS = (
     "failed validation",
     "security boundary",
     "privacy boundary",
+)
+MATT_SKILL_GUIDE = (
+    {
+        "name": "setup-matt-pocock-skills",
+        "group": "Setup",
+        "when": "Once per repository, before the first engineering flow.",
+        "outcome": "Connects the issue tracker, triage labels, and domain docs.",
+        "requires": [],
+    },
+    {
+        "name": "ask-matt",
+        "group": "Router",
+        "when": "You are unsure which skill or workflow fits.",
+        "outcome": "Routes the situation without doing the work itself.",
+        "requires": ["setup-matt-pocock-skills"],
+    },
+    {
+        "name": "grill-with-docs",
+        "group": "Main flow",
+        "when": "An idea in a codebase needs decisions resolved before building.",
+        "outcome": "One-question-at-a-time alignment with Protocol docs updated inline.",
+        "requires": ["grilling", "domain-modeling"],
+    },
+    {
+        "name": "to-spec",
+        "group": "Main flow",
+        "when": "The conversation is clear and a multi-session build needs a durable spec.",
+        "outcome": "Synthesizes the current context into a GitHub issue; no new interview.",
+        "requires": ["setup-matt-pocock-skills"],
+    },
+    {
+        "name": "to-tickets",
+        "group": "Main flow",
+        "when": "An approved spec or plan needs context-sized implementation slices.",
+        "outcome": "Publishes tracer-bullet tickets with explicit blocking edges.",
+        "requires": ["to-spec"],
+    },
+    {
+        "name": "implement",
+        "group": "Main flow",
+        "when": "A spec or ready ticket is approved for implementation.",
+        "outcome": "Builds, verifies, reviews, and commits the requested slice.",
+        "requires": ["tdd", "code-review"],
+    },
+    {
+        "name": "tdd",
+        "group": "Main flow",
+        "when": "A feature or fix should be built test-first at agreed seams.",
+        "outcome": "Runs one vertical red → green slice at a time.",
+        "requires": ["codebase-design"],
+    },
+    {
+        "name": "code-review",
+        "group": "Main flow",
+        "when": "A branch or diff needs review against a fixed point.",
+        "outcome": "Separates Standards findings from Spec findings.",
+        "requires": ["setup-matt-pocock-skills"],
+    },
+    {
+        "name": "triage",
+        "group": "On-ramp",
+        "when": "Raw bug reports or external requests need evaluation.",
+        "outcome": "Moves issues through canonical states and writes durable briefs.",
+        "requires": ["setup-matt-pocock-skills", "grilling", "domain-modeling"],
+    },
+    {
+        "name": "diagnosing-bugs",
+        "group": "On-ramp",
+        "when": "A hard bug, flake, failure, or regression resists a first look.",
+        "outcome": "Builds a tight red-capable loop, isolates the cause, and locks the fix.",
+        "requires": ["tdd"],
+    },
+    {
+        "name": "wayfinder",
+        "group": "On-ramp",
+        "when": "A huge effort is too foggy for one session or one linear plan.",
+        "outcome": "Maps decision tickets until the route to a spec is clear.",
+        "requires": [
+            "setup-matt-pocock-skills",
+            "grilling",
+            "domain-modeling",
+            "research",
+        ],
+    },
+    {
+        "name": "improve-codebase-architecture",
+        "group": "Maintenance",
+        "when": "Recurring friction suggests shallow modules or weak test seams.",
+        "outcome": "Produces a visual deepening report, then explores one candidate.",
+        "requires": ["codebase-design", "grilling", "domain-modeling"],
+    },
+    {
+        "name": "domain-modeling",
+        "group": "Foundation",
+        "when": "Terminology is fuzzy, overloaded, contradictory, or decision-worthy.",
+        "outcome": "Sharpens Protocol language and records durable decisions sparingly.",
+        "requires": [],
+    },
+    {
+        "name": "codebase-design",
+        "group": "Foundation",
+        "when": "A module interface, seam, adapter, or test surface needs design.",
+        "outcome": "Applies deep-module vocabulary for leverage and locality.",
+        "requires": [],
+    },
+    {
+        "name": "grilling",
+        "group": "Foundation",
+        "when": "A plan or decision needs every branch resolved with the user.",
+        "outcome": "Asks one recommended question at a time and waits for confirmation.",
+        "requires": [],
+    },
+    {
+        "name": "prototype",
+        "group": "Detour",
+        "when": "Logic or UI cannot be settled confidently on paper.",
+        "outcome": "Creates throwaway code that answers one design question.",
+        "requires": [],
+    },
+    {
+        "name": "research",
+        "group": "Detour",
+        "when": "A decision needs primary-source reading while other work continues.",
+        "outcome": "Delegates research and leaves one cited Markdown artifact.",
+        "requires": [],
+    },
+    {
+        "name": "handoff",
+        "group": "Bridge",
+        "when": "A fresh session is needed without losing the current context.",
+        "outcome": "Writes a redacted temporary handoff with suggested next skills.",
+        "requires": [],
+    },
+    {
+        "name": "resolving-merge-conflicts",
+        "group": "Standalone",
+        "when": "A merge or rebase is already in conflict.",
+        "outcome": "Resolves by original intent, verifies, and completes the operation.",
+        "requires": [],
+    },
+    {
+        "name": "grill-me",
+        "group": "Standalone",
+        "when": "A plan outside a codebase needs a relentless interview.",
+        "outcome": "Runs the stateless grilling loop without writing project docs.",
+        "requires": ["grilling"],
+    },
+    {
+        "name": "teach",
+        "group": "Standalone",
+        "when": "A concept should be learned across multiple sessions.",
+        "outcome": "Builds a stateful teaching workspace around a learner mission.",
+        "requires": [],
+    },
+    {
+        "name": "writing-great-skills",
+        "group": "Reference",
+        "when": "A skill needs to be created, edited, or made more predictable.",
+        "outcome": "Supplies invocation, hierarchy, pruning, and leading-word discipline.",
+        "requires": [],
+    },
+)
+MATT_SKILL_LANES = (
+    {
+        "id": "orient",
+        "label": "Start & route",
+        "hint": "Set up the system, choose a workflow, or triage incoming work.",
+    },
+    {
+        "id": "discover",
+        "label": "Clarify & investigate",
+        "hint": "Resolve uncertainty before committing to a direction.",
+    },
+    {
+        "id": "define",
+        "label": "Shape & plan",
+        "hint": "Turn understanding into durable language, specs, and tickets.",
+    },
+    {
+        "id": "build",
+        "label": "Build",
+        "hint": "Design and implement small, verifiable vertical slices.",
+    },
+    {
+        "id": "validate",
+        "label": "Fix & review",
+        "hint": "Diagnose failures, review changes, and integrate safely.",
+    },
+    {
+        "id": "evolve",
+        "label": "Maintain & extend",
+        "hint": "Improve architecture, transfer context, teach, and create skills.",
+    },
+)
+MATT_SKILL_DETAILS = {
+    "setup-matt-pocock-skills": {
+        "lane": "orient",
+        "steps": [
+            "Choose the issue tracker and canonical triage labels.",
+            "Point domain guidance at the repository's existing documentation.",
+            "Record the configuration in the agent instructions.",
+        ],
+        "avoid": "Do not rerun it casually after setup; review existing configuration before replacing anything.",
+        "example": "A repository adopts GitHub issues, maps Matt's five triage labels, and keeps Protocol as its single domain-documentation home.",
+    },
+    "ask-matt": {
+        "lane": "orient",
+        "steps": [
+            "Describe the situation and the outcome you need.",
+            "Receive the smallest matching skill or workflow.",
+            "Start that suggested skill in the appropriate context.",
+        ],
+        "avoid": "Do not expect it to implement, research, or diagnose; it is a router.",
+        "example": "You have a vague refactor request and it directs you to improve-codebase-architecture before implementation.",
+    },
+    "triage": {
+        "lane": "orient",
+        "steps": [
+            "Inspect the report and gather missing reproduction facts.",
+            "Apply one canonical state label.",
+            "Write a bounded brief when the issue is ready.",
+        ],
+        "avoid": "Do not implement the issue during triage or mark ambiguous work ready.",
+        "example": "A vague crash report becomes a reproducible issue with needs-info cleared and a ready-for-agent brief attached.",
+    },
+    "grill-with-docs": {
+        "lane": "discover",
+        "steps": [
+            "Read the existing project and domain documentation.",
+            "Resolve one dependent decision at a time with a recommendation.",
+            "Update the documentation until shared understanding is confirmed.",
+        ],
+        "avoid": "Do not use it when requirements are already settled or project docs should not change.",
+        "example": "A dashboard redesign is grilled from goals through interactions, with every accepted decision recorded before coding.",
+    },
+    "grill-me": {
+        "lane": "discover",
+        "steps": [
+            "State the idea, plan, or decision.",
+            "Answer one recommended question at a time.",
+            "Confirm shared understanding before action begins.",
+        ],
+        "avoid": "Use grill-with-docs instead when accepted decisions must update repository documentation.",
+        "example": "A launch idea is pressure-tested across audience, scope, risks, and success criteria without touching a codebase.",
+    },
+    "grilling": {
+        "lane": "discover",
+        "steps": [
+            "Map the unresolved decision tree.",
+            "Ask exactly one dependent question with a recommendation.",
+            "Continue until the user confirms shared understanding.",
+        ],
+        "avoid": "Do not ask a batch of questions or act before the design is confirmed.",
+        "example": "An unclear permissions model becomes a sequence of explicit owner decisions instead of an assumption-heavy implementation.",
+    },
+    "wayfinder": {
+        "lane": "discover",
+        "steps": [
+            "Identify major unknowns and decision frontiers.",
+            "Create small decision tickets with explicit relationships.",
+            "Resolve them until the work can become a coherent spec.",
+        ],
+        "avoid": "Do not disguise a multi-frontier problem as one giant implementation ticket.",
+        "example": "A platform migration becomes a map of authentication, data, rollout, and compatibility decisions that converge into one spec.",
+    },
+    "research": {
+        "lane": "discover",
+        "steps": [
+            "Define the decision the research must inform.",
+            "Investigate authoritative primary sources.",
+            "Capture findings, uncertainty, and citations in one artifact.",
+        ],
+        "avoid": "Do not return an uncited web summary or research without a decision target.",
+        "example": "Official platform documentation is compared in a cited brief before an authentication flow is chosen.",
+    },
+    "domain-modeling": {
+        "lane": "define",
+        "steps": [
+            "Collect the terms people and code currently use.",
+            "Expose contradictions, overloaded words, and missing distinctions.",
+            "Update canonical language and record durable decisions sparingly.",
+        ],
+        "avoid": "Do not invent abstractions before evidence exists or document language that is already stable.",
+        "example": "A team separates observation, claim, and evidence so APIs, docs, and review states stop contradicting each other.",
+    },
+    "prototype": {
+        "lane": "define",
+        "steps": [
+            "Name the single uncertainty the prototype must resolve.",
+            "Build the smallest disposable experiment.",
+            "Record the result and discard or isolate the prototype.",
+        ],
+        "avoid": "Do not let exploratory code quietly become production architecture.",
+        "example": "A throwaway interaction proves whether a metro-map layout stays readable on mobile before the dashboard is changed.",
+    },
+    "to-spec": {
+        "lane": "define",
+        "steps": [
+            "Use the already-resolved conversation and project context.",
+            "Write the problem, constraints, design, and acceptance criteria.",
+            "Publish one durable issue that can survive a fresh session.",
+        ],
+        "avoid": "Do not use it to discover missing requirements; return to grilling when decisions remain.",
+        "example": "An approved interactive guide becomes a self-contained GitHub issue with behavior and responsive acceptance criteria.",
+    },
+    "to-tickets": {
+        "lane": "define",
+        "steps": [
+            "Read the approved spec and identify end-to-end slices.",
+            "Create independently verifiable context-sized tickets.",
+            "Connect blockers and mark only ready work actionable.",
+        ],
+        "avoid": "Do not ticket unresolved specifications or split work only by technical layer.",
+        "example": "A dashboard feature becomes data, interaction, accessibility, and visual-QA tickets connected by explicit blockers.",
+    },
+    "codebase-design": {
+        "lane": "build",
+        "steps": [
+            "Sketch at least two credible interface designs.",
+            "Compare information hiding, depth, locality, and test seams.",
+            "Choose the smallest interface that hides the most complexity.",
+        ],
+        "avoid": "Do not multiply thin wrappers or expose implementation detail through broad interfaces.",
+        "example": "Two dashboard data APIs are compared; the deeper one wins because rendering never sees filesystem details.",
+    },
+    "tdd": {
+        "lane": "build",
+        "steps": [
+            "Agree on the observable seam and write one failing test.",
+            "Implement the smallest vertical behavior that makes it pass.",
+            "Refactor only after green, then repeat.",
+        ],
+        "avoid": "Do not mock internal details or write a large test batch before feedback.",
+        "example": "A route-selection test fails first, then the smallest dashboard behavior is added before styling.",
+    },
+    "implement": {
+        "lane": "build",
+        "steps": [
+            "Read one approved ticket or bounded specification.",
+            "Implement and verify the requested behavior.",
+            "Review the diff and create a focused commit.",
+        ],
+        "avoid": "Do not combine unrelated tickets or invent product decisions while implementing.",
+        "example": "One ready dashboard ticket is implemented test-first, visually checked, reviewed, and committed.",
+    },
+    "diagnosing-bugs": {
+        "lane": "validate",
+        "steps": [
+            "Create the smallest reliable reproduction loop.",
+            "Test competing hypotheses and narrow the failure boundary.",
+            "Fix the cause and preserve a regression test.",
+        ],
+        "avoid": "Do not stack speculative fixes before identifying which hypothesis is true.",
+        "example": "A sporadic route failure is reduced to one resize sequence, isolated, fixed, and locked with a regression test.",
+    },
+    "code-review": {
+        "lane": "validate",
+        "steps": [
+            "Choose the exact commit, branch, tag, or merge base.",
+            "Review standards separately from requested behavior.",
+            "Report prioritized findings with tight locations.",
+        ],
+        "avoid": "Do not review an undefined moving target or mix preferences with correctness defects.",
+        "example": "A branch is checked against main and its spec, revealing one accessibility defect and one missing criterion.",
+    },
+    "resolving-merge-conflicts": {
+        "lane": "validate",
+        "steps": [
+            "Inspect the conflicting histories and both intended changes.",
+            "Construct the integrated result instead of choosing one side.",
+            "Run focused verification and complete the operation.",
+        ],
+        "avoid": "Do not default to ours or theirs without understanding the intended combined behavior.",
+        "example": "Two dashboard changes touch one renderer; both intentions are preserved and verified before the rebase continues.",
+    },
+    "improve-codebase-architecture": {
+        "lane": "evolve",
+        "steps": [
+            "Find repeated friction, leakage, and shallow-module symptoms.",
+            "Rank deepening candidates in a visual report.",
+            "Choose and explore one bounded improvement.",
+        ],
+        "avoid": "Do not launch a repository-wide refactor from aesthetic discomfort alone.",
+        "example": "Repeated rendering friction identifies one leaky data boundary, which is redesigned before migration.",
+    },
+    "handoff": {
+        "lane": "evolve",
+        "steps": [
+            "Summarize the goal, decisions, state, and blockers.",
+            "Remove secrets, transcripts, and irrelevant history.",
+            "Name the next action and likely next skills.",
+        ],
+        "avoid": "Do not copy the conversation wholesale or treat a temporary handoff as canonical documentation.",
+        "example": "A nearly full session leaves a compact handoff that lets a fresh agent resume the exact ticket safely.",
+    },
+    "teach": {
+        "lane": "evolve",
+        "steps": [
+            "Define the learner mission and current level.",
+            "Sequence explanations, exercises, resources, and vocabulary.",
+            "Persist progress so the next session continues.",
+        ],
+        "avoid": "Do not build a stateful curriculum when one concise explanation is enough.",
+        "example": "A developer learns deep-module design across sessions with exercises and a durable glossary.",
+    },
+    "writing-great-skills": {
+        "lane": "evolve",
+        "steps": [
+            "Choose whether invocation is user-led or model-led.",
+            "Write precise triggers and a lean instruction hierarchy.",
+            "Prune ambiguity and validate realistic prompts.",
+        ],
+        "avoid": "Do not create a universal skill with vague triggers and an oversized description.",
+        "example": "A noisy review prompt becomes a focused skill with explicit triggers and progressive references.",
+    },
+}
+MATT_SKILL_CONNECTIONS = (
+    {"from": "setup-matt-pocock-skills", "to": "triage", "kind": "supports"},
+    {"from": "grilling", "to": "grill-with-docs", "kind": "supports"},
+    {"from": "domain-modeling", "to": "grill-with-docs", "kind": "supports"},
+    {"from": "research", "to": "wayfinder", "kind": "supports"},
+    {"from": "wayfinder", "to": "grill-with-docs", "kind": "feeds"},
+    {"from": "grill-with-docs", "to": "to-spec", "kind": "feeds"},
+    {"from": "to-spec", "to": "to-tickets", "kind": "feeds"},
+    {"from": "to-tickets", "to": "implement", "kind": "feeds"},
+    {"from": "domain-modeling", "to": "codebase-design", "kind": "supports"},
+    {"from": "prototype", "to": "codebase-design", "kind": "supports"},
+    {"from": "codebase-design", "to": "tdd", "kind": "feeds"},
+    {"from": "tdd", "to": "implement", "kind": "feeds"},
+    {"from": "diagnosing-bugs", "to": "tdd", "kind": "feeds"},
+    {"from": "implement", "to": "code-review", "kind": "feeds"},
+    {
+        "from": "codebase-design",
+        "to": "improve-codebase-architecture",
+        "kind": "supports",
+    },
+    {"from": "grill-me", "to": "grill-with-docs", "kind": "alternative"},
+    {"from": "prototype", "to": "research", "kind": "alternative"},
+)
+MATT_SKILL_SPARKS = (
+    {
+        "id": "fuzzy",
+        "label": "I have an idea, but it is still fuzzy.",
+        "description": "Resolve the important choices, preserve them, then turn the result into buildable work.",
+        "routes": [
+            {
+                "label": "Primary · guided idea to delivery",
+                "skills": [
+                    "grill-with-docs",
+                    "domain-modeling",
+                    "to-spec",
+                    "to-tickets",
+                    "implement",
+                    "code-review",
+                ],
+            },
+            {
+                "label": "Alternative · the effort is bigger than one plan",
+                "skills": ["wayfinder", "research", "grill-with-docs", "to-spec"],
+            },
+            {
+                "label": "Alternative · explore before committing",
+                "skills": [
+                    "grill-with-docs",
+                    "prototype",
+                    "codebase-design",
+                    "to-spec",
+                ],
+            },
+        ],
+    },
+    {
+        "id": "structure",
+        "label": "I know what to build, but not how to structure it.",
+        "description": "Clarify the language and seams before implementation hardens the wrong design.",
+        "routes": [
+            {
+                "label": "Primary · design the seam",
+                "skills": [
+                    "domain-modeling",
+                    "codebase-design",
+                    "prototype",
+                    "tdd",
+                    "implement",
+                ],
+            },
+            {
+                "label": "Alternative · recurring architectural friction",
+                "skills": [
+                    "improve-codebase-architecture",
+                    "codebase-design",
+                    "prototype",
+                ],
+            },
+            {
+                "label": "Alternative · validate the uncertainty first",
+                "skills": ["research", "prototype", "codebase-design"],
+            },
+        ],
+    },
+    {
+        "id": "broken",
+        "label": "Something is broken and the cause is unclear.",
+        "description": "Move from a reproducible signal to an isolated cause and a locked regression fix.",
+        "routes": [
+            {
+                "label": "Primary · isolate and lock the fix",
+                "skills": ["diagnosing-bugs", "tdd", "implement", "code-review"],
+            },
+            {
+                "label": "Alternative · the report is not actionable yet",
+                "skills": ["triage", "diagnosing-bugs", "tdd"],
+            },
+            {
+                "label": "Alternative · the breakage is a merge conflict",
+                "skills": ["resolving-merge-conflicts", "code-review"],
+            },
+        ],
+    },
+    {
+        "id": "wrong-shape",
+        "label": "The code works, but the design feels wrong.",
+        "description": "Turn recurring friction into evidence, compare deeper modules, and test one candidate.",
+        "routes": [
+            {
+                "label": "Primary · deepen the architecture",
+                "skills": [
+                    "improve-codebase-architecture",
+                    "domain-modeling",
+                    "codebase-design",
+                    "prototype",
+                ],
+            },
+            {
+                "label": "Alternative · terminology is the real problem",
+                "skills": ["domain-modeling", "grilling", "codebase-design"],
+            },
+            {
+                "label": "Alternative · inspect the current change first",
+                "skills": ["code-review", "codebase-design"],
+            },
+        ],
+    },
+    {
+        "id": "too-large",
+        "label": "The work is too large to see clearly.",
+        "description": "Map decision frontiers first; create a spec only after the landscape becomes coherent.",
+        "routes": [
+            {
+                "label": "Primary · find the route through the fog",
+                "skills": [
+                    "wayfinder",
+                    "research",
+                    "grill-with-docs",
+                    "to-spec",
+                    "to-tickets",
+                ],
+            },
+            {
+                "label": "Alternative · understanding exists, context does not",
+                "skills": ["handoff", "to-spec", "to-tickets"],
+            },
+            {
+                "label": "Alternative · one uncertain branch blocks everything",
+                "skills": ["research", "prototype", "grill-with-docs"],
+            },
+        ],
+    },
+    {
+        "id": "confidence",
+        "label": "I need confidence before I ship.",
+        "description": "Make behavior observable, verify the requested slice, then review it against the right baseline.",
+        "routes": [
+            {
+                "label": "Primary · test, implement, review",
+                "skills": ["codebase-design", "tdd", "implement", "code-review"],
+            },
+            {
+                "label": "Alternative · a suspicious failure remains",
+                "skills": ["diagnosing-bugs", "tdd", "code-review"],
+            },
+            {
+                "label": "Alternative · integration is conflicted",
+                "skills": ["resolving-merge-conflicts", "tdd", "code-review"],
+            },
+        ],
+    },
+    {
+        "id": "transfer",
+        "label": "I need to preserve or transfer understanding.",
+        "description": "Choose the durable format that matches the lifespan: session, specification, curriculum, or reusable skill.",
+        "routes": [
+            {
+                "label": "Primary · continue in a fresh session",
+                "skills": ["handoff", "ask-matt"],
+            },
+            {
+                "label": "Alternative · preserve product intent",
+                "skills": ["grill-with-docs", "to-spec", "to-tickets"],
+            },
+            {
+                "label": "Alternative · teach reusable understanding",
+                "skills": ["teach", "writing-great-skills"],
+            },
+        ],
+    },
 )
 LOW_VALUE_KNOWLEDGE_TERMS = (
     "windows icons",
@@ -444,9 +1037,21 @@ def _summary_visuals(
                     "description": "Reviewed sessions are either project-linked or safely restricted to person-level analysis",
                     "evidence": session_evidence,
                     "chips": [
-                        {"label": "Reviewed sessions", "value": sessions, "evidence": session_evidence},
-                        {"label": "Linked sessions", "value": linked, "evidence": session_evidence},
-                        {"label": "Projects represented", "value": projects, "evidence": session_evidence},
+                        {
+                            "label": "Reviewed sessions",
+                            "value": sessions,
+                            "evidence": session_evidence,
+                        },
+                        {
+                            "label": "Linked sessions",
+                            "value": linked,
+                            "evidence": session_evidence,
+                        },
+                        {
+                            "label": "Projects represented",
+                            "value": projects,
+                            "evidence": session_evidence,
+                        },
                         {"label": "Profile-only sessions", "value": unlinked},
                     ],
                 }
@@ -484,8 +1089,16 @@ def _summary_visuals(
                     "description": "How many reviewed agent sessions could be connected to a known project",
                     "evidence": session_evidence,
                     "chips": [
-                        {"label": "Reviewed sessions", "value": sessions, "evidence": session_evidence},
-                        {"label": "Projects represented", "value": projects, "evidence": session_evidence},
+                        {
+                            "label": "Reviewed sessions",
+                            "value": sessions,
+                            "evidence": session_evidence,
+                        },
+                        {
+                            "label": "Projects represented",
+                            "value": projects,
+                            "evidence": session_evidence,
+                        },
                     ],
                 }
             )
@@ -712,8 +1325,7 @@ def _cached_summary_evidence_ids(
         sections[0] if sections else {"items": []},
     )
     expected = [
-        _clean_markdown(str(item), max_chars=1200)
-        for item in recap.get("items", [])
+        _clean_markdown(str(item), max_chars=1200) for item in recap.get("items", [])
     ]
     if not expected:
         return []
@@ -770,12 +1382,19 @@ def _summary_evidence_cards(
     for row in rows:
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         if row.get("kind") == "project_delta":
-            name = str(payload.get("project_name") or projects.get(str(row.get("project_id"))) or "Project")
+            name = str(
+                payload.get("project_name")
+                or projects.get(str(row.get("project_id")))
+                or "Project"
+            )
             signals = [str(value) for value in payload.get("change_types") or []]
-            detail = ", ".join(
-                CHANGE_LABELS.get(signal, signal.replace("_", " ").title())
-                for signal in signals
-            ) or "Project activity"
+            detail = (
+                ", ".join(
+                    CHANGE_LABELS.get(signal, signal.replace("_", " ").title())
+                    for signal in signals
+                )
+                or "Project activity"
+            )
             cards.append(
                 {
                     "category": "project_change",
@@ -945,7 +1564,9 @@ def _apply_canonical_evidence_details(
         if match_index is not None:
             used_items.add(match_index)
         if match and "—" in match:
-            card["detail"] = sanitize_text(match.split("—", 1)[1].strip(), max_chars=800)
+            card["detail"] = sanitize_text(
+                match.split("—", 1)[1].strip(), max_chars=800
+            )
 
 
 def _summary_timeline_context(
@@ -1016,9 +1637,7 @@ def _summary_entry(
     if not sections:
         return None
     evidence_rows = _summary_evidence_rows(store, paths, kind, path.stem, sections)
-    evidence = _summary_evidence_cards(
-        vault, store, evidence_rows, kind=kind
-    )
+    evidence = _summary_evidence_cards(vault, store, evidence_rows, kind=kind)
     _apply_canonical_evidence_details(evidence, sections)
     _attach_section_evidence(sections, evidence, period=path.stem)
     timeline_context = _summary_timeline_context(
@@ -1070,11 +1689,7 @@ def _summary_entry(
         "sections": sections,
         "visuals": _summary_visuals(sections, evidence=evidence),
         "evidence": evidence,
-        "evidence_ids": [
-            str(row.get("id"))
-            for row in evidence_rows
-            if row.get("id")
-        ],
+        "evidence_ids": [str(row.get("id")) for row in evidence_rows if row.get("id")],
         "usage": usage or {"available": False, "iterations": []},
         "url": obsidian_uri(vault, path),
     }
@@ -1892,18 +2507,9 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
         sessions = int(item.get("session_count", 0))
         dates = int(item.get("date_count", 0))
         projects = int(item.get("project_count", 0))
-        contexts = int(
-            ((item.get("payload") or {}).get("context_count"))
-            or projects
-        )
+        contexts = int(((item.get("payload") or {}).get("context_count")) or projects)
         progress = round(
-            (
-                min(sessions / 3, 1)
-                + min(dates / 2, 1)
-                + min(contexts / 2, 1)
-            )
-            / 3
-            * 100
+            (min(sessions / 3, 1) + min(dates / 2, 1) + min(contexts / 2, 1)) / 3 * 100
         )
         patterns.append(
             {
@@ -2165,9 +2771,7 @@ def _learning_snapshot(
     daily: dict[str, Any],
 ) -> dict[str, Any]:
     period = str(daily.get("period") or "")
-    evidence_ids = {
-        str(value) for value in daily.get("evidence_ids") or [] if value
-    }
+    evidence_ids = {str(value) for value in daily.get("evidence_ids") or [] if value}
     visible_topics = store.visible_learning_topics()
     personal_topic_keys = {
         str(topic.get("topic_key") or "")
@@ -2224,9 +2828,7 @@ def _learning_snapshot(
                 "tone": "capability"
                 if signal_type in {"operational_capability", "validated_outcome"}
                 else "learning",
-                "detail": _clean_markdown(
-                    str(event.get("claim") or ""), max_chars=700
-                ),
+                "detail": _clean_markdown(str(event.get("claim") or ""), max_chars=700),
                 "observed_at": occurred,
             }
         )
@@ -2358,14 +2960,109 @@ def _review_browser(
                     "claim": personalize_knowledge_text(claim, first_name),
                     "confidence": round(float(item.get("confidence") or 0) * 100),
                     "source_count": int(
-                        item.get("source_count")
-                        or len(item.get("evidence_refs") or [])
+                        item.get("source_count") or len(item.get("evidence_refs") or [])
                     ),
                     "project_count": int(item.get("project_count") or 0),
                     "url": obsidian_uri(vault, group_note),
                 }
             )
     return cards
+
+
+def _matt_skills_catalog(vault: Path) -> dict[str, Any]:
+    """Return a safe, installed-only guide to the Matt Pocock skill set."""
+
+    skills: list[dict[str, Any]] = []
+    skills_root = vault / ".agents" / "skills"
+    for guide in MATT_SKILL_GUIDE:
+        skill_dir = skills_root / str(guide["name"])
+        skill_path = skill_dir / "SKILL.md"
+        if not skill_path.is_file():
+            continue
+        skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
+        openai_path = skill_dir / "agents" / "openai.yaml"
+        openai_text = (
+            openai_path.read_text(encoding="utf-8", errors="replace")
+            if openai_path.is_file()
+            else ""
+        )
+        manual = (
+            "disable-model-invocation: true" in skill_text
+            or "allow_implicit_invocation: false" in openai_text
+        )
+        source_body = skill_text.strip()
+        if source_body.startswith("---"):
+            frontmatter_end = source_body.find("\n---", 3)
+            if frontmatter_end >= 0:
+                source_body = source_body[frontmatter_end + 4 :].lstrip()
+        package_files = [
+            {
+                "path": markdown_path.relative_to(skill_dir).as_posix(),
+                "content": (
+                    source_body
+                    if markdown_path == skill_path
+                    else markdown_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).strip()
+                ),
+                "kind": (
+                    "instructions" if markdown_path == skill_path else "reference"
+                ),
+            }
+            for markdown_path in sorted(
+                skill_dir.rglob("*.md"),
+                key=lambda path: (
+                    path.name != "SKILL.md",
+                    path.relative_to(skill_dir).as_posix().casefold(),
+                ),
+            )
+            if markdown_path.is_file()
+        ]
+        skills.append(
+            {
+                **guide,
+                **MATT_SKILL_DETAILS.get(str(guide["name"]), {}),
+                "mode": "manual" if manual else "automatic",
+                "mode_label": (
+                    "Codex · You invoke" if manual else "Codex · Model can invoke"
+                ),
+                "antigravity_mode": "discoverable",
+                "source_body": source_body,
+                "package_files": package_files,
+            }
+        )
+
+    manual_count = sum(skill["mode"] == "manual" for skill in skills)
+    installed_names = {str(skill["name"]) for skill in skills}
+    installed_lanes = {str(skill.get("lane", "")) for skill in skills}
+    connections = [
+        connection
+        for connection in MATT_SKILL_CONNECTIONS
+        if connection["from"] in installed_names and connection["to"] in installed_names
+    ]
+    sparks = []
+    for spark in MATT_SKILL_SPARKS:
+        routes = []
+        for route in spark["routes"]:
+            route_skills = [name for name in route["skills"] if name in installed_names]
+            if route_skills:
+                routes.append({**route, "skills": route_skills})
+        if routes:
+            sparks.append({**spark, "routes": routes})
+    return {
+        "available": bool(skills),
+        "source": "mattpocock/skills",
+        "expected_count": len(MATT_SKILL_GUIDE),
+        "installed_count": len(skills),
+        "manual_count": manual_count,
+        "automatic_count": len(skills) - manual_count,
+        "antigravity_discoverable_count": len(skills),
+        "agents": ["Codex", "Antigravity"],
+        "lanes": [lane for lane in MATT_SKILL_LANES if lane["id"] in installed_lanes],
+        "connections": connections,
+        "sparks": sparks,
+        "skills": skills,
+    }
 
 
 def build_snapshot(
@@ -2452,10 +3149,10 @@ def build_snapshot(
     cached_search = _cached_search_health(paths, store)
     git = _git_summary(vault)
     schedule_state = str(schedule.get("state") or "unknown")
-    scheduler_good = (
-        bool(schedule.get("installed"))
-        and schedule_state.casefold() in {"ready", "running"}
-    )
+    scheduler_good = bool(schedule.get("installed")) and schedule_state.casefold() in {
+        "ready",
+        "running",
+    }
     next_scheduled = _parse_datetime(schedule.get("next_run"))
     scheduler_detail = (
         "Installed; first run pending"
@@ -2464,7 +3161,9 @@ def build_snapshot(
     )
     if scheduler_good and next_scheduled:
         next_label = next_scheduled.astimezone(now.tzinfo).strftime("%b %d, %I:%M %p")
-        scheduler_detail = f"{schedule_state.title()}; next {next_label.replace(' 0', ' ')}"
+        scheduler_detail = (
+            f"{schedule_state.title()}; next {next_label.replace(' 0', ' ')}"
+        )
     latest_pipeline = next(iter(store.pipeline_runs(limit=1)), None)
     if latest_pipeline and latest_pipeline.get("status") == "failed":
         daily_outcome = {
@@ -2580,6 +3279,7 @@ def build_snapshot(
         "knowledge": _knowledge_deck(store, vault),
         "questions": _question_deck(store, vault),
         "patterns": _forming_patterns(store, vault),
+        "matt_skills": _matt_skills_catalog(vault),
         "review": {
             "pending": reviews["pending"],
             "questions": reviews["needs_answers"],

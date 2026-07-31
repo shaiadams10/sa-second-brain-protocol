@@ -3,9 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:,">
   <title>Second Brain Dashboard</title>
+  <script>
+    (() => {
+      try {
+        const storedTheme = localStorage.getItem("second-brain-theme");
+        const theme = storedTheme === "dark" || storedTheme === "light"
+          ? storedTheme
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+      } catch (_error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
   <style>
     :root {
       --paper: #f3f0ed;
@@ -32,6 +45,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
@@ -169,8 +183,34 @@
     .nav-stamp { margin-right: 9px; padding: 5px 8px; background: var(--ink); color: white; font-family: var(--mono); font-weight: 900; }
     .nav-strip a { padding: 7px 10px; border: 1.5px solid transparent; font-family: var(--mono); font-size: 12px; font-weight: 750; text-transform: uppercase; }
     .nav-strip a:hover { border-color: var(--ink); background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .workspace-tab { min-height: 34px; padding: 6px 10px; border: 1.5px solid var(--ink); background: var(--paper-bright); cursor: pointer; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .workspace-tab.active { transform: translate(-2px, -2px); background: var(--pink); color: white; box-shadow: 3px 3px 0 var(--ink); }
+    .workspace-tab-count { display: inline-grid; min-width: 20px; min-height: 20px; place-items: center; margin-left: 4px; border: 1px solid currentColor; font-size: 9px; }
+    .nav-divider { width: 1px; height: 28px; margin: 0 4px; background: var(--muted); opacity: 0.5; }
     .nav-spacer { flex: 1; }
     .updated { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .theme-toggle {
+      display: inline-flex;
+      min-height: 34px;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border: 1.5px solid var(--ink);
+      background: var(--paper-bright);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .theme-toggle:hover,
+    .theme-toggle:focus-visible {
+      transform: translate(-1px, -1px);
+      background: var(--purple-soft);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+    .theme-toggle-icon { font-size: 14px; line-height: 1; }
 
     .dashboard { padding: clamp(20px, 3.2vw, 48px); }
     section[id] { scroll-margin-top: 104px; }
@@ -619,10 +659,1337 @@
     .focus-links a { padding: 8px 10px; border: 1.5px solid white; background: transparent; font-family: var(--mono); font-size: 11px; font-weight: 800; }
     .focus-links a:hover { background: var(--pink); color: white; }
 
+    .matt-skills-view[hidden] { display: none; }
+    .matt-skills-view { animation: panel-arrive var(--motion-slow) var(--ease-smooth) both; }
+    .matt-intro {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
+      gap: 24px;
+      padding: clamp(24px, 4vw, 48px);
+      border: var(--border);
+      background: var(--purple-deep);
+      color: white;
+      box-shadow: var(--shadow);
+    }
+    .matt-kicker { color: var(--pink-soft); font: 900 11px/1 var(--mono); letter-spacing: 0.13em; text-transform: uppercase; }
+    .matt-title { max-width: 900px; margin: 12px 0 16px; font: 900 clamp(36px, 5vw, 68px)/0.95 var(--mono); letter-spacing: -0.07em; text-transform: uppercase; }
+    .matt-lede { max-width: 760px; margin: 0; color: #e4dff1; font-size: clamp(16px, 2vw, 21px); }
+    .matt-mode-key { display: grid; gap: 10px; align-content: center; }
+    .matt-mode {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1.5px solid white;
+      background: rgba(255,255,255,0.08);
+    }
+    .matt-mode strong { display: block; font: 900 12px/1.2 var(--mono); text-transform: uppercase; }
+    .matt-mode span:last-child { color: #d9d1e6; font-size: 12px; }
+    .matt-agent-note { margin: 0; color: #bdb2cb; font-size: 11px; line-height: 1.45; }
+    .mode-dot { width: 14px; height: 14px; border: 2px solid white; background: var(--pink); box-shadow: 3px 3px 0 rgba(255,255,255,0.45); }
+    .mode-dot.auto { background: var(--green); }
+    .matt-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 26px 0; border: var(--border); background: var(--paper-bright); box-shadow: var(--shadow-small); }
+    .matt-stat { padding: 16px 18px; }
+    .matt-stat + .matt-stat { border-left: 1.5px dashed var(--muted); }
+    .matt-stat-value { font: 900 clamp(24px, 3vw, 38px)/1 var(--mono); }
+    .matt-stat-label { margin-top: 5px; color: var(--muted); font: 800 10px/1.2 var(--mono); text-transform: uppercase; }
+    .matt-flow-panel { padding: clamp(22px, 3vw, 36px); border: var(--border); background: var(--paper-bright); box-shadow: var(--shadow-small); }
+    .matt-section-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+    .matt-section-head h2 { margin: 5px 0 0; font: 900 clamp(24px, 3vw, 38px)/1 var(--mono); }
+    .matt-section-note { max-width: 560px; margin: 0; color: var(--muted); font-size: 13px; }
+    .matt-flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+    .matt-flow-step { position: relative; min-width: 0; padding: 14px 12px; border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-flow-step:not(:last-child)::after { content: "→"; position: absolute; z-index: 2; right: -13px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: grid; place-items: center; border: 1.5px solid var(--ink); background: var(--pink); color: white; font: 900 14px/1 var(--mono); }
+    .matt-flow-index { color: var(--pink); font: 900 9px/1 var(--mono); }
+    .matt-flow-name { margin-top: 8px; overflow-wrap: anywhere; font: 900 12px/1.2 var(--mono); }
+    .matt-onramps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .matt-onramp { padding: 7px 9px; border: 1.5px solid var(--ink); background: var(--purple-soft); font: 800 10px/1.2 var(--mono); }
+    .matt-catalog { margin-top: 26px; }
+    .matt-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .matt-filter { padding: 8px 10px; border: 1.5px solid var(--ink); background: var(--paper-bright); cursor: pointer; font: 900 10px/1 var(--mono); text-transform: uppercase; }
+    .matt-filter.active { background: var(--purple-soft); box-shadow: 3px 3px 0 var(--ink); transform: translate(-2px, -2px); }
+    .matt-skill-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .matt-skill-card { display: flex; min-width: 0; min-height: 250px; flex-direction: column; padding: 18px; border: var(--border); background: var(--paper-bright); box-shadow: var(--shadow-small); }
+    .matt-skill-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .matt-group { color: var(--muted); font: 900 9px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .matt-invocation { padding: 5px 7px; border: 1.5px solid var(--ink); background: var(--pink-soft); font: 900 9px/1 var(--mono); text-transform: uppercase; }
+    .matt-invocation.automatic { background: #cceadc; }
+    .matt-skill-name { margin: 16px 0 12px; overflow-wrap: anywhere; font: 900 clamp(19px, 2vw, 28px)/1 var(--mono); letter-spacing: -0.04em; }
+    .matt-skill-when { margin: 0; font-weight: 750; }
+    .matt-skill-outcome { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+    .matt-deps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 16px; }
+    .matt-dep { padding: 4px 6px; border: 1px solid var(--muted); background: var(--paper); font: 750 9px/1 var(--mono); }
+    .matt-no-deps { color: var(--muted); font: 750 10px/1 var(--mono); text-transform: uppercase; }
+    .matt-guide {
+      margin-top: 26px;
+      padding: clamp(20px, 3vw, 34px);
+      border: var(--border);
+      background: var(--paper-bright);
+      box-shadow: var(--shadow-small);
+    }
+    .matt-guide-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+    .matt-guide-head h2 { margin: 6px 0 0; font: 900 clamp(27px, 3vw, 42px)/1 var(--mono); letter-spacing: -0.04em; }
+    .matt-guide-copy { max-width: 620px; margin: 0; color: var(--muted); font-size: 13px; }
+    .matt-sparks {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .matt-spark {
+      min-height: 92px;
+      padding: 13px;
+      border: 1.5px solid var(--ink);
+      background: var(--paper);
+      color: var(--ink);
+      cursor: pointer;
+      font: 800 12px/1.35 var(--mono);
+      text-align: left;
+      transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease, background var(--motion-fast) ease;
+    }
+    .matt-spark::before { content: "SPARK"; display: block; margin-bottom: 8px; color: var(--pink); font: 900 8px/1 var(--mono); letter-spacing: 0.12em; }
+    .matt-spark:hover, .matt-spark:focus-visible { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+    .matt-spark.active { background: var(--purple-deep); color: white; box-shadow: 4px 4px 0 var(--pink); }
+    .matt-spark.active::before { color: var(--pink-soft); }
+    .matt-route-stage {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1.4fr);
+      gap: 18px;
+      margin-top: 18px;
+      padding: 18px;
+      border: 1.5px solid var(--ink);
+      background: var(--purple-soft);
+    }
+    .matt-route-context h3 { margin: 6px 0 8px; font: 900 clamp(19px, 2.2vw, 29px)/1.05 var(--mono); }
+    .matt-route-context p { margin: 0; color: var(--muted); font-size: 13px; }
+    .matt-route-options { display: flex; flex-wrap: wrap; gap: 8px; align-content: start; }
+    .matt-route-option {
+      padding: 8px 10px;
+      border: 1.5px solid var(--ink);
+      background: white;
+      cursor: pointer;
+      font: 850 9px/1.2 var(--mono);
+      text-align: left;
+      text-transform: uppercase;
+    }
+    .matt-route-option.active { background: var(--pink); color: white; box-shadow: 3px 3px 0 var(--ink); }
+    .matt-route-steps { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; margin-top: 6px; }
+    .matt-route-step {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 8px;
+      border: 1px solid var(--ink);
+      background: white;
+      cursor: pointer;
+      font: 850 9px/1 var(--mono);
+    }
+    .matt-route-step-index { display: grid; width: 18px; height: 18px; place-items: center; background: var(--purple-deep); color: white; font-size: 8px; }
+    .matt-explorer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 370px);
+      gap: 18px;
+      margin-top: 20px;
+      align-items: start;
+    }
+    .matt-map-shell { min-width: 0; border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1.5px solid var(--ink); background: white; }
+    .matt-map-toolbar strong { font: 900 11px/1 var(--mono); text-transform: uppercase; }
+    .matt-map-legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font: 800 8px/1 var(--mono); text-transform: uppercase; }
+    .matt-map-key { display: inline-flex; align-items: center; gap: 5px; }
+    .matt-map-key::before { content: ""; width: 18px; border-top: 3px solid var(--pink); }
+    .matt-map-key.alt::before { border-top-color: var(--purple-deep); border-top-style: dashed; }
+    .matt-map-key.quiet::before { border-top-width: 1px; border-top-color: var(--muted); }
+    .matt-map-scroll { overflow: auto; overscroll-behavior-x: contain; }
+    .matt-map { position: relative; min-width: 0; min-height: 570px; padding: 12px; }
+    .matt-map-lines { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+    .matt-map-path { fill: none; stroke: var(--muted); stroke-width: 1.5; opacity: 0.18; vector-effect: non-scaling-stroke; }
+    .matt-map-path.supports { stroke-dasharray: 4 5; }
+    .matt-map-path.alternative { stroke: var(--purple-deep); stroke-dasharray: 2 6; }
+    .matt-map-path.route { stroke: var(--pink); stroke-width: 4; opacity: 0.95; }
+    .matt-map-path.route-alternative { stroke: var(--purple-deep); stroke-width: 3; stroke-dasharray: 7 5; opacity: 0.9; }
+    .matt-lanes { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(6, minmax(88px, 1fr)); gap: 6px; }
+    .matt-lane { min-width: 0; padding: 7px; border-left: 1.5px dashed #b9aebd; }
+    .matt-lane:first-child { border-left: 0; }
+    .matt-lane-head { min-height: 48px; margin-bottom: 12px; }
+    .matt-lane-name { display: block; font: 900 11px/1 var(--mono); text-transform: uppercase; }
+    .matt-lane-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .matt-lane-nodes { display: grid; gap: 10px; align-content: start; }
+    .matt-node {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+      min-height: 58px;
+      padding: 10px;
+      border: 1.5px solid var(--ink);
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      font: 850 9px/1.2 var(--mono);
+      overflow-wrap: anywhere;
+      text-align: left;
+      transition: opacity var(--motion-fast) ease, transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease, background var(--motion-fast) ease;
+    }
+    .matt-node:hover, .matt-node:focus-visible { opacity: 1 !important; transform: translate(-2px, -2px); box-shadow: 3px 3px 0 var(--ink); }
+    .matt-node.is-quiet { opacity: 0.28; filter: saturate(0.35); }
+    .matt-node.is-route { opacity: 1; background: #fff4fa; filter: none; }
+    .matt-node.is-selected { background: var(--purple-deep); color: white; box-shadow: 4px 4px 0 var(--pink); }
+    .matt-node-order { display: grid; position: absolute; top: -8px; right: -7px; width: 20px; height: 20px; place-items: center; border: 1px solid var(--ink); background: var(--pink); color: white; font: 900 8px/1 var(--mono); }
+    .matt-node-mode { display: block; margin-top: 7px; color: var(--muted); font: 800 7px/1 var(--mono); text-transform: uppercase; }
+    .matt-node.is-selected .matt-node-mode { color: #ddd4e9; }
+    .matt-detail {
+      position: sticky;
+      top: 14px;
+      max-height: calc(100vh - 40px);
+      overflow: auto;
+      border: var(--border);
+      background: white;
+      box-shadow: var(--shadow-small);
+    }
+    .matt-detail-empty { padding: 28px; color: var(--muted); }
+    .matt-detail-hero { padding: 20px; border-bottom: 1.5px solid var(--ink); background: var(--purple-deep); color: white; }
+    .matt-detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .matt-detail-pill { padding: 5px 7px; border: 1px solid white; font: 850 8px/1 var(--mono); text-transform: uppercase; }
+    .matt-detail-title { margin: 0; overflow-wrap: anywhere; font: 900 clamp(24px, 2.5vw, 34px)/0.95 var(--mono); letter-spacing: -0.05em; }
+    .matt-detail-body { padding: 18px; }
+    .matt-detail-label { margin: 0 0 6px; color: var(--pink); font: 900 8px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+    .matt-detail-when { margin: 0; font-weight: 800; }
+    .matt-detail-outcome { margin: 9px 0 0; color: var(--muted); font-size: 13px; }
+    .matt-detail-invoke { margin-top: 14px; padding: 11px; border: 1px solid var(--ink); background: var(--pink-soft); font-size: 12px; }
+    .matt-detail-invoke.automatic { background: #dff1e8; }
+    .matt-disclosure { margin-top: 12px; border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-disclosure summary { padding: 11px 12px; cursor: pointer; font: 900 10px/1.2 var(--mono); text-transform: uppercase; }
+    .matt-disclosure[open] summary { border-bottom: 1px solid var(--ink); background: var(--purple-soft); }
+    .matt-disclosure-content { padding: 13px; }
+    .matt-disclosure-content p { margin: 0; font-size: 12px; }
+    .matt-detail-steps { margin: 0; padding-left: 22px; }
+    .matt-detail-steps li + li { margin-top: 8px; }
+    .matt-related { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .matt-related-button { padding: 6px 7px; border: 1px solid var(--ink); background: white; cursor: pointer; font: 800 8px/1 var(--mono); }
+    .matt-static-note { margin: 14px 0 0; color: var(--muted); font: 750 9px/1.4 var(--mono); }
+    .matt-intro { grid-template-columns: 1fr; padding: clamp(22px, 3vw, 34px); }
+    .matt-title { max-width: 980px; font-size: clamp(32px, 4vw, 52px); }
+    .matt-lede { font-size: clamp(14px, 1.6vw, 18px); }
+    .matt-mode-key, .matt-stats { display: none; }
+    .matt-guide-switcher {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1.5px solid var(--ink);
+    }
+    .matt-guide-switcher h2 { margin: 6px 0 0; font: 900 clamp(27px, 3vw, 42px)/1 var(--mono); letter-spacing: -0.04em; }
+    .matt-mode-tabs { display: inline-flex; flex: 0 0 auto; padding: 4px; border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-mode-tab { padding: 10px 13px; border: 0; background: transparent; cursor: pointer; font: 900 10px/1 var(--mono); text-transform: uppercase; }
+    .matt-mode-tab.active { background: var(--purple-deep); color: white; box-shadow: 3px 3px 0 var(--pink); }
+    .matt-guided-view, .matt-atlas-view { margin-top: 20px; }
+    .matt-spark-picker { padding: clamp(20px, 3vw, 30px); border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-spark-picker .matt-guide-head h3 { margin: 6px 0 0; font: 900 clamp(24px, 3vw, 38px)/1 var(--mono); }
+    .matt-guided-route-head, .matt-atlas-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px;
+      border: 1.5px solid var(--ink);
+      background: var(--purple-soft);
+    }
+    .matt-guided-route-head h3, .matt-atlas-head h3 { margin: 6px 0 7px; font: 900 clamp(24px, 3vw, 38px)/1 var(--mono); }
+    .matt-guided-route-head p, .matt-atlas-head p { max-width: 720px; margin: 0; color: var(--muted); }
+    .matt-subtle-action { flex: 0 0 auto; padding: 9px 11px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font: 900 9px/1 var(--mono); text-transform: uppercase; }
+    .matt-subtle-action:hover, .matt-subtle-action:focus-visible { background: var(--pink-soft); box-shadow: 3px 3px 0 var(--ink); }
+    .matt-guided-stepper { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }
+    .matt-guided-stepper .matt-route-step { min-height: 54px; justify-content: flex-start; background: var(--paper); opacity: 0.55; }
+    .matt-guided-stepper .matt-route-step.is-complete { opacity: 0.78; background: var(--purple-soft); }
+    .matt-guided-stepper .matt-route-step.is-current { opacity: 1; background: var(--purple-deep); color: white; box-shadow: 3px 3px 0 var(--pink); }
+    .matt-focus-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 290px); gap: 16px; align-items: start; }
+    .matt-guided-detail { position: static; max-height: none; }
+    .matt-guided-detail .matt-detail-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 15px; align-items: center; }
+    .matt-guided-detail .matt-detail-meta { margin: 0; }
+    .matt-guided-detail .matt-detail-title { font-size: clamp(24px, 3vw, 40px); }
+    .matt-step-navigation { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin-top: 10px; }
+    .matt-step-navigation span { color: var(--muted); font: 850 9px/1 var(--mono); text-transform: uppercase; }
+    .matt-step-nav { padding: 10px; border: 1.5px solid var(--ink); background: white; cursor: pointer; font: 900 9px/1 var(--mono); text-transform: uppercase; }
+    .matt-step-nav:last-child { justify-self: end; }
+    .matt-step-nav:disabled { cursor: default; opacity: 0.3; }
+    .matt-nearby { padding: 16px; border: 1.5px solid var(--ink); background: var(--paper); }
+    .matt-nearby h4 { margin: 6px 0 12px; font: 900 20px/1 var(--mono); }
+    .matt-nearby-skill { display: block; width: 100%; margin-top: 7px; padding: 9px; border: 1px solid var(--ink); background: white; cursor: pointer; font: 850 9px/1.25 var(--mono); text-align: left; }
+    .matt-nearby-skill small { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .matt-alternatives { margin-top: 14px; border-top: 1.5px dashed var(--muted); }
+    .matt-alternatives summary { padding-top: 13px; cursor: pointer; font: 900 9px/1.2 var(--mono); text-transform: uppercase; }
+    .matt-alternatives .matt-route-options { margin-top: 10px; }
+    .matt-alternatives .matt-route-option { width: 100%; }
+    .matt-atlas-view .matt-explorer { margin-top: 14px; }
+    .matt-atlas-view .matt-node { opacity: 0.86; filter: none; }
+    .matt-atlas-view .matt-node.is-selected { opacity: 1; }
+
+    .skills-library {
+      --skills-accent: #5b4bc4;
+      --skills-accent-soft: #efedff;
+      --skills-border: #d9d6e2;
+      --skills-muted: #655f6f;
+      color: #1e1b27;
+      font-family: var(--sans);
+    }
+    .skills-library-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 36px;
+      align-items: end;
+      padding: clamp(34px, 5vw, 68px);
+      border: 1px solid var(--skills-border);
+      border-radius: 24px;
+      background: #17151f;
+      color: white;
+    }
+    .skills-eyebrow {
+      color: #968be4;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .skills-library-hero .skills-eyebrow { color: #c6bfff; }
+    .skills-library-title {
+      max-width: 840px;
+      margin: 12px 0 18px;
+      font: 750 clamp(36px, 5vw, 64px)/1.02 var(--sans);
+      letter-spacing: -0.055em;
+      text-transform: none;
+    }
+    .skills-library-lede {
+      max-width: 760px;
+      margin: 0;
+      color: #d8d4e0;
+      font-size: clamp(18px, 2vw, 22px);
+      line-height: 1.55;
+    }
+    .skills-library-count {
+      display: grid;
+      min-width: 150px;
+      padding: 22px;
+      border: 1px solid #4a4653;
+      border-radius: 18px;
+      background: #23202c;
+    }
+    .skills-library-count strong {
+      color: #c6bfff;
+      font-size: clamp(46px, 5vw, 72px);
+      line-height: 0.95;
+      letter-spacing: -0.06em;
+    }
+    .skills-library-count span {
+      margin-top: 10px;
+      color: #d8d4e0;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .skills-finder {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.72fr) minmax(320px, 1.28fr);
+      gap: 24px 34px;
+      align-items: end;
+      margin-top: 24px;
+      padding: clamp(26px, 4vw, 42px);
+      border: 1px solid var(--skills-border);
+      border-radius: 24px;
+      background: #fff;
+    }
+    .skills-finder-copy h3 {
+      margin: 8px 0 0;
+      font-size: clamp(26px, 3vw, 38px);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+    .skills-search { display: grid; gap: 9px; }
+    .skills-search-label {
+      color: var(--skills-muted);
+      font-size: 14px;
+      font-weight: 750;
+    }
+    .skills-search input {
+      width: 100%;
+      min-height: 58px;
+      padding: 0 18px;
+      border: 1.5px solid #aaa5b3;
+      border-radius: 14px;
+      background: #faf9fc;
+      color: #1e1b27;
+      font: 600 17px/1 var(--sans);
+    }
+    .skills-search input:focus {
+      outline: 3px solid rgba(91, 75, 196, 0.22);
+      border-color: var(--skills-accent);
+      background: white;
+    }
+    .skills-family-filters {
+      display: flex;
+      grid-column: 1 / -1;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .skills-family-filter {
+      min-height: 42px;
+      padding: 0 15px;
+      border: 1px solid var(--skills-border);
+      border-radius: 999px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .skills-family-filter:hover,
+    .skills-family-filter:focus-visible { border-color: var(--skills-accent); background: var(--skills-accent-soft); }
+    .skills-family-filter.active {
+      border-color: var(--skills-accent);
+      background: var(--skills-accent);
+      color: white;
+    }
+    .skills-catalog-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 0.44fr);
+      gap: 24px;
+      align-items: start;
+      margin-top: 24px;
+    }
+    .skills-catalog-results,
+    .skills-reader {
+      border: 1px solid var(--skills-border);
+      border-radius: 24px;
+      background: #fff;
+    }
+    .skills-catalog-results { padding: clamp(24px, 3vw, 38px); }
+    .skills-results-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: baseline;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--skills-border);
+    }
+    .skills-results-bar p { margin: 0; }
+    .skills-results-bar p:first-child { font-size: 18px; font-weight: 800; }
+    .skills-results-bar p:last-child { max-width: 500px; color: var(--skills-muted); font-size: 14px; text-align: right; }
+    .skills-catalog-groups { display: grid; gap: 42px; margin-top: 32px; }
+    .skills-group-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 22px;
+      align-items: end;
+      margin-bottom: 17px;
+    }
+    .skills-group-head h4 { margin: 0; font-size: 25px; letter-spacing: -0.03em; }
+    .skills-group-head p { max-width: 520px; margin: 0; color: var(--skills-muted); font-size: 15px; text-align: right; }
+    .skills-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .skills-card {
+      display: flex;
+      min-width: 0;
+      min-height: 236px;
+      flex-direction: column;
+      padding: 22px;
+      border: 1px solid var(--skills-border);
+      border-radius: 18px;
+      background: #fbfafc;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+    .skills-card:hover {
+      border-color: #aaa2e3;
+      box-shadow: 0 12px 26px rgba(40, 34, 78, 0.08);
+      transform: translateY(-2px);
+    }
+    .skills-card.is-selected { border: 2px solid var(--skills-accent); padding: 21px; background: var(--skills-accent-soft); }
+    .skills-card-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .skills-card-family { color: var(--skills-accent); font-size: 13px; font-weight: 800; }
+    .skills-card-mode {
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: #ebe9ef;
+      color: #504a59;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .skills-card-mode.automatic { background: #e3f3ec; color: #236751; }
+    .skills-card h5 {
+      margin: 17px 0 12px;
+      overflow-wrap: anywhere;
+      font-size: clamp(21px, 2vw, 28px);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+    .skills-card-when { margin: 0; color: #302c38; font-size: 16px; font-weight: 650; line-height: 1.48; }
+    .skills-card-outcome { margin: 9px 0 0; color: var(--skills-muted); font-size: 15px; line-height: 1.48; }
+    .skills-card-open {
+      align-self: flex-start;
+      margin-top: auto;
+      padding: 12px 0 0;
+      border: 0;
+      background: transparent;
+      color: var(--skills-accent);
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .skills-empty {
+      padding: 36px;
+      border: 1px dashed #aaa5b3;
+      border-radius: 18px;
+      color: var(--skills-muted);
+      font-size: 17px;
+      text-align: center;
+    }
+    .skills-reader {
+      position: sticky;
+      top: 22px;
+      max-height: calc(100vh - 44px);
+      overflow: auto;
+    }
+    .skills-reader-empty { padding: 34px; color: var(--skills-muted); font-size: 17px; }
+    .skills-reader-head {
+      padding: 28px;
+      border-bottom: 1px solid var(--skills-border);
+      background: #1d1a25;
+      color: white;
+    }
+    .skills-reader-head-row { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
+    .skills-reader-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .skills-reader-tag {
+      padding: 6px 9px;
+      border: 1px solid #5b5664;
+      border-radius: 999px;
+      color: #dcd7e5;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .skills-reader-close {
+      display: none;
+      width: 40px;
+      height: 40px;
+      flex: 0 0 auto;
+      border: 1px solid #5b5664;
+      border-radius: 50%;
+      background: transparent;
+      color: white;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .skills-reader-title {
+      margin: 18px 0 0;
+      overflow-wrap: anywhere;
+      font-size: clamp(28px, 3vw, 42px);
+      line-height: 1.02;
+      letter-spacing: -0.05em;
+    }
+    .skills-reader-body { padding: 28px; }
+    .skills-reader-section + .skills-reader-section { margin-top: 26px; }
+    .skills-reader-label { margin: 0 0 8px; color: var(--skills-accent); font-size: 13px; font-weight: 850; letter-spacing: 0.07em; text-transform: uppercase; }
+    .skills-reader-copy { margin: 0; color: #302c38; font-size: 17px; line-height: 1.58; }
+    .skills-reader-outcome { color: var(--skills-muted); }
+    .skills-reader-steps { margin: 0; padding-left: 24px; color: #302c38; font-size: 16px; line-height: 1.55; }
+    .skills-reader-steps li + li { margin-top: 8px; }
+    .skills-reader-related { display: flex; flex-wrap: wrap; gap: 8px; }
+    .skills-reader-related button {
+      padding: 8px 10px;
+      border: 1px solid var(--skills-border);
+      border-radius: 9px;
+      background: #faf9fc;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .skills-invocation {
+      padding: 15px;
+      border-radius: 12px;
+      background: #f1eff5;
+      color: #3e3947;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .skills-source-toggle {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 28px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--skills-accent);
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .skills-source-toggle:hover,
+    .skills-source-toggle:focus-visible { background: #4637ad; }
+    .skills-source {
+      margin-top: 18px;
+      padding-top: 24px;
+      border-top: 1px solid var(--skills-border);
+    }
+    .skills-source h2,
+    .skills-source h3,
+    .skills-source h4,
+    .skills-source h5 { margin: 28px 0 10px; line-height: 1.2; letter-spacing: -0.025em; }
+    .skills-source h2 { font-size: 25px; }
+    .skills-source h3 { font-size: 21px; }
+    .skills-source h4,
+    .skills-source h5 { font-size: 18px; }
+    .skills-source p,
+    .skills-source li,
+    .skills-source blockquote { color: #37323f; font-size: 15px; line-height: 1.62; }
+    .skills-source p { margin: 10px 0; }
+    .skills-source ul,
+    .skills-source ol { margin: 10px 0; padding-left: 24px; }
+    .skills-source li + li { margin-top: 7px; }
+    .skills-source code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eeecf1;
+      font: 0.9em/1.4 var(--mono);
+    }
+    .skills-source pre {
+      overflow: auto;
+      padding: 16px;
+      border-radius: 12px;
+      background: #25222c;
+      color: #f5f2f8;
+      white-space: pre-wrap;
+    }
+    .skills-source pre code { padding: 0; background: transparent; color: inherit; }
+    .skills-source blockquote { margin: 14px 0; padding-left: 14px; border-left: 3px solid var(--skills-accent); }
+    .skills-library-note { margin: 18px 0 0; color: var(--skills-muted); font-size: 13px; text-align: center; }
+
+    .skills-library {
+      --reader-bg: #0b0b0c;
+      --reader-panel: #111113;
+      --reader-panel-raised: #18181b;
+      --reader-line: #2a2a2e;
+      --reader-text: #f2f1f3;
+      --reader-muted: #a6a3aa;
+      --reader-accent: #f1b832;
+      overflow: clip;
+      border: 1px solid #26262a;
+      border-radius: 22px;
+      background: var(--reader-bg);
+      color: var(--reader-text);
+      font-family: var(--sans);
+    }
+    .skills-library-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
+      min-height: 78px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--reader-line);
+      background: #101012;
+    }
+    .skills-library-kicker {
+      color: var(--reader-accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+    .skills-library-bar h2 {
+      margin: 3px 0 0;
+      font-size: clamp(23px, 2.4vw, 31px);
+      line-height: 1;
+      letter-spacing: -0.045em;
+    }
+    .skills-library-toolbar { display: flex; gap: 8px; align-items: center; }
+    .skills-library-meta {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 9px;
+      align-items: baseline;
+      color: var(--reader-muted);
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .skills-library-meta strong { color: var(--reader-text); font-size: 23px; letter-spacing: -0.04em; }
+    .skills-library-tool,
+    .skills-view-tab,
+    .skills-package-file {
+      border: 1px solid #3b3a3f;
+      border-radius: 8px;
+      background: transparent;
+      color: #b9b6bd;
+      cursor: pointer;
+      font: 750 12px/1 var(--sans);
+    }
+    .skills-library-tool { min-height: 36px; padding: 0 12px; }
+    .skills-library-tool:hover,
+    .skills-library-tool:focus-visible,
+    .skills-library-tool.active,
+    .skills-view-tab:hover,
+    .skills-view-tab:focus-visible,
+    .skills-view-tab.active,
+    .skills-package-file:hover,
+    .skills-package-file:focus-visible,
+    .skills-package-file.active {
+      border-color: var(--reader-accent);
+      background: #28231a;
+      color: var(--reader-accent);
+    }
+    .skills-workbench {
+      display: grid;
+      grid-template-columns: minmax(250px, 286px) minmax(0, 1fr);
+      align-items: start;
+      min-height: 640px;
+      transition: grid-template-columns 160ms ease;
+    }
+    .skills-workbench.catalog-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+    .skills-workbench.catalog-collapsed .skills-navigation {
+      visibility: hidden;
+      overflow: hidden;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .skills-navigation {
+      position: sticky;
+      top: 0;
+      max-height: 100vh;
+      overflow: auto;
+      border-right: 1px solid var(--reader-line);
+      background: #0e0e10;
+      scrollbar-color: #3c3b40 transparent;
+      scrollbar-width: thin;
+      transition: opacity 140ms ease;
+    }
+    .skills-navigation-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--reader-line);
+      background: #141416;
+    }
+    .skills-navigation-head > p:first-child {
+      margin: 0 0 13px;
+      color: #c8c5cc;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .skills-navigation-search { display: grid; gap: 8px; }
+    .skills-navigation-search span {
+      color: var(--reader-muted);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .skills-navigation-search input {
+      width: 100%;
+      min-height: 39px;
+      padding: 0 13px;
+      border: 1px solid #3a393e;
+      border-radius: 9px;
+      background: #0b0b0d;
+      color: white;
+      font: 600 15px/1 var(--sans);
+    }
+    .skills-navigation-search input:focus {
+      outline: 2px solid color-mix(in srgb, var(--reader-accent) 55%, transparent);
+      outline-offset: 2px;
+      border-color: var(--reader-accent);
+    }
+    .skills-navigation-count { margin: 12px 0 0 !important; color: var(--reader-muted) !important; font-size: 12px !important; }
+    .skills-nav-group + .skills-nav-group { border-top: 1px solid var(--reader-line); }
+    .skills-nav-group-head {
+      display: grid;
+      width: 100%;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 15px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .skills-nav-group-head:hover,
+    .skills-nav-group-head:focus-visible { background: #171719; }
+    .skills-nav-group-head::before {
+      content: "›";
+      grid-column: 1;
+      grid-row: 1;
+      color: #77747c;
+      font-size: 18px;
+      transform-origin: center;
+      transition: transform 140ms ease;
+    }
+    .skills-nav-group.open .skills-nav-group-head::before { transform: rotate(90deg); color: var(--reader-accent); }
+    .skills-nav-group-index { display: none; }
+    .skills-nav-group-title { grid-column: 2; }
+    .skills-nav-group-count { grid-column: 3; }
+    .skills-nav-group-title { font-size: 15px; font-weight: 800; }
+    .skills-nav-group-count { color: #706d75; font: 700 11px/1 var(--mono); }
+    .skills-nav-group-hint {
+      margin: -5px 15px 11px 40px;
+      color: #77747c;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .skills-nav-group:not(.open) .skills-nav-group-hint,
+    .skills-nav-group:not(.open) .skills-nav-items { display: none; }
+    .skills-nav-items { padding-bottom: 7px; }
+    .skills-nav-skill {
+      display: grid;
+      position: relative;
+      width: 100%;
+      grid-template-columns: 15px minmax(0, 1fr);
+      gap: 11px;
+      align-items: center;
+      min-height: 43px;
+      padding: 8px 15px;
+      border: 0;
+      border-left: 3px solid transparent;
+      background: transparent;
+      color: #aaa7ae;
+      cursor: pointer;
+      text-align: left;
+    }
+    .skills-nav-skill::before {
+      content: "▷";
+      color: #68656c;
+      font-size: 11px;
+      line-height: 1;
+    }
+    .skills-nav-skill:hover,
+    .skills-nav-skill:focus-visible { background: #171719; color: white; }
+    .skills-nav-skill.active {
+      border-left-color: var(--reader-accent);
+      background: #1a1a1d;
+      color: var(--reader-accent);
+    }
+    .skills-nav-skill.active::before { content: "▶"; color: var(--reader-accent); }
+    .skills-nav-skill-name { overflow-wrap: anywhere; font-size: 12.5px; font-weight: 750; line-height: 1.25; }
+    .skills-navigation-empty { padding: 28px 20px; color: var(--reader-muted); font-size: 14px; text-align: center; }
+    .skills-document {
+      min-width: 0;
+      min-height: 640px;
+      background: var(--reader-bg);
+    }
+    .skills-document-empty { padding: 60px; color: var(--reader-muted); font-size: 18px; }
+    .skills-document-hero {
+      padding: 24px clamp(26px, 4vw, 46px);
+      border-bottom: 1px solid var(--reader-line);
+      background: #171719;
+    }
+    .skills-document-kicker {
+      color: var(--reader-accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .skills-document-title {
+      max-width: 960px;
+      margin: 7px 0 15px;
+      overflow-wrap: anywhere;
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+    .skills-document-meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 22px;
+      align-items: center;
+    }
+    .skills-document-meta { display: flex; flex-wrap: wrap; gap: 9px; }
+    .skills-document-pill {
+      padding: 6px 9px;
+      border: 1px solid #3b3a3f;
+      border-radius: 999px;
+      color: #c4c1c8;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .skills-document-actions { display: flex; gap: 8px; }
+    .skills-document-action {
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid #3b3a3f;
+      border-radius: 999px;
+      background: transparent;
+      color: #d4d1d7;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .skills-document-action:hover,
+    .skills-document-action:focus-visible { border-color: #69666f; background: #232326; color: white; }
+    .skills-document-action:disabled { cursor: default; opacity: 0.35; }
+    .skills-document-toc {
+      display: flex;
+      position: sticky;
+      z-index: 8;
+      top: 0;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 11px clamp(26px, 4vw, 46px);
+      border-bottom: 1px solid var(--reader-line);
+      background: rgba(14, 14, 16, 0.96);
+      backdrop-filter: blur(12px);
+      scrollbar-width: none;
+    }
+    .skills-document-toc::-webkit-scrollbar { display: none; }
+    .skills-document-toc-label { flex: 0 0 auto; margin-right: 6px; color: #77747c; font-size: 12px; font-weight: 750; }
+    .skills-document-toc button {
+      flex: 0 0 auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #aaa7ae;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .skills-document-toc button::after { content: "·"; margin-left: 8px; color: #555259; }
+    .skills-document-toc button:last-child::after { display: none; }
+    .skills-document-toc button:hover,
+    .skills-document-toc button:focus-visible { color: var(--reader-accent); }
+    .skills-document-body {
+      max-width: 1080px;
+      padding: 30px clamp(26px, 4vw, 46px) 54px;
+    }
+    .skills-document-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .skills-document-summary-card {
+      padding: 15px;
+      border: 1px solid var(--reader-line);
+      border-radius: 13px;
+      background: var(--reader-panel);
+    }
+    .skills-document-summary-card.wide { grid-column: 1 / -1; }
+    .skills-document-summary-label {
+      margin: 0 0 9px;
+      color: var(--reader-accent);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .skills-document-summary-card p {
+      margin: 0;
+      color: #d5d2d8;
+      font-size: 13.5px;
+      line-height: 1.48;
+    }
+    .skills-markdown { color: #d8d6db; font-size: 15.5px; line-height: 1.66; }
+    .skills-markdown > :first-child { margin-top: 0; }
+    .skills-markdown h2,
+    .skills-markdown h3,
+    .skills-markdown h4,
+    .skills-markdown h5 {
+      scroll-margin-top: 74px;
+      color: var(--reader-text);
+      line-height: 1.12;
+      letter-spacing: -0.035em;
+    }
+    .skills-markdown h2 { margin: 42px 0 14px; font-size: clamp(26px, 3vw, 34px); }
+    .skills-markdown h3 { margin: 34px 0 12px; font-size: clamp(21px, 2.4vw, 27px); }
+    .skills-markdown h4 { margin: 28px 0 10px; font-size: 19px; }
+    .skills-markdown h5 { margin: 24px 0 9px; font-size: 17px; }
+    .skills-markdown p { margin: 0 0 16px; }
+    .skills-markdown strong { color: #f7f5f8; font-weight: 800; }
+    .skills-markdown em { color: #e5e2e8; }
+    .skills-markdown a {
+      color: var(--reader-accent);
+      font-weight: 700;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    .skills-md-reference {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #c6c2ca;
+      cursor: pointer;
+      font: inherit;
+      text-decoration: underline dotted #67636c;
+      text-underline-offset: 3px;
+    }
+    .skills-md-reference:hover,
+    .skills-md-reference:focus-visible { color: var(--reader-accent); }
+    .skills-markdown code {
+      padding: 3px 7px;
+      border-radius: 6px;
+      background: #222226;
+      color: #f4f1f5;
+      font: 0.86em/1.45 var(--mono);
+    }
+    .skills-markdown ul,
+    .skills-markdown ol { margin: 0 0 18px; padding-left: 25px; }
+    .skills-markdown li { padding-left: 5px; }
+    .skills-markdown li + li { margin-top: 8px; }
+    .skills-markdown li::marker { color: var(--reader-accent); font-weight: 800; }
+    .skills-markdown li.skills-md-task { padding-left: 0; list-style: none; }
+    .skills-md-task input { margin: 0 8px 0 -20px; accent-color: var(--reader-accent); }
+    .skills-markdown table {
+      width: 100%;
+      margin: 20px 0;
+      border-collapse: collapse;
+      border: 1px solid var(--reader-line);
+      font-size: 13px;
+    }
+    .skills-markdown th,
+    .skills-markdown td {
+      padding: 10px 12px;
+      border-right: 1px solid var(--reader-line);
+      border-bottom: 1px solid var(--reader-line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .skills-markdown th { background: #19191c; color: white; font-size: 11px; text-transform: uppercase; }
+    .skills-markdown tr:last-child td { border-bottom: 0; }
+    .skills-markdown th:last-child,
+    .skills-markdown td:last-child { border-right: 0; }
+    .skills-markdown blockquote {
+      margin: 21px 0;
+      padding: 14px 18px;
+      border-left: 3px solid var(--reader-accent);
+      background: #141416;
+      color: #c7c4ca;
+    }
+    .skills-markdown hr { margin: 32px 0; border: 0; border-top: 1px solid var(--reader-line); }
+    .skills-md-codeblock {
+      overflow: hidden;
+      margin: 21px 0;
+      border: 1px solid #303035;
+      border-radius: 13px;
+      background: #171719;
+    }
+    .skills-md-codebar {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-bottom: 1px solid #303035;
+      color: #77747c;
+      font: 700 10px/1 var(--mono);
+      text-transform: uppercase;
+    }
+    .skills-md-codebar::before { content: "● ● ●"; color: #5a575f; letter-spacing: 3px; }
+    .skills-md-codeblock pre { overflow: auto; margin: 0; padding: 17px; }
+    .skills-md-codeblock pre code { padding: 0; background: transparent; color: #e6e3e8; font-size: 12.5px; white-space: pre; }
+    .skills-package-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding: 30px clamp(26px, 4vw, 46px) 24px;
+      border-bottom: 1px solid var(--reader-line);
+      background:
+        radial-gradient(circle at 82% 20%, rgba(241, 184, 50, 0.1), transparent 28%),
+        #171719;
+    }
+    .skills-package-hero h3 {
+      max-width: 680px;
+      margin: 6px 0 9px;
+      font-size: clamp(31px, 4.2vw, 47px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+    }
+    .skills-package-hero p { max-width: 720px; margin: 0; color: #b7b4bb; font-size: 14px; line-height: 1.5; }
+    .skills-package-stats { display: flex; gap: 8px; }
+    .skills-package-stat {
+      min-width: 88px;
+      padding: 12px;
+      border: 1px solid #39383d;
+      border-radius: 10px;
+      background: rgba(10, 10, 11, 0.54);
+    }
+    .skills-package-stat strong { display: block; color: white; font-size: 22px; letter-spacing: -0.04em; }
+    .skills-package-stat span { color: #858189; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+    .skills-capability-section { padding: 26px clamp(26px, 4vw, 46px) 42px; }
+    .skills-section-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 15px;
+    }
+    .skills-section-heading h4 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
+    .skills-section-heading p { max-width: 520px; margin: 0; color: #817e86; font-size: 12px; text-align: right; }
+    .skills-capability-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .skills-capability-card {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--reader-line);
+      border-radius: 12px;
+      background: #121214;
+    }
+    .skills-capability-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .skills-capability-card h5 { margin: 0; color: white; font-size: 15px; }
+    .skills-capability-card-count { color: var(--reader-accent); font: 800 10px/1 var(--mono); }
+    .skills-capability-card > p { min-height: 34px; margin: 0 0 12px; color: #87838c; font-size: 11px; line-height: 1.45; }
+    .skills-capability-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .skills-capability-skill,
+    .skills-dependency {
+      min-height: 29px;
+      padding: 0 9px;
+      border: 1px solid #37363b;
+      border-radius: 999px;
+      background: #1b1b1e;
+      color: #cbc8ce;
+      cursor: pointer;
+      font: 700 11px/1 var(--sans);
+    }
+    .skills-capability-skill:hover,
+    .skills-capability-skill:focus-visible,
+    .skills-dependency:hover,
+    .skills-dependency:focus-visible { border-color: var(--reader-accent); color: var(--reader-accent); }
+    .skills-view-tabs {
+      display: flex;
+      gap: 7px;
+      margin-left: auto;
+    }
+    .skills-view-tab { min-height: 34px; padding: 0 11px; }
+    .skills-overview-grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .skills-overview-card {
+      grid-column: span 4;
+      padding: 15px;
+      border: 1px solid var(--reader-line);
+      border-radius: 11px;
+      background: #121214;
+    }
+    .skills-overview-card.wide { grid-column: span 8; }
+    .skills-overview-card.full { grid-column: 1 / -1; }
+    .skills-overview-card h4 {
+      margin: 0 0 7px;
+      color: var(--reader-accent);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: 0.075em;
+      text-transform: uppercase;
+    }
+    .skills-overview-card p { margin: 0; color: #d1ced4; font-size: 13px; line-height: 1.5; }
+    .skills-overview-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .skills-overview-steps li {
+      position: relative;
+      min-height: 74px;
+      padding: 12px 12px 12px 38px;
+      border: 1px solid #302f33;
+      border-radius: 9px;
+      color: #d4d1d7;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .skills-overview-steps li::before {
+      content: attr(data-step);
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      color: var(--reader-accent);
+      font: 850 11px/1 var(--mono);
+    }
+    .skills-overview-dependencies { display: flex; flex-wrap: wrap; gap: 7px; }
+    .skills-overview-empty { color: #827f86; font-size: 12px; }
+    .skills-reference-intro {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .skills-reference-intro p { margin: 0; color: #8f8b93; font-size: 12px; }
+    .skills-package-files {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      margin-bottom: 22px;
+      padding-bottom: 3px;
+      scrollbar-width: thin;
+    }
+    .skills-package-file { flex: 0 0 auto; min-height: 34px; padding: 0 11px; }
+    .skills-package-file small { margin-left: 5px; color: #77747c; font-size: 9px; }
+    .skills-reference-file-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 10px 0;
+      border-top: 1px solid var(--reader-line);
+      border-bottom: 1px solid var(--reader-line);
+      color: #8a878f;
+      font: 700 10px/1 var(--mono);
+    }
+    .skills-reference-end {
+      margin-top: 42px;
+      padding-top: 14px;
+      border-top: 1px solid var(--reader-line);
+      color: #77747c;
+      font: 700 10px/1 var(--mono);
+      text-align: center;
+      text-transform: uppercase;
+    }
+
     .footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px clamp(20px, 3.2vw, 48px); border-top: var(--border); color: var(--muted); font-family: var(--mono); font-size: 10px; text-transform: uppercase; }
     .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; max-width: 390px; padding: 13px 16px; border: var(--border); background: var(--ink); color: white; box-shadow: 5px 5px 0 var(--pink); font-family: var(--mono); font-size: 12px; transform: translateY(140%); opacity: 0; transition: 180ms ease; }
     .toast.show { transform: translateY(0); opacity: 1; }
 
+    html[data-theme="dark"] { color-scheme: dark; }
+    html[data-theme="dark"] body {
+      --paper: #111016;
+      --paper-bright: #1b1921;
+      --paper-muted: #25212b;
+      --ink: #f2edf5;
+      --muted: #b5adba;
+      --purple: #aa9bec;
+      --purple-soft: #3a3151;
+      --purple-deep: #d8d0ff;
+      --pink: #ff5fa7;
+      --pink-soft: #59283f;
+      --yellow: #f2cb68;
+      --green: #61c8a2;
+      --red: #ff789d;
+      --border: 2px solid #6d6675;
+      --shadow: 8px 8px 0 #050407;
+      --shadow-small: 4px 4px 0 #050407;
+      background-color: var(--paper);
+      background-image:
+        radial-gradient(rgba(242, 237, 245, 0.08) 0.65px, transparent 0.65px),
+        linear-gradient(115deg, rgba(116, 101, 182, 0.12), transparent 44%, rgba(237, 63, 145, 0.08));
+    }
+    html[data-theme="dark"] .page-frame {
+      border-color: #6d6675;
+      background: rgba(20, 18, 25, 0.88);
+      box-shadow: 13px 13px 0 #050407;
+    }
+    html[data-theme="dark"] .nav-strip {
+      border-bottom-color: #6d6675;
+      background: rgba(17, 16, 22, 0.95);
+    }
+    html[data-theme="dark"] .nav-stamp {
+      background: var(--ink);
+      color: #111016;
+    }
+    html[data-theme="dark"] .panel,
+    html[data-theme="dark"] .metric,
+    html[data-theme="dark"] .brain-console,
+    html[data-theme="dark"] .knowledge-card,
+    html[data-theme="dark"] .question-card,
+    html[data-theme="dark"] .review-dialog,
+    html[data-theme="dark"] .run-dialog {
+      background: var(--paper-bright);
+    }
+    html[data-theme="dark"] .knowledge-panel {
+      background: linear-gradient(145deg, rgba(77, 65, 108, 0.56), rgba(27, 25, 33, 0.98) 46%);
+    }
+    html[data-theme="dark"] .questions-panel {
+      background: linear-gradient(120deg, rgba(104, 45, 72, 0.55), rgba(27, 25, 33, 0.98) 45%);
+    }
+    html[data-theme="dark"] .briefing-panel {
+      background: #17141c;
+      color: #f4eff6;
+    }
+    html[data-theme="dark"] .focus-panel,
+    html[data-theme="dark"] .matt-intro {
+      background: #29223d;
+      color: white;
+    }
+    html[data-theme="dark"] :where(
+      .chip,
+      .layer-count,
+      .summary-entry,
+      .glance-card,
+      .usage-stat,
+      .pricing-rate,
+      .quota-track,
+      .impact-step,
+      .summary-section li,
+      .summary-item-card,
+      .session-review-card,
+      .visual-group,
+      .evidence-row,
+      .question-scope-stamp,
+      .question-answer,
+      .question-action,
+      .weekly-badge,
+      .review-dialog-close,
+      .review-search,
+      .review-tab,
+      .review-card,
+      .run-dialog-close,
+      .matt-map-toolbar,
+      .matt-node,
+      .matt-related-button,
+      .matt-subtle-action,
+      .matt-step-nav,
+      .matt-nearby-skill
+    ) {
+      border-color: #625c68;
+      background: #211e27;
+      color: var(--ink);
+    }
+    html[data-theme="dark"] :where(
+      .glance-card,
+      .summary-item-card,
+      .visual-group,
+      .review-card
+    ):hover {
+      background: #2a2531;
+    }
+    html[data-theme="dark"] .summary-usage,
+    html[data-theme="dark"] .question-destination,
+    html[data-theme="dark"] .run-detail-error,
+    html[data-theme="dark"] .deck-layer.awaiting-review {
+      background: #2b2029;
+    }
+    html[data-theme="dark"] .historical-recovery-note,
+    html[data-theme="dark"] .session-coverage-note {
+      background: rgba(116, 101, 182, 0.2);
+    }
+    html[data-theme="dark"] .knowledge-project-stamp {
+      background: rgba(27, 25, 33, 0.96);
+    }
+    html[data-theme="dark"] .deck-action.like,
+    html[data-theme="dark"] .question-action.save {
+      background: #7465b6;
+      color: white;
+    }
+    html[data-theme="dark"] .toast {
+      background: #1b1921;
+      color: #f2edf5;
+    }
+    html[data-theme="dark"] :where(
+      .deck-layer.active,
+      .deck-tab.active,
+      .summary-tab.active,
+      .review-tab.active,
+      .workspace-tab.active
+    ) {
+      box-shadow: 3px 3px 0 #050407;
+    }
     @keyframes panel-arrive {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -638,6 +2005,46 @@
       .knowledge-panel, .briefing-panel, .summary-panel, .questions-panel, .projects-panel, .pulse-panel { grid-column: span 12; }
       .patterns-panel, .review-panel, .health-panel { grid-column: span 6; }
       .health-panel { grid-column: span 12; }
+      .matt-intro { grid-template-columns: 1fr; }
+      .matt-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .matt-flow-step:nth-child(3)::after { display: none; }
+      .matt-skill-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .matt-sparks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .matt-explorer { grid-template-columns: 1fr; }
+      .matt-detail { position: static; max-height: none; }
+      .matt-focus-layout { grid-template-columns: 1fr; }
+      .skills-catalog-layout { grid-template-columns: 1fr; }
+      .skills-reader {
+        display: none;
+        position: fixed;
+        z-index: 80;
+        inset: 24px;
+        max-height: calc(100vh - 48px);
+        box-shadow: 0 24px 70px rgba(17, 14, 27, 0.28);
+      }
+      .skills-reader.is-open { display: block; }
+      .skills-reader-close { display: inline-grid; place-items: center; }
+      .skills-capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .skills-library { border-radius: 16px; }
+      .skills-workbench { grid-template-columns: 1fr; }
+      .skills-workbench.catalog-collapsed { grid-template-columns: 1fr; }
+      .skills-navigation {
+        position: static;
+        max-height: 540px;
+        border-right: 0;
+        border-bottom: 1px solid var(--reader-line);
+      }
+      .skills-navigation-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .skills-nav-group { border-top: 1px solid var(--reader-line); }
+      .skills-nav-group:nth-child(even) { border-left: 1px solid var(--reader-line); }
+      .skills-nav-group-hint { display: none; }
+      .skills-document-meta-row { align-items: flex-start; flex-direction: column; }
+      .skills-document-actions { width: 100%; }
+      .skills-document-action { flex: 1; }
+      .skills-package-hero { grid-template-columns: 1fr; align-items: start; }
+      .skills-package-stats { justify-content: flex-start; }
     }
     @media (max-width: 760px) {
       .page-frame { width: calc(100% - 20px); margin: 10px auto 26px; box-shadow: 7px 7px 0 var(--ink); }
@@ -675,6 +2082,83 @@
       .run { grid-template-columns: 1fr auto; padding-right: 54px; }
       .run-meta, .run-error { grid-column: 1 / -1; }
       .run-detail-grid { grid-template-columns: 1fr; }
+      .workspace-tab { white-space: nowrap; }
+      .nav-divider, .brain-section-link { display: none; }
+      .matt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .matt-stat + .matt-stat { border-left: 0; }
+      .matt-stat:nth-child(even) { border-left: 1.5px dashed var(--muted); }
+      .matt-stat:nth-child(n+3) { border-top: 1.5px dashed var(--muted); }
+      .matt-flow { grid-template-columns: 1fr; }
+      .matt-flow-step:not(:last-child)::after { right: 12px; top: auto; bottom: -13px; transform: rotate(90deg); }
+      .matt-skill-grid { grid-template-columns: 1fr; }
+      .matt-guide-head, .matt-route-stage { display: grid; grid-template-columns: 1fr; }
+      .matt-sparks { grid-template-columns: 1fr; }
+      .matt-spark { min-height: 0; }
+      .matt-guide-switcher, .matt-guided-route-head, .matt-atlas-head { align-items: stretch; flex-direction: column; }
+      .matt-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; }
+      .matt-guided-stepper { grid-template-columns: 1fr; }
+      .matt-guided-detail .matt-detail-hero { grid-template-columns: 1fr; }
+      .matt-step-navigation { grid-template-columns: 1fr 1fr; }
+      .matt-step-navigation span { grid-column: 1 / -1; grid-row: 1; text-align: center; }
+      .matt-step-nav { grid-row: 2; }
+      .matt-map { min-width: 0; min-height: 0; }
+      .matt-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .matt-lane { border-left: 1.5px dashed #b9aebd; }
+      .matt-map-lines { display: none; }
+      .matt-node.is-quiet { opacity: 0.42; }
+      .skills-library-hero,
+      .skills-finder { grid-template-columns: 1fr; }
+      .skills-library-count { min-width: 0; }
+      .skills-finder { align-items: stretch; }
+      .skills-family-filters { grid-column: auto; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .skills-family-filter { flex: 0 0 auto; }
+      .skills-results-bar,
+      .skills-group-head { align-items: flex-start; flex-direction: column; }
+      .skills-results-bar p:last-child,
+      .skills-group-head p { max-width: none; text-align: left; }
+      .skills-card-grid { grid-template-columns: 1fr; }
+      .skills-card { min-height: 0; }
+      .skills-reader { inset: 10px; max-height: calc(100vh - 20px); border-radius: 18px; }
+      .skills-library-bar { min-height: 86px; padding: 20px; }
+      .skills-library-bar { align-items: flex-start; flex-direction: column; }
+      .skills-library-toolbar { width: 100%; flex-wrap: wrap; }
+      .skills-library-meta { margin-right: auto; }
+      .skills-library-meta span { display: none; }
+      .skills-navigation-head { padding: 20px; }
+      .skills-navigation { max-height: 470px; }
+      .skills-navigation-groups { grid-template-columns: 1fr; }
+      .skills-nav-group:nth-child(even) { border-left: 0; }
+      .skills-document-hero { padding: 30px 22px; }
+      .skills-document-title { font-size: 39px; }
+      .skills-document-toc { padding: 13px 22px; }
+      .skills-document-body { padding: 34px 22px 52px; }
+      .skills-document-summary { grid-template-columns: 1fr; margin-bottom: 42px; }
+      .skills-document-summary-card.wide { grid-column: auto; }
+      .skills-markdown { font-size: 15px; }
+      .skills-markdown h2 { font-size: 27px; }
+      .skills-markdown h3 { font-size: 23px; }
+      .skills-capability-grid { grid-template-columns: 1fr; }
+      .skills-section-heading { align-items: flex-start; flex-direction: column; }
+      .skills-section-heading p { text-align: left; }
+      .skills-overview-card,
+      .skills-overview-card.wide { grid-column: 1 / -1; }
+      .skills-overview-steps { grid-template-columns: 1fr; }
+      .skills-view-tabs { width: 100%; margin-left: 0; }
+      .skills-view-tab { flex: 1; }
+    }
+    @media (max-width: 460px) {
+      .matt-lanes { grid-template-columns: 1fr; }
+      .matt-lane { border-left: 0; border-top: 1.5px dashed #b9aebd; }
+      .matt-lane:first-child { border-top: 0; }
+      .matt-section-head { align-items: flex-start; flex-direction: column; }
+      .skills-library-hero,
+      .skills-finder,
+      .skills-catalog-results { padding: 22px; border-radius: 18px; }
+      .skills-library-title { font-size: 34px; }
+      .skills-card { padding: 18px; }
+      .skills-card.is-selected { padding: 17px; }
+      .skills-reader-head,
+      .skills-reader-body { padding: 22px; }
       .footer { flex-direction: column; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -713,14 +2197,21 @@
 
     <nav class="nav-strip" aria-label="Dashboard sections">
       <span class="nav-stamp">SA:SB</span>
-      <a href="#today">Today</a>
-      <a href="#summaries">Summary logs</a>
-      <a href="#knowledge">Knowledge Deck</a>
-      <a href="#questions">Questions</a>
-      <a href="#projects">Projects</a>
-      <a href="#review">Review</a>
-      <a href="#system">System</a>
+      <button class="workspace-tab active" type="button" role="tab" aria-selected="true" data-workspace-view="brain">Second brain</button>
+      <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-view="matt">Matt's skills <span class="workspace-tab-count" id="matt-tab-count">0</span></button>
+      <span class="nav-divider" aria-hidden="true"></span>
+      <a class="brain-section-link" href="#today">Today</a>
+      <a class="brain-section-link" href="#summaries">Summary logs</a>
+      <a class="brain-section-link" href="#knowledge">Knowledge Deck</a>
+      <a class="brain-section-link" href="#questions">Questions</a>
+      <a class="brain-section-link" href="#projects">Projects</a>
+      <a class="brain-section-link" href="#review">Review</a>
+      <a class="brain-section-link" href="#system">System</a>
       <span class="nav-spacer"></span>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">
+        <span class="theme-toggle-icon" id="theme-toggle-icon" aria-hidden="true">☾</span>
+        <span id="theme-toggle-label">Dark</span>
+      </button>
       <span class="updated" id="updated-time"></span>
       <a id="vault-link" href="#">Open Obsidian ↗</a>
     </nav>
@@ -728,7 +2219,7 @@
     <main class="dashboard" id="main">
       <section class="metrics" id="metrics" aria-label="Knowledge coverage"></section>
 
-      <div class="grid">
+      <div class="grid" id="brain-dashboard-view">
         <section class="panel knowledge-panel" id="knowledge" data-index="01 // CURATE" aria-labelledby="knowledge-title">
           <div class="panel-head">
             <div>
@@ -898,6 +2389,159 @@
           </div>
         </section>
       </div>
+
+      <section class="matt-skills-view skills-library" id="matt-skills-view" aria-labelledby="matt-skills-title" hidden>
+        <header class="skills-library-bar">
+          <div>
+            <div class="skills-library-kicker">Matt Pocock’s engineering system</div>
+            <h2 id="matt-skills-title">Skills field guide</h2>
+          </div>
+          <div class="skills-library-toolbar">
+            <div class="skills-library-meta"><strong id="matt-library-count">22</strong><span>installed skills</span></div>
+            <button class="skills-library-tool active" id="matt-package-overview" type="button">Capability map</button>
+            <button class="skills-library-tool" id="matt-sidebar-toggle" type="button" aria-expanded="true">Hide catalog</button>
+          </div>
+        </header>
+
+        <div class="skills-workbench" id="matt-workbench">
+          <aside class="skills-navigation" aria-label="Skills navigation">
+            <div class="skills-navigation-head">
+              <p>Expand a capability, then choose a skill. Categories stay folded until you need them.</p>
+              <label class="skills-navigation-search">
+                <span>Search all skills</span>
+                <input id="matt-search" type="search" autocomplete="off" placeholder="Bug, spec, review…">
+              </label>
+              <p class="skills-navigation-count" id="matt-results-count" aria-live="polite"></p>
+            </div>
+            <nav class="skills-navigation-groups" id="matt-catalog-nav" aria-label="All Matt Pocock skills"></nav>
+          </aside>
+
+          <main class="skills-document" id="matt-reader" aria-live="polite" aria-label="Selected skill document">
+            <div class="skills-document-empty">Choose a skill to read its complete installed instructions.</div>
+          </main>
+        </div>
+      </section>
+
+      <section class="matt-skills-view" id="matt-skills-view-legacy" aria-labelledby="matt-skills-title-legacy" hidden>
+        <div class="matt-intro">
+          <div>
+            <div class="matt-kicker">Matt Pocock // engineering operating system</div>
+            <h2 class="matt-title" id="matt-skills-title-legacy">Know what to reach for—and what reaches for you.</h2>
+            <p class="matt-lede">A compact map of the 22 project-local skills installed for Codex and Antigravity.</p>
+          </div>
+          <div class="matt-mode-key" aria-label="Invocation modes">
+            <div class="matt-mode"><span class="mode-dot"></span><div><strong>Codex · You invoke</strong><span>Manual orchestrators start only when you choose them.</span></div></div>
+            <div class="matt-mode"><span class="mode-dot auto"></span><div><strong>Codex · Model can invoke</strong><span>Reusable disciplines may activate automatically when the task fits.</span></div></div>
+            <p class="matt-agent-note">Antigravity discovers all 22 by description. Mention a skill by name when you want to force it.</p>
+          </div>
+        </div>
+        <div class="matt-stats" id="matt-stats" aria-label="Matt Pocock skill coverage"></div>
+        <section class="matt-guide" aria-labelledby="matt-guide-title">
+          <div class="matt-guide-switcher">
+            <div>
+              <div class="panel-label">Two ways in</div>
+              <h2 id="matt-guide-title">Follow a path or explore freely.</h2>
+            </div>
+            <div class="matt-mode-tabs" role="tablist" aria-label="Matt skills guide modes">
+              <button class="matt-mode-tab active" id="matt-guided-tab" type="button" role="tab" aria-selected="true" data-matt-mode="guided">Guided path</button>
+              <button class="matt-mode-tab" id="matt-atlas-tab" type="button" role="tab" aria-selected="false" data-matt-mode="atlas">Skill atlas</button>
+            </div>
+          </div>
+
+          <section class="matt-guided-view" id="matt-guided-view" role="tabpanel" aria-labelledby="matt-guided-tab">
+            <div class="matt-spark-picker" id="matt-spark-picker">
+              <div class="matt-guide-head">
+                <div>
+                  <div class="panel-label">Start with the situation</div>
+                  <h3>What are you trying to move forward?</h3>
+                </div>
+                <p class="matt-guide-copy">These are starting points, not limits. Choose the closest spark and adjust the route if needed.</p>
+              </div>
+              <div class="matt-sparks" id="matt-sparks" aria-label="Starting sparks"></div>
+            </div>
+
+            <div class="matt-guided-route" id="matt-guided-route" hidden>
+              <div class="matt-guided-route-head">
+                <div>
+                  <div class="panel-label">Your guided path</div>
+                  <h3 id="matt-route-title"></h3>
+                  <p id="matt-route-description"></p>
+                </div>
+                <button class="matt-subtle-action" id="matt-change-spark" type="button">Change starting spark</button>
+              </div>
+              <div class="matt-route-steps matt-guided-stepper" id="matt-route-steps" aria-label="Selected route steps"></div>
+              <div class="matt-focus-layout">
+                <div>
+                  <aside class="matt-detail matt-guided-detail" id="matt-guided-detail" aria-live="polite"></aside>
+                  <div class="matt-step-navigation">
+                    <button class="matt-step-nav" id="matt-previous-step" type="button">← Previous</button>
+                    <span id="matt-step-position"></span>
+                    <button class="matt-step-nav" id="matt-next-step" type="button">Next →</button>
+                  </div>
+                </div>
+                <aside class="matt-nearby">
+                  <div class="panel-label">Nearby choices</div>
+                  <h4>You could also…</h4>
+                  <div id="matt-nearby-skills"></div>
+                  <details class="matt-alternatives">
+                    <summary>Compare alternative routes</summary>
+                    <div class="matt-route-options" id="matt-route-options" aria-label="Alternative routes"></div>
+                  </details>
+                </aside>
+              </div>
+            </div>
+          </section>
+
+          <section class="matt-atlas-view" id="matt-atlas-view" role="tabpanel" aria-labelledby="matt-atlas-tab" hidden>
+            <div class="matt-atlas-head">
+              <div>
+                <div class="panel-label">All 22 skills</div>
+                <h3>Skill atlas</h3>
+                <p>Browse the stable landscape. Select any skill to inspect its role and relationships.</p>
+              </div>
+              <button class="matt-subtle-action" id="matt-return-guided" type="button">Return to guided path</button>
+            </div>
+            <div class="matt-explorer">
+            <section class="matt-map-shell" aria-labelledby="matt-map-title">
+              <div class="matt-map-toolbar">
+                <strong id="matt-map-title">Skill landscape</strong>
+                <div class="matt-map-legend" aria-label="Map legend">
+                  <span class="matt-map-key">Selected skill</span>
+                  <span class="matt-map-key alt">Relationship</span>
+                  <span class="matt-map-key quiet">All skills available</span>
+                </div>
+              </div>
+              <div class="matt-map-scroll">
+                <div class="matt-map" id="matt-map">
+                  <div class="matt-map-lines" id="matt-map-lines" aria-hidden="true"></div>
+                  <div class="matt-lanes" id="matt-lanes"></div>
+                </div>
+              </div>
+            </section>
+            <aside class="matt-detail" id="matt-atlas-detail" aria-live="polite">
+              <div class="matt-detail-empty">Select any skill to inspect when it helps, how it works, and what connects to it.</div>
+            </aside>
+          </div>
+          </section>
+          <p class="matt-static-note">Generated from the installed project-local skill set. This page makes no model calls while you explore it.</p>
+        </section>
+        <section class="matt-flow-panel" aria-labelledby="matt-flow-title" hidden>
+          <div class="matt-section-head">
+            <div><div class="panel-label">Recommended route</div><h2 id="matt-flow-title">Idea → ship</h2></div>
+            <p class="matt-section-note">Keep discovery through ticketing in one context. Start each implementation ticket fresh.</p>
+          </div>
+          <div class="matt-flow" id="matt-flow"></div>
+          <div class="matt-onramps" id="matt-onramps" aria-label="Workflow on-ramps"></div>
+        </section>
+        <section class="matt-catalog" aria-labelledby="matt-catalog-title" hidden>
+          <div class="matt-section-head">
+            <div><div class="panel-label">Skill index</div><h2 id="matt-catalog-title">When, who, and what next</h2></div>
+            <p class="matt-section-note">Filters show Codex policy. Antigravity may discover any skill when its description matches.</p>
+          </div>
+          <div class="matt-toolbar" id="matt-toolbar" aria-label="Filter Matt Pocock skills"></div>
+          <div class="matt-skill-grid" id="matt-skill-grid"></div>
+        </section>
+      </section>
     </main>
 
     <footer class="footer"><span id="privacy-text">Canonical knowledge only.</span><span>Local loopback actions // raw evidence excluded</span></footer>
@@ -951,6 +2595,1189 @@
       const setText = (id, value) => { const node = byId(id); if (node) node.textContent = value ?? ""; };
       const setLink = (id, value) => { const node = byId(id); if (node && value) node.href = value; };
       const make = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+      const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+      let savedTheme = null;
+      try { savedTheme = localStorage.getItem("second-brain-theme"); } catch (_error) {}
+      const applyTheme = (theme, persist = false) => {
+        const normalized = theme === "dark" ? "dark" : "light";
+        document.documentElement.dataset.theme = normalized;
+        const dark = normalized === "dark";
+        byId("theme-toggle").setAttribute("aria-pressed", String(dark));
+        byId("theme-toggle").setAttribute("aria-label", `Switch to ${dark ? "light" : "dark"} theme`);
+        byId("theme-toggle").title = `Switch to ${dark ? "light" : "dark"} theme`;
+        setText("theme-toggle-icon", dark ? "☀" : "☾");
+        setText("theme-toggle-label", dark ? "Light" : "Dark");
+        if (persist) {
+          savedTheme = normalized;
+          try { localStorage.setItem("second-brain-theme", normalized); } catch (_error) {}
+        }
+      };
+      applyTheme(document.documentElement.dataset.theme || (systemTheme.matches ? "dark" : "light"));
+      byId("theme-toggle").addEventListener("click", () => {
+        applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark", true);
+      });
+      systemTheme.addEventListener("change", (event) => {
+        if (!savedTheme) applyTheme(event.matches ? "dark" : "light");
+      });
+      const mattSkills = data.matt_skills || { skills: [], installed_count: 0, expected_count: 22, manual_count: 0, automatic_count: 0, antigravity_discoverable_count: 0, agents: [] };
+      let mattCatalogFamily = "all";
+      let mattCatalogQuery = "";
+      let mattSourceExpanded = false;
+
+      const mattLane = (laneId) => (mattSkills.lanes || []).find((lane) => lane.id === laneId) || { id: laneId, label: "Other", hint: "" };
+      const mattModeShort = (skill) => skill.mode === "manual" ? "You start it" : "Can start automatically";
+      const mattCatalogInvocationCopy = (skill) => skill.mode === "manual"
+        ? `Name ${skill.name} when you want this workflow. Codex will not start it implicitly.`
+        : `Codex may apply ${skill.name} when the request matches. You can also name it directly.`;
+
+      const appendMattInline = (node, text) => {
+        String(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean).forEach((part) => {
+          if (part.startsWith("`") && part.endsWith("`")) node.append(make("code", "", part.slice(1, -1)));
+          else if (part.startsWith("**") && part.endsWith("**")) node.append(make("strong", "", part.slice(2, -2)));
+          else node.append(document.createTextNode(part));
+        });
+      };
+
+      const renderMattSource = (target, source) => {
+        target.replaceChildren();
+        const lines = String(source || "").split(/\r?\n/);
+        let list = null;
+        let listType = "";
+        let codeLines = null;
+        lines.forEach((line) => {
+          if (line.trim().startsWith("```")) {
+            list = null;
+            if (codeLines) {
+              const pre = make("pre");
+              pre.append(make("code", "", codeLines.join("\n")));
+              target.append(pre);
+              codeLines = null;
+            } else {
+              codeLines = [];
+            }
+            return;
+          }
+          if (codeLines) {
+            codeLines.push(line);
+            return;
+          }
+          const heading = line.match(/^(#{1,4})\s+(.+)$/);
+          if (heading) {
+            list = null;
+            const level = Math.min(5, heading[1].length + 1);
+            const node = make(`h${level}`);
+            appendMattInline(node, heading[2]);
+            target.append(node);
+            return;
+          }
+          const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+          const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+          if (unordered || ordered) {
+            const type = ordered ? "ol" : "ul";
+            if (!list || listType !== type) {
+              list = make(type);
+              listType = type;
+              target.append(list);
+            }
+            const item = make("li");
+            appendMattInline(item, (ordered || unordered)[1]);
+            list.append(item);
+            return;
+          }
+          if (!line.trim()) {
+            list = null;
+            listType = "";
+            return;
+          }
+          list = null;
+          listType = "";
+          if (line.startsWith(">")) {
+            const quote = make("blockquote");
+            appendMattInline(quote, line.replace(/^>\s?/, ""));
+            target.append(quote);
+            return;
+          }
+          const paragraph = make("p");
+          appendMattInline(paragraph, line);
+          target.append(paragraph);
+        });
+        if (codeLines) {
+          const pre = make("pre");
+          pre.append(make("code", "", codeLines.join("\n")));
+          target.append(pre);
+        }
+      };
+
+      const renderMattReader = () => {
+        const skill = mattByName.get(activeMattSkillName);
+        const reader = byId("matt-reader");
+        reader.replaceChildren();
+        if (!skill) {
+          reader.append(make("div", "skills-reader-empty", "Choose a skill to inspect its guidance."));
+          return;
+        }
+
+        const head = make("div", "skills-reader-head");
+        const headRow = make("div", "skills-reader-head-row");
+        const tags = make("div", "skills-reader-tags");
+        tags.append(
+          make("span", "skills-reader-tag", mattLane(skill.lane).label),
+          make("span", "skills-reader-tag", mattModeShort(skill)),
+        );
+        const close = make("button", "skills-reader-close", "×");
+        close.type = "button";
+        close.setAttribute("aria-label", "Close skill details");
+        close.addEventListener("click", () => reader.classList.remove("is-open"));
+        headRow.append(tags, close);
+        head.append(headRow, make("h3", "skills-reader-title", skill.name));
+
+        const body = make("div", "skills-reader-body");
+        const when = make("section", "skills-reader-section");
+        when.append(
+          make("h4", "skills-reader-label", "Use it when"),
+          make("p", "skills-reader-copy", skill.when),
+        );
+        const outcome = make("section", "skills-reader-section");
+        outcome.append(
+          make("h4", "skills-reader-label", "What it gives you"),
+          make("p", "skills-reader-copy skills-reader-outcome", skill.outcome),
+        );
+        body.append(when, outcome);
+
+        if (skill.steps?.length) {
+          const how = make("section", "skills-reader-section");
+          const steps = make("ol", "skills-reader-steps");
+          skill.steps.forEach((step) => steps.append(make("li", "", step)));
+          how.append(make("h4", "skills-reader-label", "How it works"), steps);
+          body.append(how);
+        }
+
+        if (skill.requires?.length) {
+          const relatedSection = make("section", "skills-reader-section");
+          const related = make("div", "skills-reader-related");
+          skill.requires.filter((name) => mattByName.has(name)).forEach((name) => {
+            const button = make("button", "", name);
+            button.type = "button";
+            button.addEventListener("click", () => selectMattSkill(name, { open: true }));
+            related.append(button);
+          });
+          relatedSection.append(make("h4", "skills-reader-label", "Useful with"), related);
+          body.append(relatedSection);
+        }
+
+        if (skill.avoid) {
+          const boundary = make("section", "skills-reader-section");
+          boundary.append(
+            make("h4", "skills-reader-label", "Good boundary"),
+            make("p", "skills-reader-copy skills-reader-outcome", skill.avoid),
+          );
+          body.append(boundary);
+        }
+
+        body.append(make("div", "skills-reader-section skills-invocation", mattCatalogInvocationCopy(skill)));
+        const sourceToggle = make("button", "skills-source-toggle", mattSourceExpanded ? "Hide full skill" : "Read the full skill");
+        sourceToggle.type = "button";
+        const source = make("article", "skills-source");
+        source.hidden = !mattSourceExpanded;
+        if (mattSourceExpanded) renderMattSource(source, skill.source_body);
+        sourceToggle.addEventListener("click", () => {
+          mattSourceExpanded = !mattSourceExpanded;
+          renderMattReader();
+        });
+        body.append(sourceToggle, source);
+        reader.append(head, body);
+      };
+
+      const selectMattSkill = (name, { open = false } = {}) => {
+        if (!mattByName.has(name)) return;
+        activeMattSkillName = name;
+        mattSourceExpanded = false;
+        renderMattCatalog();
+        renderMattReader();
+        if (open) byId("matt-reader").classList.add("is-open");
+      };
+
+      const mattVisibleSkills = () => {
+        const query = mattCatalogQuery.trim().toLocaleLowerCase();
+        return (mattSkills.skills || []).filter((skill) => {
+          if (mattCatalogFamily !== "all" && skill.lane !== mattCatalogFamily) return false;
+          if (!query) return true;
+          const searchable = [skill.name, skill.group, skill.when, skill.outcome, mattLane(skill.lane).label].join(" ").toLocaleLowerCase();
+          return searchable.includes(query);
+        });
+      };
+
+      const renderMattFilters = () => {
+        const filters = byId("matt-family-filters");
+        filters.replaceChildren();
+        [{ id: "all", label: "All skills" }, ...(mattSkills.lanes || [])].forEach((lane) => {
+          const button = make("button", `skills-family-filter${mattCatalogFamily === lane.id ? " active" : ""}`, lane.label);
+          button.type = "button";
+          button.setAttribute("aria-pressed", String(mattCatalogFamily === lane.id));
+          button.addEventListener("click", () => {
+            mattCatalogFamily = lane.id;
+            renderMattFilters();
+            renderMattCatalog();
+          });
+          filters.append(button);
+        });
+      };
+
+      const renderMattCatalog = () => {
+        const visible = mattVisibleSkills();
+        setText("matt-results-count", `${visible.length} ${visible.length === 1 ? "skill" : "skills"}`);
+        const groups = byId("matt-catalog-groups");
+        groups.replaceChildren();
+        if (!visible.length) {
+          groups.append(make("div", "skills-empty", "No skills match that search. Try a broader word or choose All skills."));
+          return;
+        }
+        (mattSkills.lanes || []).forEach((lane) => {
+          const laneSkills = visible.filter((skill) => skill.lane === lane.id);
+          if (!laneSkills.length) return;
+          const section = make("section", "skills-group");
+          const head = make("div", "skills-group-head");
+          head.append(make("h4", "", `${lane.label} · ${laneSkills.length}`), make("p", "", lane.hint));
+          const grid = make("div", "skills-card-grid");
+          laneSkills.forEach((skill) => {
+            const card = make("article", `skills-card${skill.name === activeMattSkillName ? " is-selected" : ""}`);
+            const top = make("div", "skills-card-top");
+            top.append(
+              make("span", "skills-card-family", skill.group),
+              make("span", `skills-card-mode ${skill.mode}`, mattModeShort(skill)),
+            );
+            const open = make("button", "skills-card-open", "Open skill →");
+            open.type = "button";
+            open.addEventListener("click", () => selectMattSkill(skill.name, { open: true }));
+            card.append(
+              top,
+              make("h5", "", skill.name),
+              make("p", "skills-card-when", skill.when),
+              make("p", "skills-card-outcome", skill.outcome),
+              open,
+            );
+            grid.append(card);
+          });
+          section.append(head, grid);
+          groups.append(section);
+        });
+      };
+
+      const renderMattSkills = () => {
+        const count = mattSkills.installed_count || 0;
+        setText("matt-tab-count", String(count));
+        setText("matt-library-count", String(count));
+        const search = byId("matt-search");
+        search.addEventListener("input", () => {
+          mattCatalogQuery = search.value;
+          renderMattCatalog();
+        });
+        renderMattFilters();
+        renderMattCatalog();
+        renderMattReader();
+      };
+      const mattByName = new Map((mattSkills.skills || []).map((skill) => [skill.name, skill]));
+      let activeMattMode = "guided";
+      let activeMattSparkId = "";
+      let activeMattRouteIndex = 0;
+      let activeMattStepIndex = 0;
+      let activeMattSkillName = "";
+      let mattNodeElements = new Map();
+      let mattMapFrame = 0;
+      let mattLibraryQuery = "";
+      let mattSkillView = "overview";
+      let activeMattFilePath = "SKILL.md";
+      let mattSidebarCollapsed = false;
+      const mattExpandedLanes = new Set();
+
+      const appendSkillInline = (node, text) => {
+        const pattern = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\[[^\]]+\]\([^)]+\)|\*[^*\n]+\*|_[^_\n]+_)/g;
+        String(text).split(pattern).filter(Boolean).forEach((part) => {
+          if (part.startsWith("`") && part.endsWith("`")) {
+            node.append(make("code", "", part.slice(1, -1)));
+            return;
+          }
+          if ((part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"))) {
+            const strong = make("strong");
+            appendSkillInline(strong, part.slice(2, -2));
+            node.append(strong);
+            return;
+          }
+          const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+          if (link) {
+            if (/^https?:\/\//i.test(link[2]) || link[2].startsWith("#")) {
+              const anchor = make("a", "", link[1]);
+              anchor.href = link[2];
+              if (/^https?:\/\//i.test(link[2])) {
+                anchor.target = "_blank";
+                anchor.rel = "noreferrer";
+              }
+              node.append(anchor);
+            } else {
+              const reference = make("button", "skills-md-reference", link[1]);
+              reference.type = "button";
+              reference.title = link[2];
+              reference.addEventListener("click", () => {
+                const normalizedPath = link[2].split("#")[0].replace(/^\.\//, "");
+                const skill = mattByName.get(activeMattSkillName);
+                if (!normalizedPath || !skill?.package_files?.some((file) => file.path === normalizedPath)) return;
+                mattSkillView = "reference";
+                activeMattFilePath = normalizedPath;
+                renderMattSkillDocument();
+              });
+              node.append(reference);
+            }
+            return;
+          }
+          if ((part.startsWith("*") && part.endsWith("*")) || (part.startsWith("_") && part.endsWith("_"))) {
+            const emphasis = make("em");
+            appendSkillInline(emphasis, part.slice(1, -1));
+            node.append(emphasis);
+            return;
+          }
+          node.append(document.createTextNode(part));
+        });
+      };
+
+      const skillHeadingId = (text, usedIds) => {
+        const base = String(text).toLocaleLowerCase().replace(/[`*_]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section";
+        let candidate = base;
+        let suffix = 2;
+        while (usedIds.has(candidate)) {
+          candidate = `${base}-${suffix}`;
+          suffix += 1;
+        }
+        usedIds.add(candidate);
+        return candidate;
+      };
+
+      const renderSkillMarkdown = (target, source) => {
+        target.replaceChildren();
+        const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+        const headings = [];
+        const usedIds = new Set();
+        let index = 0;
+        while (index < lines.length && !lines[index].trim()) index += 1;
+        if (lines[index]?.match(/^#\s+/)) index += 1;
+
+        const isBlockStart = (line) => (
+          /^```/.test(line.trim())
+          || /^#{1,5}\s+/.test(line)
+          || /^\s*(?:[-*_]\s*){3,}$/.test(line)
+          || /^>\s?/.test(line)
+          || /^\s*\|.*\|\s*$/.test(line)
+          || /^(\s*)([-*+]|\d+\.)\s+/.test(line)
+        );
+
+        while (index < lines.length) {
+          const line = lines[index];
+          if (!line.trim()) {
+            index += 1;
+            continue;
+          }
+
+          const fence = line.trim().match(/^```(.*)$/);
+          if (fence) {
+            const language = fence[1].trim() || "code";
+            const codeLines = [];
+            index += 1;
+            while (index < lines.length && !lines[index].trim().startsWith("```")) {
+              codeLines.push(lines[index]);
+              index += 1;
+            }
+            if (index < lines.length) index += 1;
+            const block = make("div", "skills-md-codeblock");
+            block.append(make("div", "skills-md-codebar", language));
+            const pre = make("pre");
+            pre.append(make("code", "", codeLines.join("\n")));
+            block.append(pre);
+            target.append(block);
+            continue;
+          }
+
+          const heading = line.match(/^(#{1,5})\s+(.+)$/);
+          if (heading) {
+            const level = Math.min(5, Math.max(2, heading[1].length));
+            const headingText = heading[2].replace(/\s+#+\s*$/, "");
+            const headingNode = make(`h${level}`);
+            appendSkillInline(headingNode, headingText);
+            headingNode.id = skillHeadingId(headingText, usedIds);
+            target.append(headingNode);
+            headings.push({ id: headingNode.id, label: headingText.replace(/[`*_]/g, "") });
+            index += 1;
+            continue;
+          }
+
+          if (/^\s*(?:[-*_]\s*){3,}$/.test(line)) {
+            target.append(make("hr"));
+            index += 1;
+            continue;
+          }
+
+          if (/^>\s?/.test(line)) {
+            const quoteLines = [];
+            while (index < lines.length && /^>\s?/.test(lines[index])) {
+              quoteLines.push(lines[index].replace(/^>\s?/, ""));
+              index += 1;
+            }
+            const quote = make("blockquote");
+            appendSkillInline(quote, quoteLines.join(" "));
+            target.append(quote);
+            continue;
+          }
+
+          const nextLine = lines[index + 1] || "";
+          if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[\s|:-]+\|\s*$/.test(nextLine)) {
+            const cells = (value) => value.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+            const table = make("table");
+            const head = make("thead");
+            const headRow = make("tr");
+            cells(line).forEach((cell) => {
+              const th = make("th");
+              appendSkillInline(th, cell);
+              headRow.append(th);
+            });
+            head.append(headRow);
+            table.append(head);
+            const tableBody = make("tbody");
+            index += 2;
+            while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+              const row = make("tr");
+              cells(lines[index]).forEach((cell) => {
+                const td = make("td");
+                appendSkillInline(td, cell);
+                row.append(td);
+              });
+              tableBody.append(row);
+              index += 1;
+            }
+            table.append(tableBody);
+            target.append(table);
+            continue;
+          }
+
+          const listMatch = line.match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/);
+          if (listMatch) {
+            const rootType = /\d+\./.test(listMatch[2]) ? "ol" : "ul";
+            const root = make(rootType);
+            const stack = [{ indent: listMatch[1].length, type: rootType, list: root, lastItem: null }];
+            while (index < lines.length) {
+              const itemMatch = lines[index].match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/);
+              if (!itemMatch) break;
+              const indent = itemMatch[1].length;
+              const type = /\d+\./.test(itemMatch[2]) ? "ol" : "ul";
+              while (stack.length > 1 && indent < stack[stack.length - 1].indent) stack.pop();
+              let current = stack[stack.length - 1];
+              if (indent > current.indent && current.lastItem) {
+                const nested = make(type);
+                current.lastItem.append(nested);
+                current = { indent, type, list: nested, lastItem: null };
+                stack.push(current);
+              } else if (indent === current.indent && type !== current.type) {
+                break;
+              } else if (indent < current.indent || (stack.length === 1 && type !== rootType)) {
+                break;
+              }
+              const task = itemMatch[3].match(/^\[([ xX])\]\s+(.+)$/);
+              const item = make("li", task ? "skills-md-task" : "");
+              if (task) {
+                const checkbox = make("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = task[1].toLocaleLowerCase() === "x";
+                checkbox.disabled = true;
+                item.append(checkbox);
+                appendSkillInline(item, task[2]);
+              } else {
+                appendSkillInline(item, itemMatch[3]);
+              }
+              current.list.append(item);
+              current.lastItem = item;
+              index += 1;
+            }
+            target.append(root);
+            continue;
+          }
+
+          const paragraphLines = [line.trim()];
+          index += 1;
+          while (index < lines.length && lines[index].trim() && !isBlockStart(lines[index])) {
+            paragraphLines.push(lines[index].trim());
+            index += 1;
+          }
+          const paragraph = make("p");
+          appendSkillInline(paragraph, paragraphLines.join(" "));
+          target.append(paragraph);
+        }
+        return headings;
+      };
+
+      const visibleLibrarySkills = () => {
+        const normalizeSearch = (value) => String(value).toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const query = normalizeSearch(mattLibraryQuery);
+        if (!query) return mattSkills.skills || [];
+        return (mattSkills.skills || []).filter((skill) => (
+          normalizeSearch([skill.name, skill.group, skill.when, skill.outcome, mattLane(skill.lane).label].join(" "))
+            .includes(query)
+        ));
+      };
+
+      const renderMattLibraryNavigation = () => {
+        const visible = visibleLibrarySkills();
+        setText("matt-results-count", `${visible.length} of ${mattSkills.installed_count || 0} skills shown`);
+        const navigation = byId("matt-catalog-nav");
+        navigation.replaceChildren();
+        if (!visible.length) {
+          navigation.append(make("div", "skills-navigation-empty", "No skills match that search."));
+          return;
+        }
+        (mattSkills.lanes || []).forEach((lane, laneIndex) => {
+          const laneSkills = visible.filter((skill) => skill.lane === lane.id);
+          if (!laneSkills.length) return;
+          const expanded = Boolean(mattLibraryQuery.trim()) || mattExpandedLanes.has(lane.id);
+          const group = make("section", `skills-nav-group${expanded ? " open" : ""}`);
+          const heading = make("button", "skills-nav-group-head");
+          heading.type = "button";
+          heading.setAttribute("aria-expanded", String(expanded));
+          heading.append(
+            make("span", "skills-nav-group-index", String(laneIndex + 1).padStart(2, "0")),
+            make("span", "skills-nav-group-title", lane.label),
+            make("span", "skills-nav-group-count", String(laneSkills.length).padStart(2, "0")),
+          );
+          heading.addEventListener("click", () => {
+            if (mattExpandedLanes.has(lane.id)) mattExpandedLanes.delete(lane.id);
+            else mattExpandedLanes.add(lane.id);
+            renderMattLibraryNavigation();
+          });
+          const items = make("div", "skills-nav-items");
+          items.hidden = !expanded;
+          laneSkills.forEach((skill) => {
+            const button = make("button", `skills-nav-skill${skill.name === activeMattSkillName ? " active" : ""}`);
+            button.type = "button";
+            button.dataset.skill = skill.name;
+            button.setAttribute("aria-current", skill.name === activeMattSkillName ? "page" : "false");
+            button.append(make("span", "skills-nav-skill-name", `The /${skill.name} Skill`));
+            button.addEventListener("click", () => openMattSkillDocument(skill.name, { scroll: true }));
+            items.append(button);
+          });
+          const hint = make("p", "skills-nav-group-hint", lane.hint);
+          hint.hidden = !expanded;
+          group.append(heading, hint, items);
+          navigation.append(group);
+        });
+      };
+
+      const renderMattPackageOverview = () => {
+        const documentNode = byId("matt-reader");
+        documentNode.replaceChildren();
+        byId("matt-package-overview")?.classList.add("active");
+
+        const hero = make("header", "skills-package-hero");
+        const heroCopy = make("div");
+        heroCopy.append(
+          make("div", "skills-document-kicker", "Capability map"),
+          make("h3", "", "22 skills. Six jobs. One engineering system."),
+          make("p", "", "Use this map to understand what the package can do and choose the smallest useful skill. Open a skill for its concise operating guide, then switch to Full reference only when you need the complete package instructions."),
+        );
+        const stats = make("div", "skills-package-stats");
+        [
+          [mattSkills.installed_count || 0, "Skills"],
+          [(mattSkills.lanes || []).length, "Capabilities"],
+          [mattSkills.manual_count || 0, "You start"],
+        ].forEach(([value, label]) => {
+          const stat = make("div", "skills-package-stat");
+          stat.append(make("strong", "", String(value)), make("span", "", label));
+          stats.append(stat);
+        });
+        hero.append(heroCopy, stats);
+
+        const section = make("section", "skills-capability-section");
+        const heading = make("div", "skills-section-heading");
+        heading.append(
+          make("h4", "", "What the package helps you do"),
+          make("p", "", "The categories describe the job. The skill chips are the tools available for that job."),
+        );
+        const grid = make("div", "skills-capability-grid");
+        (mattSkills.lanes || []).forEach((lane) => {
+          const skills = (mattSkills.skills || []).filter((skill) => skill.lane === lane.id);
+          const card = make("article", "skills-capability-card");
+          const cardHead = make("div", "skills-capability-card-head");
+          cardHead.append(
+            make("h5", "", lane.label),
+            make("span", "skills-capability-card-count", String(skills.length).padStart(2, "0")),
+          );
+          const chips = make("div", "skills-capability-skills");
+          skills.forEach((skill) => {
+            const chip = make("button", "skills-capability-skill", `/${skill.name}`);
+            chip.type = "button";
+            chip.title = skill.when;
+            chip.addEventListener("click", () => openMattSkillDocument(skill.name, { scroll: true }));
+            chips.append(chip);
+          });
+          card.append(cardHead, make("p", "", lane.hint), chips);
+          grid.append(card);
+        });
+        section.append(heading, grid);
+        documentNode.append(hero, section);
+      };
+
+      const renderMattSkillHero = (skill, skillIndex) => {
+        const allSkills = mattSkills.skills || [];
+        const hero = make("header", "skills-document-hero");
+        hero.append(
+          make("div", "skills-document-kicker", mattLane(skill.lane).label),
+          make("h3", "skills-document-title", `The /${skill.name} Skill`),
+        );
+        const metaRow = make("div", "skills-document-meta-row");
+        const meta = make("div", "skills-document-meta");
+        const fileCount = (skill.package_files || []).length;
+        meta.append(
+          make("span", "skills-document-pill", skill.group),
+          make("span", "skills-document-pill", mattModeShort(skill)),
+          make("span", "skills-document-pill", `${fileCount} package file${fileCount === 1 ? "" : "s"}`),
+        );
+        const controls = make("div", "skills-document-actions");
+        const views = make("div", "skills-view-tabs");
+        [["overview", "Quick guide"], ["reference", "Full reference"]].forEach(([view, label]) => {
+          const button = make("button", `skills-view-tab${mattSkillView === view ? " active" : ""}`, label);
+          button.type = "button";
+          button.setAttribute("aria-pressed", String(mattSkillView === view));
+          button.addEventListener("click", () => {
+            mattSkillView = view;
+            renderMattSkillDocument();
+          });
+          views.append(button);
+        });
+        const previous = make("button", "skills-document-action", "←");
+        previous.type = "button";
+        previous.title = "Previous skill";
+        previous.disabled = skillIndex <= 0;
+        previous.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex - 1]?.name));
+        const next = make("button", "skills-document-action", "→");
+        next.type = "button";
+        next.title = "Next skill";
+        next.disabled = skillIndex < 0 || skillIndex >= allSkills.length - 1;
+        next.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex + 1]?.name));
+        controls.append(views, previous, next);
+        metaRow.append(meta, controls);
+        hero.append(metaRow);
+        return hero;
+      };
+
+      const renderMattSkillOverview = (body, skill) => {
+        const grid = make("div", "skills-overview-grid");
+        const addCard = (label, copy, className = "") => {
+          const card = make("article", `skills-overview-card${className ? ` ${className}` : ""}`);
+          card.append(make("h4", "", label), make("p", "", copy));
+          grid.append(card);
+        };
+        addCard("Use it when", skill.when);
+        addCard("What it gives you", skill.outcome);
+        addCard("How it starts", mattCatalogInvocationCopy(skill));
+
+        const flow = make("article", "skills-overview-card full");
+        flow.append(make("h4", "", "How it works"));
+        const steps = make("ol", "skills-overview-steps");
+        (skill.steps || []).forEach((step, index) => {
+          const item = make("li", "", step);
+          item.dataset.step = String(index + 1).padStart(2, "0");
+          steps.append(item);
+        });
+        flow.append(steps);
+        grid.append(flow);
+
+        addCard("Example", skill.example || "Open the full reference for detailed examples.", "wide");
+        addCard("Watch out for", skill.avoid || "Use the smallest skill that fits the situation.");
+
+        const dependencies = make("article", "skills-overview-card full");
+        dependencies.append(make("h4", "", "Works with"));
+        const dependencyList = make("div", "skills-overview-dependencies");
+        if ((skill.requires || []).length) {
+          skill.requires.forEach((name) => {
+            const dependency = make("button", "skills-dependency", `/${name}`);
+            dependency.type = "button";
+            dependency.addEventListener("click", () => openMattSkillDocument(name));
+            dependencyList.append(dependency);
+          });
+        } else {
+          dependencyList.append(make("span", "skills-overview-empty", "No required companion skill."));
+        }
+        dependencies.append(dependencyList);
+        grid.append(dependencies);
+        body.append(grid);
+      };
+
+      const renderMattSkillReference = (documentNode, body, skill, hero) => {
+        const files = skill.package_files?.length
+          ? skill.package_files
+          : [{ path: "SKILL.md", content: skill.source_body || "", kind: "instructions" }];
+        if (!files.some((file) => file.path === activeMattFilePath)) activeMattFilePath = files[0].path;
+        const activeFile = files.find((file) => file.path === activeMattFilePath) || files[0];
+
+        const intro = make("div", "skills-reference-intro");
+        intro.append(
+          make("p", "", files.length === 1
+            ? "Complete installed skill instructions."
+            : `Complete package: the main instructions and ${files.length - 1} supporting reference file${files.length === 2 ? "" : "s"}.`),
+        );
+        const filesNode = make("div", "skills-package-files");
+        files.forEach((file) => {
+          const button = make("button", `skills-package-file${file.path === activeFile.path ? " active" : ""}`);
+          button.type = "button";
+          button.dataset.path = file.path;
+          button.append(document.createTextNode(file.path));
+          if (file.kind === "instructions") button.append(make("small", "", "MAIN"));
+          button.addEventListener("click", () => {
+            activeMattFilePath = file.path;
+            renderMattSkillDocument();
+          });
+          filesNode.append(button);
+        });
+        const fileLines = activeFile.content ? activeFile.content.replace(/\r\n/g, "\n").split("\n").length : 0;
+        const fileMeta = make("div", "skills-reference-file-meta");
+        fileMeta.append(
+          make("span", "", activeFile.path),
+          make("span", "", `${fileLines} lines · complete file`),
+        );
+        const markdown = make("article", "skills-markdown");
+        const headings = renderSkillMarkdown(markdown, activeFile.content);
+        if (!markdown.childNodes.length) markdown.append(make("p", "", "This file contains metadata only; there are no additional instructions."));
+        markdown.append(make("div", "skills-reference-end", `End of ${activeFile.path}`));
+        body.append(intro, filesNode, fileMeta, markdown);
+
+        const toc = make("nav", "skills-document-toc");
+        toc.setAttribute("aria-label", "On this file");
+        toc.append(make("span", "skills-document-toc-label", activeFile.path));
+        headings.slice(0, 8).forEach((heading) => {
+          const button = make("button", "", heading.label);
+          button.type = "button";
+          button.addEventListener("click", () => byId(heading.id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+          toc.append(button);
+        });
+        if (!headings.length) toc.hidden = true;
+        documentNode.append(hero, toc, body);
+      };
+
+      const renderMattSkillDocument = () => {
+        const skill = mattByName.get(activeMattSkillName);
+        const documentNode = byId("matt-reader");
+        documentNode.replaceChildren();
+        if (!skill) {
+          renderMattPackageOverview();
+          return;
+        }
+        byId("matt-package-overview")?.classList.remove("active");
+        const allSkills = mattSkills.skills || [];
+        const skillIndex = allSkills.findIndex((candidate) => candidate.name === skill.name);
+        const hero = renderMattSkillHero(skill, skillIndex);
+        const body = make("div", "skills-document-body");
+        if (mattSkillView === "reference") {
+          renderMattSkillReference(documentNode, body, skill, hero);
+        } else {
+          renderMattSkillOverview(body, skill);
+          documentNode.append(hero, body);
+        }
+      };
+
+      const openMattSkillDocument = (name, { scroll = false, view = "overview" } = {}) => {
+        if (!mattByName.has(name)) return;
+        activeMattSkillName = name;
+        mattSkillView = view;
+        activeMattFilePath = "SKILL.md";
+        const skill = mattByName.get(name);
+        if (skill?.lane) mattExpandedLanes.add(skill.lane);
+        renderMattLibraryNavigation();
+        renderMattSkillDocument();
+        if (scroll && window.matchMedia("(max-width: 900px)").matches) {
+          byId("matt-reader").scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+
+      const renderMattLibrary = () => {
+        const count = mattSkills.installed_count || 0;
+        setText("matt-tab-count", String(count));
+        setText("matt-library-count", String(count));
+        const search = byId("matt-search");
+        search.addEventListener("input", () => {
+          mattLibraryQuery = search.value;
+          renderMattLibraryNavigation();
+        });
+        byId("matt-package-overview").addEventListener("click", () => {
+          activeMattSkillName = "";
+          mattSkillView = "overview";
+          renderMattLibraryNavigation();
+          renderMattSkillDocument();
+        });
+        byId("matt-sidebar-toggle").addEventListener("click", () => {
+          mattSidebarCollapsed = !mattSidebarCollapsed;
+          byId("matt-workbench").classList.toggle("catalog-collapsed", mattSidebarCollapsed);
+          const toggle = byId("matt-sidebar-toggle");
+          toggle.setAttribute("aria-expanded", String(!mattSidebarCollapsed));
+          toggle.textContent = mattSidebarCollapsed ? "Show catalog" : "Hide catalog";
+        });
+        renderMattLibraryNavigation();
+        renderMattSkillDocument();
+      };
+
+      const activeMattSpark = () => (mattSkills.sparks || []).find((spark) => spark.id === activeMattSparkId);
+      const activeMattRoute = () => activeMattSpark()?.routes?.[activeMattRouteIndex] || activeMattSpark()?.routes?.[0] || { skills: [] };
+      const mattLegacyInvocationCopy = (skill) => skill.mode === "manual"
+        ? `Start ${skill.name} explicitly in Codex when you want this workflow. Antigravity may discover it from the task description.`
+        : `Codex may apply ${skill.name} automatically when the task matches; you can still name it directly. Antigravity may also discover it by description.`;
+
+      const renderMattSparks = () => {
+        const node = byId("matt-sparks");
+        node.replaceChildren();
+        (mattSkills.sparks || []).forEach((spark) => {
+          const button = make("button", `matt-spark${spark.id === activeMattSparkId ? " active" : ""}`, spark.label);
+          button.type = "button";
+          button.setAttribute("aria-pressed", String(spark.id === activeMattSparkId));
+          button.addEventListener("click", () => {
+            activeMattSparkId = spark.id;
+            activeMattRouteIndex = 0;
+            activeMattStepIndex = 0;
+            activeMattSkillName = spark.routes?.[0]?.skills?.[0] || activeMattSkillName;
+            renderMattGuided();
+          });
+          node.append(button);
+        });
+      };
+
+      const renderMattRoute = () => {
+        const spark = activeMattSpark();
+        const picker = byId("matt-spark-picker");
+        const guidedRoute = byId("matt-guided-route");
+        picker.hidden = Boolean(spark);
+        guidedRoute.hidden = !spark;
+        if (!spark) return;
+        const route = activeMattRoute();
+        setText("matt-route-title", spark.label);
+        setText("matt-route-description", spark.description);
+        const options = byId("matt-route-options");
+        options.replaceChildren();
+        (spark.routes || []).forEach((candidate, index) => {
+          const button = make("button", `matt-route-option${index === activeMattRouteIndex ? " active" : ""}`, candidate.label);
+          button.type = "button";
+          button.setAttribute("aria-pressed", String(index === activeMattRouteIndex));
+          button.addEventListener("click", () => {
+            activeMattRouteIndex = index;
+            activeMattStepIndex = 0;
+            activeMattSkillName = candidate.skills?.[0] || activeMattSkillName;
+            renderMattGuided();
+          });
+          options.append(button);
+        });
+        const steps = byId("matt-route-steps");
+        steps.replaceChildren();
+        (route.skills || []).forEach((name, index) => {
+          const stateClass = index === activeMattStepIndex ? " is-current" : index < activeMattStepIndex ? " is-complete" : "";
+          const button = make("button", `matt-route-step${stateClass}`);
+          button.type = "button";
+          button.setAttribute("aria-current", index === activeMattStepIndex ? "step" : "false");
+          button.append(
+            make("span", "matt-route-step-index", String(index + 1).padStart(2, "0")),
+            make("span", "", name),
+          );
+          button.addEventListener("click", () => {
+            activeMattStepIndex = index;
+            activeMattSkillName = name;
+            renderMattGuided();
+          });
+          steps.append(button);
+        });
+      };
+
+      const mattSvg = (name, attributes = {}) => {
+        const node = document.createElementNS("http:" + "//www.w3.org/2000/svg", name);
+        Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
+        return node;
+      };
+
+      const addMattPath = (fromName, toName, className) => {
+        const from = mattNodeElements.get(fromName);
+        const to = mattNodeElements.get(toName);
+        const map = byId("matt-map");
+        if (!from || !to || !map) return;
+        const mapRect = map.getBoundingClientRect();
+        const fromRect = from.getBoundingClientRect();
+        const toRect = to.getBoundingClientRect();
+        const x1 = fromRect.left + fromRect.width / 2 - mapRect.left + map.scrollLeft;
+        const y1 = fromRect.top + fromRect.height / 2 - mapRect.top + map.scrollTop;
+        const x2 = toRect.left + toRect.width / 2 - mapRect.left + map.scrollLeft;
+        const y2 = toRect.top + toRect.height / 2 - mapRect.top + map.scrollTop;
+        const bend = Math.max(26, Math.abs(x2 - x1) * 0.42);
+        const direction = x2 >= x1 ? 1 : -1;
+        const path = mattSvg("path", {
+          d: `M ${x1} ${y1} C ${x1 + bend * direction} ${y1}, ${x2 - bend * direction} ${y2}, ${x2} ${y2}`,
+          class: `matt-map-path ${className}`,
+        });
+        byId("matt-map-lines").append(path);
+      };
+
+      const drawMattMap = () => {
+        mattMapFrame = 0;
+        const map = byId("matt-map");
+        let svg = byId("matt-map-lines");
+        if (!map || !svg || window.matchMedia("(max-width: 760px)").matches) return;
+        if (svg.namespaceURI !== "http:" + "//www.w3.org/2000/svg") {
+          const replacement = mattSvg("svg", { class: "matt-map-lines", id: "matt-map-lines", "aria-hidden": "true" });
+          svg.replaceWith(replacement);
+          svg = replacement;
+        }
+        svg.replaceChildren();
+        const width = map.scrollWidth;
+        const height = map.scrollHeight;
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.setAttribute("width", String(width));
+        svg.setAttribute("height", String(height));
+        (mattSkills.connections || []).forEach((connection) => {
+          addMattPath(connection.from, connection.to, connection.kind || "supports");
+        });
+      };
+
+      const scheduleMattMapDraw = () => {
+        if (mattMapFrame) cancelAnimationFrame(mattMapFrame);
+        mattMapFrame = requestAnimationFrame(drawMattMap);
+      };
+
+      const renderMattMap = () => {
+        const lanes = byId("matt-lanes");
+        lanes.replaceChildren();
+        mattNodeElements = new Map();
+        (mattSkills.lanes || []).forEach((lane) => {
+          const laneNode = make("section", "matt-lane");
+          const heading = make("div", "matt-lane-head");
+          heading.append(make("span", "matt-lane-name", lane.label), make("span", "matt-lane-hint", lane.hint));
+          const nodes = make("div", "matt-lane-nodes");
+          (mattSkills.skills || []).filter((skill) => skill.lane === lane.id).forEach((skill) => {
+            const selected = skill.name === activeMattSkillName;
+            const button = make(
+              "button",
+              `matt-node${selected ? " is-selected" : ""}`,
+            );
+            button.type = "button";
+            button.dataset.skill = skill.name;
+            button.setAttribute("aria-pressed", String(selected));
+            button.append(make("span", "", skill.name));
+            button.append(make("span", "matt-node-mode", skill.mode === "manual" ? "Codex · explicit" : "Codex · automatic"));
+            button.addEventListener("click", () => {
+              activeMattSkillName = skill.name;
+              renderMattMap();
+              renderMattDetail("matt-atlas-detail", "atlas");
+            });
+            mattNodeElements.set(skill.name, button);
+            nodes.append(button);
+          });
+          laneNode.append(heading, nodes);
+          lanes.append(laneNode);
+        });
+        scheduleMattMapDraw();
+      };
+
+      const mattDisclosure = (label, content) => {
+        const details = make("details", "matt-disclosure");
+        details.append(make("summary", "", label), content);
+        return details;
+      };
+
+      const renderMattDetail = (targetId, context = "atlas") => {
+        const skill = mattByName.get(activeMattSkillName);
+        const detail = byId(targetId);
+        detail.replaceChildren();
+        if (!skill) {
+          detail.append(make("div", "matt-detail-empty", "Select a skill to inspect its guidance."));
+          return;
+        }
+        const hero = make("div", "matt-detail-hero");
+        const meta = make("div", "matt-detail-meta");
+        meta.append(make("span", "matt-detail-pill", skill.group), make("span", "matt-detail-pill", skill.mode_label));
+        hero.append(meta, make("h3", "matt-detail-title", skill.name));
+
+        const body = make("div", "matt-detail-body");
+        body.append(
+          make("div", "matt-detail-label", "Use it when"),
+          make("p", "matt-detail-when", skill.when),
+          make("p", "matt-detail-outcome", skill.outcome),
+          make("div", `matt-detail-invoke ${skill.mode}`, mattLegacyInvocationCopy(skill)),
+        );
+
+        const how = make("div", "matt-disclosure-content");
+        const steps = make("ol", "matt-detail-steps");
+        (skill.steps || []).forEach((step) => steps.append(make("li", "", step)));
+        how.append(steps);
+        if (skill.requires?.length) {
+          how.append(make("div", "matt-detail-label", "Works with"));
+          const dependencies = make("div", "matt-related");
+          skill.requires.forEach((name) => {
+            const button = make("button", "matt-related-button", name);
+            button.type = "button";
+            button.addEventListener("click", () => {
+              activeMattSkillName = name;
+              if (context === "guided") {
+                setMattMode("atlas");
+              } else {
+                renderMattMap();
+                renderMattDetail("matt-atlas-detail", "atlas");
+              }
+            });
+            dependencies.append(button);
+          });
+          how.append(dependencies);
+        }
+        body.append(mattDisclosure("How it works", how));
+
+        const example = make("div", "matt-disclosure-content");
+        example.append(make("p", "", skill.example || "Open the skill source for a detailed example."));
+        body.append(mattDisclosure("End-to-end example", example));
+
+        const avoid = make("div", "matt-disclosure-content");
+        avoid.append(make("p", "", skill.avoid || "Use the narrowest skill that matches the task."));
+        body.append(mattDisclosure("When not to use it", avoid));
+
+        const relatedNames = new Set(skill.requires || []);
+        (mattSkills.connections || []).forEach((connection) => {
+          if (connection.from === skill.name) relatedNames.add(connection.to);
+          if (connection.to === skill.name) relatedNames.add(connection.from);
+        });
+        relatedNames.delete(skill.name);
+        if (relatedNames.size) {
+          body.append(make("div", "matt-detail-label", "Connected skills"));
+          const related = make("div", "matt-related");
+          [...relatedNames].filter((name) => mattByName.has(name)).forEach((name) => {
+            const button = make("button", "matt-related-button", name);
+            button.type = "button";
+            button.addEventListener("click", () => {
+              activeMattSkillName = name;
+              if (context === "guided") {
+                setMattMode("atlas");
+              } else {
+                renderMattMap();
+                renderMattDetail("matt-atlas-detail", "atlas");
+              }
+            });
+            related.append(button);
+          });
+          body.append(related);
+        }
+        detail.append(hero, body);
+        if (context === "atlas" && window.matchMedia("(max-width: 1100px)").matches) detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      };
+
+      const renderMattNearby = () => {
+        const node = byId("matt-nearby-skills");
+        node.replaceChildren();
+        const skill = mattByName.get(activeMattSkillName);
+        if (!skill) return;
+        const routeSet = new Set(activeMattRoute().skills || []);
+        const nearby = new Set(skill.requires || []);
+        (mattSkills.connections || []).forEach((connection) => {
+          if (connection.from === skill.name) nearby.add(connection.to);
+          if (connection.to === skill.name) nearby.add(connection.from);
+        });
+        (mattSkills.skills || []).filter((candidate) => candidate.lane === skill.lane).forEach((candidate) => nearby.add(candidate.name));
+        nearby.delete(skill.name);
+        const candidates = [...nearby].filter((name) => mattByName.has(name) && !routeSet.has(name)).slice(0, 3);
+        if (!candidates.length) {
+          node.append(make("p", "matt-guide-copy", "This step already contains its closest connected skills."));
+          return;
+        }
+        candidates.forEach((name) => {
+          const candidate = mattByName.get(name);
+          const button = make("button", "matt-nearby-skill");
+          button.type = "button";
+          button.append(make("span", "", name), make("small", "", candidate.when));
+          button.addEventListener("click", () => {
+            activeMattSkillName = name;
+            setMattMode("atlas");
+          });
+          node.append(button);
+        });
+      };
+
+      const renderMattStepNavigation = () => {
+        const route = activeMattRoute();
+        const total = route.skills?.length || 0;
+        const previous = byId("matt-previous-step");
+        const next = byId("matt-next-step");
+        previous.disabled = activeMattStepIndex <= 0;
+        next.disabled = activeMattStepIndex >= total - 1;
+        setText("matt-step-position", total ? `Step ${activeMattStepIndex + 1} of ${total}` : "");
+        previous.onclick = () => {
+          if (activeMattStepIndex <= 0) return;
+          activeMattStepIndex -= 1;
+          activeMattSkillName = route.skills[activeMattStepIndex];
+          renderMattGuided();
+        };
+        next.onclick = () => {
+          if (activeMattStepIndex >= total - 1) return;
+          activeMattStepIndex += 1;
+          activeMattSkillName = route.skills[activeMattStepIndex];
+          renderMattGuided();
+        };
+      };
+
+      const renderMattGuided = () => {
+        renderMattSparks();
+        renderMattRoute();
+        if (!activeMattSpark()) return;
+        const route = activeMattRoute();
+        activeMattStepIndex = Math.min(activeMattStepIndex, Math.max(0, (route.skills?.length || 1) - 1));
+        activeMattSkillName = route.skills?.[activeMattStepIndex] || activeMattSkillName;
+        renderMattDetail("matt-guided-detail", "guided");
+        renderMattNearby();
+        renderMattStepNavigation();
+      };
+
+      const renderMattAtlas = () => {
+        renderMattMap();
+        renderMattDetail("matt-atlas-detail", "atlas");
+      };
+
+      const setMattMode = (mode) => {
+        activeMattMode = mode === "atlas" ? "atlas" : "guided";
+        byId("matt-guided-view").hidden = activeMattMode !== "guided";
+        byId("matt-atlas-view").hidden = activeMattMode !== "atlas";
+        document.querySelectorAll(".matt-mode-tab").forEach((button) => {
+          const active = button.dataset.mattMode === activeMattMode;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+        if (activeMattMode === "atlas") {
+          renderMattAtlas();
+          scheduleMattMapDraw();
+        } else {
+          renderMattGuided();
+        }
+      };
+
+      window.addEventListener("resize", scheduleMattMapDraw, { passive: true });
+      document.querySelectorAll(".matt-mode-tab").forEach((button) => button.addEventListener("click", () => setMattMode(button.dataset.mattMode)));
+      byId("matt-change-spark").addEventListener("click", () => {
+        activeMattSparkId = "";
+        activeMattRouteIndex = 0;
+        activeMattStepIndex = 0;
+        renderMattGuided();
+        byId("matt-spark-picker").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      byId("matt-return-guided").addEventListener("click", () => setMattMode("guided"));
+      const setWorkspaceView = (view, { updateHash = true } = {}) => {
+        const mattActive = view === "matt";
+        byId("metrics").hidden = mattActive;
+        byId("brain-dashboard-view").hidden = mattActive;
+        byId("matt-skills-view").hidden = !mattActive;
+        document.querySelectorAll(".brain-section-link").forEach((link) => { link.hidden = mattActive; });
+        document.querySelectorAll(".workspace-tab").forEach((button) => {
+          const active = button.dataset.workspaceView === view;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+        if (updateHash) history.replaceState(null, "", mattActive ? "#matt-skills" : "#top");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        if (mattActive && activeMattMode === "atlas") scheduleMattMapDraw();
+      };
+      document.querySelectorAll(".workspace-tab").forEach((button) => button.addEventListener("click", () => setWorkspaceView(button.dataset.workspaceView)));
+      renderMattLibrary();
+      setMattMode("guided");
+      if (window.location.hash === "#matt-skills") setWorkspaceView("matt", { updateHash: false });
       let evidencePopoverId = 0;
       let evidencePositionFrame = 0;
       const repositionOpenEvidence = () => {
@@ -1994,6 +4821,7 @@
       byId("knowledge-card").addEventListener("pointerup", (event) => { if (pointerStart === null) return; const delta = event.clientX - pointerStart; pointerStart = null; byId("knowledge-card").style.transform = ""; if (filter === "confirmed") { if (delta > 90) previousCurrent(); else if (delta < -90) skipCurrent(); } else if (delta > 90) likeCurrent(); else if (delta < -90) dislikeCurrent(); });
       document.addEventListener("keydown", (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (!byId("matt-skills-view").hidden) return;
         if (event.target.closest("input, textarea, button, select, a, details, summary")) return;
         if (event.key === "ArrowRight") { event.preventDefault(); filter === "confirmed" ? skipCurrent() : likeCurrent(); }
         else if (event.key === "ArrowLeft") { event.preventDefault(); filter === "confirmed" ? previousCurrent() : dislikeCurrent(); }

@@ -25,6 +25,8 @@ Every completed packet passes a second fail-closed privacy preflight immediately
 ## Promotion
 
 - Promote explicit, non-conflicting personal facts and reusable preferences automatically.
+- In the main vault only, a deterministic owner-interaction capture may publish one distilled implied insight as provisional generated knowledge in the Knowledge Deck. It must be classified into one stable layer, carry no raw conversation, remain visibly unconfirmed until the owner confirms it, and be fully retractable through Curate. High-certainty, non-sensitive, non-conflicting knowledge may be recorded as already confirmed.
+- Other project agents remain read-only. They do not write canonical notes or submit Curate candidates; their session evidence enters through the normal Daily pipeline.
 - Promote objective project facts from an authoritative artifact or two consistent signals.
 - Promote skills only with authorship/direction plus successful implementation evidence.
 - Promote work-style or personality patterns only after three sessions across two dates and two independent contexts, unless explicit. A known project is one context; an unattributed profile-only session may contribute a separate context without creating project knowledge.
@@ -35,7 +37,7 @@ Every completed packet passes a second fail-closed privacy preflight immediately
 
 ## Publishing
 
-Only deterministic publishers write canonical notes. They may replace their named `sb:generated` section and must preserve all other prose. If markers are malformed, create a review item instead of overwriting the note.
+Only deterministic publishers write canonical generated knowledge. They may replace their named `sb:generated` section and must preserve all other prose. If markers are malformed, create a review item instead of overwriting the note. Main-vault owner-interaction capture uses the same bounded generated sections and durable observation IDs as model-derived knowledge.
 
 ## Failure
 

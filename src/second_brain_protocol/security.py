@@ -60,7 +60,7 @@ SENSITIVE_IDENTITY_KEYS = {
     "id_card",
 }
 
-WINDOWS_PATH = re.compile(r"(?i)(?<![A-Za-z0-9])(?:[A-Z]:\\|[A-Z]:/)(?:[^\s\]\[\)\(<>\"']+)")
+WINDOWS_PATH = re.compile(r"(?i)(?<![A-Za-z0-9])(?:[A-Z]:\\|[A-Z]:/)(?:[^\s\]\[\)\(<>\"']*)")
 HOME_PATH = re.compile(r"(?i)(?:C:\\Users\\|C:/Users/)[^\\/\s]+(?:[\\/][^\s\]\[\)\(<>\"']+)*")
 EMAIL = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
 URL = re.compile(r"(?i)\b(?:https?|ftp)://[^\s\]\[\)\(<>\"']+")
@@ -180,11 +180,38 @@ def sanitize_packet(value: Any) -> Any:
 def assert_model_packet_safe(value: Any) -> None:
     """Fail closed if a model-bound packet still contains a recognized secret."""
 
-    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    findings = scan_text(encoded, "external-model-packet", block_paths=True)
+    # Verify transport serialization, but inspect the original strings. Scanning
+    # JSON text can mistake the second slash in an escaped drive root (`C:\\`)
+    # for path content even when the source string ends at `C:\`.
+    json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    findings: list[Finding] = []
+
+    def scan_value(item: Any, location: str) -> None:
+        if isinstance(item, str):
+            findings.extend(scan_text(item, location, block_paths=True))
+            return
+        if isinstance(item, list):
+            for index, child in enumerate(item):
+                scan_value(child, f"{location}[{index}]")
+            return
+        if isinstance(item, dict):
+            for key, child in item.items():
+                key_text = str(key)
+                findings.extend(
+                    scan_text(key_text, f"{location}.<key>", block_paths=True)
+                )
+                scan_value(child, f"{location}.{key_text}")
+
+    scan_value(value, "external-model-packet")
     if findings:
         kinds = ", ".join(sorted({finding.kind for finding in findings}))
-        raise ValueError(f"External model packet blocked by privacy preflight: {kinds}")
+        locations = ", ".join(
+            sorted({finding.location for finding in findings})[:3]
+        )
+        raise ValueError(
+            "External model packet blocked by privacy preflight: "
+            f"{kinds} at {locations}"
+        )
 
 
 def sanitize_external_text(text: str, *, max_chars: int) -> str:
@@ -291,7 +318,7 @@ def sanitize_model_payload(kind: str, payload: Any) -> Any:
     safe["user_messages"] = user_messages
     safe["assistant_results"] = assistant_results
     safe["privacy_summary"] = {
-        "policy": "sanitized-session-digest-v3",
+        "policy": "sanitized-session-digest-v4",
         "raw_session_id_removed": True,
         "artifact_text_removed": True,
         "user_messages_included": len(user_messages),

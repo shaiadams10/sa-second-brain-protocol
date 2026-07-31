@@ -7,6 +7,7 @@ from second_brain_protocol.dashboard import (
     _attach_section_evidence,
     _knowledge_deck,
     _learning_snapshot,
+    _matt_skills_catalog,
     _question_deck,
     _recent_activity,
     _summary_cost,
@@ -25,6 +26,71 @@ from second_brain_protocol.state import StateStore
 def _note(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def test_dashboard_supports_persisted_light_and_dark_themes() -> None:
+    rendered = render_dashboard({})
+
+    assert 'content="light dark"' in rendered
+    assert 'id="theme-toggle"' in rendered
+    assert 'html[data-theme="dark"]' in rendered
+    assert 'localStorage.getItem("second-brain-theme")' in rendered
+    assert 'localStorage.setItem("second-brain-theme", normalized)' in rendered
+
+
+def test_matt_skills_catalog_is_installed_only_and_marks_invocation_mode(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    manual = vault / ".agents" / "skills" / "ask-matt"
+    automatic = vault / ".agents" / "skills" / "tdd"
+    _note(
+        manual / "SKILL.md",
+        "---\nname: ask-matt\ndisable-model-invocation: true\n---\n\n# Ask Matt\n\nRoute the work.",
+    )
+    _note(manual / "ROUTING.md", "# Routing notes\n\nChoose the smallest workflow.")
+    _note(automatic / "SKILL.md", "---\nname: tdd\n---\n")
+
+    catalog = _matt_skills_catalog(vault)
+
+    assert catalog["installed_count"] == 2
+    assert catalog["expected_count"] == 22
+    assert catalog["manual_count"] == 1
+    assert catalog["automatic_count"] == 1
+    assert catalog["antigravity_discoverable_count"] == 2
+    assert [(item["name"], item["mode"]) for item in catalog["skills"]] == [
+        ("ask-matt", "manual"),
+        ("tdd", "automatic"),
+    ]
+    assert all(item["antigravity_mode"] == "discoverable" for item in catalog["skills"])
+    assert {item["lane"] for item in catalog["skills"]} == {"orient", "build"}
+    assert all(
+        set(route["skills"]) <= {"ask-matt", "tdd"}
+        for spark in catalog["sparks"]
+        for route in spark["routes"]
+    )
+    assert catalog["connections"] == []
+    assert catalog["skills"][0]["steps"]
+    assert catalog["skills"][0]["example"]
+    assert catalog["skills"][0]["avoid"]
+    assert catalog["skills"][0]["source_body"] == "# Ask Matt\n\nRoute the work."
+    assert catalog["skills"][1]["source_body"] == ""
+    assert catalog["skills"][0]["package_files"] == [
+        {
+            "path": "SKILL.md",
+            "content": "# Ask Matt\n\nRoute the work.",
+            "kind": "instructions",
+        },
+        {
+            "path": "ROUTING.md",
+            "content": "# Routing notes\n\nChoose the smallest workflow.",
+            "kind": "reference",
+        },
+    ]
+    assert catalog["skills"][1]["package_files"] == [
+        {"path": "SKILL.md", "content": "", "kind": "instructions"}
+    ]
+    assert str(tmp_path) not in str(catalog)
 
 
 def test_daily_activity_bullets_become_visual_stats_and_chips() -> None:
@@ -61,8 +127,16 @@ def test_session_sections_hide_profile_only_cards_but_keep_coverage() -> None:
     sections = [{"title": "Sessions reviewed", "paragraphs": [], "items": []}]
     evidence = [
         {"category": "session", "lane": "full", "label": "Demo"},
-        {"category": "session", "lane": "profile_only", "label": "Unattributed session"},
-        {"category": "session", "lane": "profile_only", "label": "Unattributed session"},
+        {
+            "category": "session",
+            "lane": "profile_only",
+            "label": "Unattributed session",
+        },
+        {
+            "category": "session",
+            "lane": "profile_only",
+            "label": "Unattributed session",
+        },
     ]
 
     _attach_section_evidence(sections, evidence)
@@ -200,7 +274,9 @@ def test_daily_summary_hides_stale_learning_cards_for_any_historical_backfill() 
     assert sections[1]["items"] == []
 
 
-def test_daily_summary_hides_mixed_date_learning_cards_but_keeps_today_separate() -> None:
+def test_daily_summary_hides_mixed_date_learning_cards_but_keeps_today_separate() -> (
+    None
+):
     sections = [
         {
             "title": "What the brain learned",
@@ -347,7 +423,8 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
 
 
 def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     monkeypatch.setattr(
         "second_brain_protocol.state.utc_now",
@@ -609,7 +686,9 @@ The dashboard work was completed and verified.
     assert snapshot["actions"] == {"enabled": False, "csrf_token": ""}
     assert "PENDING-RAW-SECRET" not in rendered
     assert "Example led a verified product integration." in rendered
-    assert "A private integration remains local until validation is complete." in rendered
+    assert (
+        "A private integration remains local until validation is complete." in rendered
+    )
     assert 'aria-labelledby="review-dialog-title"' in rendered
     assert "review-card-list" in rendered
     assert (

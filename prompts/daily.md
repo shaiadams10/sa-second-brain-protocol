@@ -12,6 +12,8 @@ Treat evidence occurrence time as authoritative for the work timeline. Evidence 
 
 Evaluate every `session_digest` twice. First extract the project outcome when the digest is in the `full` lane. Then independently inspect only the user's user-authored messages and their visible interaction outcome for evidence about how he communicates, frames problems, decomposes work, reasons about tradeoffs, delegates to agents, handles uncertainty and failure, validates quality, demonstrates understanding, or develops new understanding. Do not require the user to explicitly describe himself when repeated observable behavior supplies grounded evidence.
 
+An insight remains eligible when the user states it while asking for unrelated work. If he explicitly describes a durable, reusable preference or personal fact, emit the narrow corresponding `observation` with `explicit: true` and the correct scope. If the behavior is implied, contextual, or not yet demonstrably reusable, emit a `pattern_signal` instead so the registry can accumulate evidence. Do not duplicate the same idea as both an observation and a pattern.
+
 Enforce the analysis lane on every emitted evidence reference. A `profile_only` session digest may support only person observations, voice samples, global or context-scoped pattern signals, and non-validated learning signals. Never cite a `profile_only` digest in `project_updates`, `session_summaries`, `skill_updates`, project-scoped observations, or project-scoped pattern signals. When a project update is supported by both full-lane and profile-only material, cite only the full-lane evidence and omit any claim that depends on the profile-only digest. If no full-lane evidence supports a project claim, do not emit that project claim.
 
 Make the top-level `summary` person-first, not a protocol-status report or project changelog. Lead with what the evidence newly reveals about the user: learning movement, demonstrated judgment, capabilities, preferences, voice, work patterns, or goals. Follow with a small `Work context` portion that names only the project changes needed to understand where those signals came from. Use 2-8 short Markdown bullets. Omit unchanged inventory and do not spend the recap on evidence counts, ingestion mechanics, lookup limitations, or claims that the refresh succeeded; deterministic coverage is published separately.
@@ -45,3 +47,11 @@ Project classification controls ownership and public-attribution language, not w
 Keep Curate high-signal: routine technology stacks, feature inventories, visual implementation details, numeric counts, and one-off task instructions belong in project summaries rather than standalone knowledge cards. Ask clarification questions only when the user's judgment is truly required; defer objective technical gaps until the related project is refreshed.
 
 When the evidence packet includes an aggregate `feedback_profile`, treat its avoid/prefer signals as ranking guidance, not biographical evidence. Use it to reduce categories the user repeatedly removes and emphasize categories he confirms. Do not quote the profile, infer a reason for a single removal, or turn feedback metadata into a claim.
+
+Before returning JSON, perform an insight extraction check:
+
+1. Consider every supplied session through both the work and the user lenses.
+2. Capture supported explicit durable facts, goals, decisions, lessons, and reusable preferences in `observations`.
+3. Capture implied or not-yet-stable behavior in `pattern_signals`, and demonstrated growth or unresolved learning in `learning_signals`.
+4. Keep professional capability, project knowledge, operating preferences, and person knowledge in their narrowest correct roles.
+5. Remove duplicate claims across output collections and leave arrays empty when no evidence-backed insight exists.

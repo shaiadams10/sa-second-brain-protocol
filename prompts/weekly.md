@@ -14,6 +14,8 @@ For `project_updates`, preserve the scanner-provided project ID and project name
 
 Connect the week's approved and new evidence across projects and profile-only contexts. Use `project_delta`, `session_digest`, `recurring_pattern`, and prior learning-registry records to distinguish genuinely new activity from previously evaluated history. Evaluate both the work outcome and what the user's own interactions demonstrate. Identify major wins, trajectories, capability evidence, cross-project lessons, stable work patterns, stable voice patterns, learning edges, later application, validated growth, counterevidence, stale claims, and suggested next focus areas without overstating skills, personality, or voice.
 
+Do not wait for memory-specific phrasing. Reconsider explicit facts or reusable preferences embedded inside ordinary requests, corrections, or complaints, and emit the narrow corresponding `observation` when the week's user-authored evidence supports them. Use `pattern_signals` for implied or accumulating behaviors and avoid duplicating the same insight across observations, patterns, learning signals, and skills.
+
 Re-emit a normalized `pattern_signal` when the week supplies additional evidence for a recurring preference, work style, voice style, personality trait, or preferred protocol. Preserve the established kebab-case key from a `recurring_pattern` record when it represents the same behavior. Do not merge materially different behaviors merely to reach the promotion threshold.
 
 Emit `learning_signals` with the same stable topic key when the week adds session or explicit interview evidence to a tracked area of understanding. A prior `learning_topic` record supplies comparison context but can never support a new signal by itself. A later correct application may become `applied_learning`; an attributed successful validation may become `validated_outcome`; contradictory or weaker evidence may become `counterevidence`. Do not claim that an edge was resolved merely because the assistant supplied an answer. Resolution requires the user's later correct use, diagnosis, explanation, tradeoff, or validation.
@@ -37,3 +39,11 @@ Profile-only sessions may strengthen person, voice, pattern, goal, preference, a
 Include attributable learning from sessions in forks, experiments, and third-party repositories. Describe only the tools the user used, systems he operated, changes he directed, or problems he demonstrably solved; keep upstream ownership and pre-existing implementation explicitly separate.
 
 Use an aggregate `feedback_profile`, when supplied, to rank the weekly summary and candidate knowledge toward what the user repeatedly confirms and away from categories he repeatedly removes. The profile is optimization guidance only; it is not evidence for a personal fact and must never be quoted or described as a reason the user holds a view.
+
+Before returning JSON, perform a weekly insight consolidation check:
+
+1. Reconsider every supplied session through both the work and the user lenses.
+2. Preserve new explicit facts, consequential decisions, reusable lessons, and clearly stated preferences as evidence-backed observations.
+3. Consolidate recurring behavior under stable pattern keys and compare learning evidence with earlier state for progress, counterevidence, or a still-open edge.
+4. Keep personal, professional, operating, project, and learning roles separate and use the narrowest supported scope.
+5. Remove duplicate claims, retain contradictions for review, and leave arrays empty rather than inventing insight.

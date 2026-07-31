@@ -10,7 +10,11 @@ The user should never need to remember a command, skill name, workflow name, or 
 4. Preserve approval boundaries. Natural language does not imply approval of public claims, review items, bootstrap completion, publication, model substitution, conflict resolution, or destructive actions.
 5. Distinguish reading from updating. A question such as “What did I work on this week?” reads canonical activity; it does not rerun weekly synthesis. A request such as “Update the brain with this week’s work” explicitly asks for an update.
 6. If multiple operations are plausible and the choice would materially change state or cost, ask one narrow clarification. Otherwise choose the safest read-only interpretation.
-7. Treat a clearly stated, reusable personal preference as an explicit reviewed-note update even when it appears inside another task and the user does not say “update the brain.” Save it in the appropriate canonical identity note when it is non-conflicting and sufficiently specific. Ask before saving when its scope, meaning, sensitivity, or durability is ambiguous.
+7. During every interaction in the main second-brain vault, notice durable information about the owner even when it appears inside another task and the owner does not say "update the brain."
+8. Classify each insight into exactly one Knowledge Deck layer: About the user (personal facts, goals, personality, voice, or work style), Professional profile (experience, education, service, or capability), How I work (reusable preferences), or Project knowledge (project facts, decisions, or lessons with one exact project attribution).
+9. A clear, durable, non-sensitive, non-conflicting owner statement may be captured as confirmed knowledge. A merely implied insight normally becomes an unconfirmed Curate candidate without asking a follow-up question. Exceptionally high-confidence implied knowledge may be confirmed immediately when it is broadly reusable and its meaning and classification are unambiguous.
+10. Lead with an auditable capture notice, then continue the original task. The notice must state the exact canonical note, Knowledge Deck layer, global or project scope, confirmation state, concise distilled claim, and a short classification reason. Project knowledge must name the exact project and explicitly distinguish the capture from personal, professional-profile, and operating-preference knowledge. Never use a standalone "Brain updated with..." message that hides the destination.
+11. This immediate write route exists only inside the main vault. Agents in other projects never write canonical private notes or submit candidates; their sessions remain read-only evidence and enter through Daily ingestion.
 
 ## Intent map
 
@@ -32,13 +36,15 @@ The user should never need to remember a command, skill name, workflow name, or 
 | Show or open the dashboard | Dashboard | Start or reuse the private loopback dashboard and open it. No knowledge changes occur without an explicit card action. |
 | What needs my approval? | Review | Start with the short grouped review dashboard, never the machine ledger. |
 | Correct or add a fact about me | Interview or reviewed note update | Capture the explicit fact without inventing missing details. |
-| State a clear reusable preference during normal work | Reviewed note update | Save the non-conflicting preference in the appropriate canonical identity note without requiring a separate update command. |
+| State a clear reusable insight during normal work in the main vault | Confirmed knowledge capture | Classify it, publish it through the deterministic capture route, and confirm it when it is durable, non-sensitive, non-conflicting, and unambiguous. |
+| Imply a potentially durable insight during normal work in the main vault | Curate candidate capture | Do not interrupt the task with a clarification. Distill and classify one atomic candidate, add it to Curate as New, announce it first, and continue the request. |
 | Is the brain healthy or did the schedule run? | Health | Diagnose first and use the recovery runbook only when needed. |
 | Publish the reusable protocol | Protocol publish | Create or update a sanitized draft PR; never merge automatically. |
 
 ## Agent presentation
 
 - Say what was learned, created, updated, found, or blocked.
+- When knowledge was captured, make its structured Brain or Curate notice the first part of the response. State the exact note, layer, scope, confirmation state, claim, and classification reason; include the exact project for project knowledge.
 - Do not lead with terminal syntax or ask the user to invoke a skill.
 - When the protocol returns a local note or dashboard, open it when safe or provide a direct link.
 - Keep machine IDs, evidence IDs, run IDs, and raw ledger details in the background unless the user requests provenance.

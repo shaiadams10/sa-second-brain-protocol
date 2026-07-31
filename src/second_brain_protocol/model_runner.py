@@ -39,7 +39,7 @@ INLINE_EVIDENCE_TRANSPORT = (
     "inline-evidence-v1: sanitized evidence is embedded in the prompt; "
     "the model must not read files or call tools"
 )
-EXTERNAL_EVIDENCE_POLICY = "sanitized-lane-isolated-v3"
+EXTERNAL_EVIDENCE_POLICY = "sanitized-lane-isolated-v5"
 
 TOKEN_USAGE_FIELDS = (
     "input_tokens",
@@ -232,6 +232,7 @@ def enforce_evidence_lane_policy(
     if schema_name != "model-output.schema.json":
         return result, {}
     normalized = json.loads(json.dumps(result))
+    allowed_ids = {str(item["id"]) for item in evidence}
     profile_only_ids = {
         str(item["id"])
         for item in evidence
@@ -253,6 +254,22 @@ def enforce_evidence_lane_policy(
         normalized[collection] = after
         if len(before) != len(after):
             dropped[collection] = dropped.get(collection, 0) + len(before) - len(after)
+
+    for collection in (
+        "observations",
+        "pattern_signals",
+        "learning_signals",
+        "project_updates",
+        "skill_updates",
+        "review_items",
+        "question_resolutions",
+    ):
+        keep(collection, lambda item: not (_refs(item) - allowed_ids))
+    for collection in ("session_summaries", "voice_samples"):
+        keep(
+            collection,
+            lambda item: str(item.get("evidence_ref") or "") in allowed_ids,
+        )
 
     keep("project_updates", lambda item: not (_refs(item) & profile_only_ids))
     keep(
@@ -311,8 +328,10 @@ def _recover_staged_result(
     cache_key: str,
     schema: dict[str, Any],
     schema_name: str,
-    evidence_ids: set[str],
-) -> tuple[dict[str, Any], Path] | None:
+    evidence: list[dict[str, Any]],
+    allow_question_resolutions: bool,
+) -> tuple[dict[str, Any], Path, dict[str, int]] | None:
+    evidence_ids = {str(item["id"]) for item in evidence}
     receipts = sorted(
         paths.runs.glob("*-model-receipt.json"),
         key=lambda item: item.stat().st_mtime,
@@ -332,10 +351,18 @@ def _recover_staged_result(
             result = json.loads(output_path.read_text(encoding="utf-8"))
             Draft202012Validator(schema).validate(result)
             assert_usable_output(result, schema_name=schema_name)
+            result, dropped = enforce_evidence_lane_policy(
+                result,
+                evidence=evidence,
+                schema_name=schema_name,
+                allow_question_resolutions=allow_question_resolutions,
+            )
+            Draft202012Validator(schema).validate(result)
+            assert_usable_output(result, schema_name=schema_name)
             assert_known_evidence_references(
                 result, evidence_ids=evidence_ids, schema_name=schema_name
             )
-            return result, prior_receipt
+            return result, prior_receipt, dropped
         except Exception:
             continue
     return None
@@ -561,18 +588,11 @@ def run_model(
             cache_key=cache_key,
             schema=schema,
             schema_name=schema_name,
-            evidence_ids=allowed_evidence_ids,
+            evidence=evidence,
+            allow_question_resolutions=bool(pending_questions),
         )
         if recovered is not None:
-            result, prior_receipt = recovered
-            result, dropped = enforce_evidence_lane_policy(
-                result,
-                evidence=evidence,
-                schema_name=schema_name,
-                allow_question_resolutions=bool(pending_questions),
-            )
-            Draft202012Validator(schema).validate(result)
-            assert_usable_output(result, schema_name=schema_name)
+            result, prior_receipt, dropped = recovered
             cache_path.write_text(
                 json.dumps(
                     {
@@ -698,11 +718,6 @@ def run_model(
         result = json.loads(output_path.read_text(encoding="utf-8"))
         Draft202012Validator(schema).validate(result)
         assert_usable_output(result, schema_name=schema_name)
-        assert_known_evidence_references(
-            result,
-            evidence_ids=allowed_evidence_ids,
-            schema_name=schema_name,
-        )
         result, dropped = enforce_evidence_lane_policy(
             result,
             evidence=evidence,
@@ -711,6 +726,11 @@ def run_model(
         )
         Draft202012Validator(schema).validate(result)
         assert_usable_output(result, schema_name=schema_name)
+        assert_known_evidence_references(
+            result,
+            evidence_ids=allowed_evidence_ids,
+            schema_name=schema_name,
+        )
     except Exception as error:
         if not retain_failed_stage:
             shutil.rmtree(stage, ignore_errors=True)
@@ -740,12 +760,21 @@ def run_model(
 def canary(paths: RuntimePaths, roles: dict[str, dict[str, str]]) -> dict[str, str]:
     evidence = [
         {
-            "id": "ev-canary",
-            "source_type": "canary",
+            "id": "ev-111111111111111111111111",
+            "source_type": "interview",
+            "source_ref": "interview:status-indicator-preference",
             "project_id": None,
-            "kind": "explicit_fact",
+            "kind": "answer",
             "occurred_at": None,
-            "payload": {"text": "The canary value is green."},
+            "payload": {
+                "role": "user",
+                "text": (
+                    "the user explicitly prefers green status indicators for successful "
+                    "system checks."
+                ),
+                "explicit": True,
+                "scope": "global",
+            },
         }
     ]
     results: dict[str, str] = {}
@@ -755,14 +784,21 @@ def canary(paths: RuntimePaths, roles: dict[str, dict[str, str]]) -> dict[str, s
             result, _receipt = run_model(
                 paths=paths,
                 role=role,
-                prompt_name="daily.md",
+                prompt_name=f"{name}.md",
                 evidence=evidence,
                 run_id=f"canary-{name}",
                 max_packet_chars=10000,
                 use_cache=False,
             )
-            if "green" not in json.dumps(result, ensure_ascii=False).casefold():
-                raise ModelRunError("Canary did not reproduce the known evidence value")
+            serialized = json.dumps(result, ensure_ascii=False).casefold()
+            knowledge_items = [
+                *result.get("observations", []),
+                *result.get("pattern_signals", []),
+            ]
+            if "green" not in serialized or not knowledge_items:
+                raise ModelRunError(
+                    "Canary did not extract the known durable preference"
+                )
             results[name] = "ok"
         except Exception as error:
             results[name] = f"failed: {error}"
