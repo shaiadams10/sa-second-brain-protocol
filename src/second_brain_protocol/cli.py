@@ -15,6 +15,12 @@ from .config import (
     setup_runtime,
     vault_root,
 )
+from .curate import (
+    CURATE_KINDS,
+    KNOWLEDGE_LAYER_ORDER,
+    add_curate_candidate,
+    require_main_vault_context,
+)
 from .dashboard import build_dashboard, install_dashboard_shortcut, open_dashboard
 from .dashboard_server import serve_dashboard
 from .gitops import sync_protocol_draft
@@ -179,6 +185,17 @@ def _parser() -> argparse.ArgumentParser:
     learning_sub = learning.add_subparsers(dest="action", required=True)
     learning_suppress = learning_sub.add_parser("suppress")
     learning_suppress.add_argument("topic")
+    curate = sub.add_parser("curate")
+    curate_sub = curate.add_subparsers(dest="action", required=True)
+    curate_add = curate_sub.add_parser("add")
+    curate_add.add_argument("--layer", required=True, choices=KNOWLEDGE_LAYER_ORDER)
+    curate_add.add_argument("--kind", required=True, choices=CURATE_KINDS)
+    curate_add.add_argument("--subject", required=True)
+    curate_add.add_argument("--claim", required=True)
+    curate_add.add_argument("--project")
+    curate_add.add_argument("--confidence", type=float, default=0.85)
+    curate_add.add_argument("--explicit", action="store_true")
+    curate_add.add_argument("--confirmed", action="store_true")
     writer = sub.add_parser("write-as-me")
     writer.add_argument("request")
     career = sub.add_parser("career")
@@ -371,6 +388,28 @@ def main(argv: list[str] | None = None) -> int:
             paths, _config, _defaults, store = _common()
             result = store.suppress_learning_topic_until_new(args.topic)
             result["path"] = str(refresh_learning_tracker(vault_root(), store))
+            build_dashboard(paths, vault_root())
+            try:
+                reindex(paths, vault_root())
+                result["search_refresh"] = "completed"
+            except Exception as error:
+                result["search_refresh"] = f"deferred: {type(error).__name__}"
+            _json(result)
+        elif args.command == "curate":
+            paths, _config, _defaults, store = _common()
+            require_main_vault_context(vault_root())
+            result = add_curate_candidate(
+                vault_root(),
+                store,
+                layer=args.layer,
+                kind=args.kind,
+                subject=args.subject,
+                claim=args.claim,
+                project=args.project,
+                confidence=args.confidence,
+                explicit=args.explicit,
+                confirmed=args.confirmed,
+            )
             build_dashboard(paths, vault_root())
             try:
                 reindex(paths, vault_root())

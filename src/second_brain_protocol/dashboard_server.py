@@ -33,6 +33,7 @@ DASHBOARD_PORT = 8765
 SERVICE_NAME = "second-brain-dashboard"
 MAX_REQUEST_BYTES = 8192
 SEARCH_REFRESH_RETRY_SECONDS = 30
+SNAPSHOT_CACHE_SECONDS = 30
 IndexRefresher = Callable[[RuntimePaths, Path, list[str]], str]
 
 
@@ -60,6 +61,12 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.reindexer = reindexer
         self.answer_evaluator = answer_evaluator
         self.action_lock = threading.Lock()
+        self.snapshot_lock = threading.Lock()
+        self.snapshot_build_lock = threading.Lock()
+        self.cached_snapshot: dict[str, Any] | None = None
+        self.snapshot_cached_at = 0.0
+        self.snapshot_refreshing = False
+        self.snapshot_generation = 0
         self.refresh_event = threading.Event()
         self.stop_event = threading.Event()
         self.refresh_thread = threading.Thread(target=self._refresh_loop, daemon=True)
@@ -69,6 +76,55 @@ class DashboardHTTPServer(ThreadingHTTPServer):
 
     def request_search_refresh(self) -> None:
         self.refresh_event.set()
+
+    def _build_and_cache_snapshot(self) -> dict[str, Any]:
+        with self.snapshot_build_lock:
+            with self.snapshot_lock:
+                generation = self.snapshot_generation
+            snapshot = build_snapshot(self.paths, self.vault)
+            with self.snapshot_lock:
+                if generation == self.snapshot_generation:
+                    self.cached_snapshot = snapshot
+                    self.snapshot_cached_at = time.monotonic()
+            return snapshot
+
+    def _refresh_snapshot_in_background(self) -> None:
+        try:
+            self._build_and_cache_snapshot()
+        except Exception:
+            # Keep serving the last known-good snapshot. A later stale request
+            # will retry without turning a transient probe failure into a blank UI.
+            return
+        finally:
+            with self.snapshot_lock:
+                self.snapshot_refreshing = False
+
+    def dashboard_snapshot(self) -> dict[str, Any]:
+        start_refresh = False
+        with self.snapshot_lock:
+            snapshot = self.cached_snapshot
+            if snapshot is not None:
+                stale = (
+                    time.monotonic() - self.snapshot_cached_at
+                    >= SNAPSHOT_CACHE_SECONDS
+                )
+                if stale and not self.snapshot_refreshing:
+                    self.snapshot_refreshing = True
+                    start_refresh = True
+        if snapshot is None:
+            return self._build_and_cache_snapshot()
+        if start_refresh:
+            threading.Thread(
+                target=self._refresh_snapshot_in_background,
+                daemon=True,
+            ).start()
+        return snapshot
+
+    def invalidate_snapshot(self) -> None:
+        with self.snapshot_lock:
+            self.snapshot_generation += 1
+            self.cached_snapshot = None
+            self.snapshot_cached_at = 0.0
 
     def _refresh_loop(self) -> None:
         while not self.stop_event.is_set():
@@ -144,7 +200,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if path not in {"/", "/index.html"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Not found"})
             return
-        snapshot = build_snapshot(self.server.paths, self.server.vault)
+        snapshot = dict(self.server.dashboard_snapshot())
         snapshot["actions"] = {
             "enabled": True,
             "csrf_token": self.server.csrf_token,
@@ -275,6 +331,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         if route == "/api/knowledge/undo" or result.get("decision") == "disliked":
             self.server.request_search_refresh()
+        self.server.invalidate_snapshot()
         self._send_json(HTTPStatus.OK, {"ok": True, **result})
 
 

@@ -528,6 +528,7 @@ def _observation_note(vault: Path, kind: str) -> Path:
         "education": vault / "Experience" / "Education.md",
         "military": vault / "Experience" / "MilitaryService.md",
         "goal": vault / "Goals" / "ActiveGoals.md",
+        "skill": vault / "Identity" / "Capabilities.md",
     }
     return mapping[kind]
 
@@ -1961,6 +1962,94 @@ def promote_approved_observation(
         _observation_note(vault, item["kind"]), f"- {item['claim']} ^{item['id']}"
     )
     store.decide_observation(observation_id, "promoted")
+
+
+def publish_curate_candidate(
+    vault: Path,
+    store: StateStore,
+    *,
+    layer: str,
+    kind: str,
+    subject: str,
+    claim: str,
+    evidence_id: str,
+    project_id: str | None,
+    confidence: float,
+    explicit: bool,
+) -> dict[str, Any]:
+    """Write one provisional owner-interaction insight into the Knowledge Deck."""
+
+    existing_claims = [
+        item
+        for item in store.observations()
+        if item["kind"] == kind
+        and item["subject"].strip().casefold() == subject.strip().casefold()
+        and item["status"] in {"approved", "promoted"}
+        and item["claim"].strip().casefold() != claim.strip().casefold()
+    ]
+    if existing_claims:
+        raise ValueError(
+            "Curate candidate conflicts with existing canonical knowledge for this subject"
+        )
+
+    expected_id = "obs-" + canonical_hash(
+        {"kind": kind, "subject": subject, "claim": claim}
+    )[:24]
+    existed = store.observation(expected_id) is not None
+    observation_id = store.add_observation(
+        {
+            "kind": kind,
+            "subject": subject,
+            "claim": claim,
+            "evidence_refs": [evidence_id],
+            "confidence": confidence,
+            "source_count": 1,
+            "project_count": 1 if project_id else 0,
+            "sensitivity": "normal",
+            "promotion_tier": "curate",
+            "status": "promoted",
+            "review_reason": "implied owner insight awaiting Knowledge Deck decision",
+            "explicit": explicit,
+            "scope": "project" if project_id else "global",
+            "public_claim": False,
+            "authoritative": False,
+            "curate_candidate": True,
+            "knowledge_layer": layer,
+            "project_id": project_id,
+            "project_ids": [project_id] if project_id else [],
+        }
+    )
+    stored = store.observation(observation_id)
+    if stored is None:
+        raise RuntimeError(f"Curate candidate was not persisted: {observation_id}")
+    if stored["status"] in {"rejected", "resolved"}:
+        return {
+            "id": observation_id,
+            "status": "suppressed",
+            "created": False,
+            "layer": layer,
+            "kind": kind,
+            "path": None,
+        }
+
+    note = _observation_note(vault, kind)
+    _append_generated_bullet(
+        note,
+        f"- {sanitize_text(claim)} ^{observation_id}",
+    )
+    _update_frontmatter(
+        note,
+        evidence_refs=[evidence_id],
+        confidence=confidence,
+    )
+    return {
+        "id": observation_id,
+        "status": "new" if not existed else "already_present",
+        "created": not existed,
+        "layer": layer,
+        "kind": kind,
+        "path": str(note),
+    }
 
 
 def promote_observation_group(

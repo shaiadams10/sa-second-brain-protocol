@@ -50,4 +50,6 @@ Later projects will query the brain through bounded tools such as search, recent
 - User-approved document vault and encrypted backup policy.
 - Multiple-machine ingestion and conflict-safe synchronization.
 - Optional knowledge-decision history and bulk restoration UI if real usage proves it useful.
-- Writable MCP only if a future explicit design proves it can preserve the current review and publication boundaries.
+- A general Skills dashboard tab that safely inventories every installed Protocol skill, distinguishes manual and model invocation, explains triggers and dependencies, and derives its guide from validated skill metadata rather than a vendor-specific allowlist.
+- A reusable skill-guide generator that can inspect a validated skill package from GitHub or another approved source, model its invocation rules, workflows, relationships, examples, and edge cases at generation time, then emit a self-contained interactive HTML guide with starting sparks, route alternatives, a stable skill landscape, and progressive detail. Generated guides must remain deterministic and make no runtime model calls.
+- A narrowly writable MCP for future cross-project candidate submission only if an explicit design preserves the current review and publication boundaries. Other-project agents would submit a size-bounded, classified candidate with provenance to Curate; the MCP would never permit direct canonical-note writes and would require authentication, per-project opt-in, rate limits, auditing, conflict checks, and owner Confirm/Remove controls.
