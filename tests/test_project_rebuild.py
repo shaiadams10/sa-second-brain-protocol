@@ -169,7 +169,7 @@ def test_project_rebuild_preserves_personal_layers_and_counts_collection_childre
     assert retained["kind"] == "redacted_support"
     assert retained["project_id"] is None
     actual, collections, _folders = catalog_groups(store.present_projects())
-    assert {item["name"] for item in actual} == {"HomeDrop"}
+    assert {item["name"] for item in actual} == {"HomeDrop", "vault"}
     assert {item["name"] for item in collections} == {"Utilities & Automation"}
     assert not (vault / "Projects" / "legacy.md").exists()
 

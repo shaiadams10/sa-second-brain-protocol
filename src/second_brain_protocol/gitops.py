@@ -322,6 +322,7 @@ ALLOWLIST_DIRS = {
     "assets",
     "config",
     "docs",
+    "evaluation",
     "prompts",
     "runbooks",
     "schemas",
@@ -478,11 +479,30 @@ def _run_exported_protocol_tests(export_root: Path) -> None:
         )
 
 
-def _protocol_commit_message() -> str:
-    message = os.environ.get("SB_PROTOCOL_COMMIT_MESSAGE", "Publish sanitized protocol update").strip()
-    if not message or "\n" in message or "\r" in message or len(message) > 120:
-        raise GitPolicyError("Protocol commit message must be one non-empty line of at most 120 characters.")
-    return message
+def _latest_vault_commit_info(vault: Path) -> tuple[str, str]:
+    try:
+        title = _run(vault, "git", "log", "-1", "--format=%s", check=False).stdout.strip()
+        body = _run(vault, "git", "log", "-1", "--format=%b", check=False).stdout.strip()
+        if title:
+            return title, body
+    except Exception:
+        pass
+    return "Publish sanitized protocol update", "Generated from the private canonical Protocol/ tree."
+
+
+def _protocol_commit_message(vault: Path | None = None) -> str:
+    message = os.environ.get("SB_PROTOCOL_COMMIT_MESSAGE", "").strip()
+    if message:
+        if "\n" in message or "\r" in message or len(message) > 120:
+            raise GitPolicyError("Protocol commit message must be one non-empty line of at most 120 characters.")
+        return message
+    if vault:
+        title, _ = _latest_vault_commit_info(vault)
+        if len(title) > 120:
+            title = title[:117] + "..."
+        if title:
+            return title
+    return "Publish sanitized protocol update"
 
 
 def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) -> str:
@@ -518,10 +538,13 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
     _run(export_root, "git", "config", "user.email", config["git_email"])
     _run(export_root, "git", "add", "-A")
     if _run(export_root, "git", "diff", "--cached", "--quiet", check=False).returncode != 0:
-        _run(export_root, "git", "commit", "-m", _protocol_commit_message())
+        _run(export_root, "git", "commit", "-m", _protocol_commit_message(vault))
         _run(export_root, "git", "push", "-u", "origin", PUBLIC_BRANCH, timeout=600)
     if prs.stdout.strip():
         return prs.stdout.strip()
+    title, body = _latest_vault_commit_info(vault)
+    pr_title = title if len(title) <= 120 else title[:117] + "..."
+    pr_body = body if body else "Generated from the private canonical Protocol/ tree. Privacy checks and protocol tests must pass before manual merge."
     result = _run(
         export_root,
         "gh",
@@ -535,9 +558,9 @@ def publish_protocol_draft(vault: Path, paths: RuntimePaths, repository: str) ->
         PUBLIC_BRANCH,
         "--draft",
         "--title",
-        "Publish sanitized second-brain protocol",
+        pr_title,
         "--body",
-        "Generated from the private canonical Protocol/ tree. Privacy checks and protocol tests must pass before manual merge.",
+        pr_body,
     )
     return result.stdout.strip()
 

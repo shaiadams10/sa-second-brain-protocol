@@ -1,6 +1,9 @@
 import io
 import sys
+from dataclasses import dataclass
+from types import SimpleNamespace
 
+import second_brain_protocol.cli as cli_module
 from second_brain_protocol.cli import _json, _parser
 
 
@@ -63,11 +66,27 @@ def test_owner_correction_commands_are_explicit() -> None:
     suppress = _parser().parse_args(
         ["learning", "suppress", "windows-system-troubleshooting"]
     )
+    reattribute = _parser().parse_args(
+        [
+            "review",
+            "correct-project-attribution",
+            "obs-project-detail",
+            "--project",
+            "Example Person Second Brain",
+            "--replace-project-name",
+            "External Protocol Project",
+            "--reason",
+            "Owner correction.",
+        ]
+    )
 
     assert reclassify.action == "reclassify"
     assert reclassify.kind == "project_fact"
     assert suppress.action == "suppress"
     assert suppress.topic == "windows-system-troubleshooting"
+    assert reattribute.action == "correct-project-attribution"
+    assert reattribute.id == ["obs-project-detail"]
+    assert reattribute.project == "Example Person Second Brain"
 
 
 def test_forget_project_requires_explicit_confirmation_and_protection() -> None:
@@ -189,11 +208,104 @@ def test_protocol_publish_supports_scheduled_change_detection() -> None:
 
 def test_daily_parser_requires_explicit_flags_for_owner_test_run() -> None:
     default = _parser().parse_args(["daily"])
-    requested_test = _parser().parse_args(
-        ["daily", "--owner-requested", "--test"]
-    )
+    requested_test = _parser().parse_args(["daily", "--owner-requested", "--test"])
 
     assert default.owner_requested is False
     assert default.test is False
     assert requested_test.owner_requested is True
     assert requested_test.test is True
+
+
+def test_daily_weekly_cutover_requires_explicit_owner_authorization_flag() -> None:
+    default = _parser().parse_args(["cutover", "daily-weekly"])
+    authorized = _parser().parse_args(["cutover", "daily-weekly", "--owner-authorized"])
+
+    assert default.owner_authorized is False
+    assert authorized.owner_authorized is True
+
+
+def test_curate_cross_project_capture_requires_an_explicit_flag() -> None:
+    local = _parser().parse_args(
+        [
+            "curate",
+            "add",
+            "--layer",
+            "project_knowledge",
+            "--kind",
+            "decision",
+            "--subject",
+            "Daily engine",
+            "--claim",
+            "The vault uses governed extraction.",
+            "--project",
+            "Example Person Second Brain",
+        ]
+    )
+    cross_project = _parser().parse_args(
+        [
+            "curate",
+            "add",
+            "--layer",
+            "project_knowledge",
+            "--kind",
+            "decision",
+            "--subject",
+            "Release policy",
+            "--claim",
+            "The public protocol uses tagged releases.",
+            "--project",
+            "External Protocol Project",
+            "--cross-project",
+        ]
+    )
+
+    assert local.cross_project is False
+    assert cross_project.cross_project is True
+
+
+def test_extraction_evaluation_live_mode_requires_explicit_cost_flags() -> None:
+    replay = _parser().parse_args(["harness", "evaluate"])
+    live = _parser().parse_args(
+        [
+            "harness",
+            "evaluate",
+            "--corpus",
+            "quality",
+            "--live",
+            "--max-model-calls",
+            "3",
+            "--confirm-cost",
+        ]
+    )
+
+    assert replay.live is False
+    assert replay.corpus == "policy"
+    assert live.live is True
+    assert live.max_model_calls == 3
+    assert live.confirm_cost is True
+
+
+def test_recall_benchmark_parser_is_model_free() -> None:
+    parsed = _parser().parse_args(["harness", "recall"])
+
+    assert parsed.action == "recall"
+
+
+def test_failed_replay_evaluation_returns_nonzero_exit(monkeypatch) -> None:
+    @dataclass
+    class FailedReport:
+        passed: bool = False
+
+    fake_corpus = SimpleNamespace(
+        replay_model=lambda: object(),
+        suite=object(),
+    )
+    monkeypatch.setattr(cli_module, "load_evaluation_corpus", lambda _path: fake_corpus)
+    monkeypatch.setattr(
+        cli_module,
+        "EvaluationHarness",
+        lambda **_kwargs: SimpleNamespace(evaluate=lambda _suite: FailedReport()),
+    )
+    monkeypatch.setattr(cli_module, "_json", lambda _value: None)
+
+    assert cli_module.main(["harness", "evaluate"]) == 1

@@ -362,6 +362,66 @@ def _checkpoint_cursor_position(cursor: str | None) -> tuple[int, int]:
     return (0, -1)
 
 
+def _governed_baseline_checkpoints(
+    connection: sqlite3.Connection,
+    *,
+    include_new: bool,
+) -> dict[str, dict[str, Any]]:
+    statuses = (
+        "'new','compacted','processed'" if include_new else "'compacted','processed'"
+    )
+    rows = connection.execute(
+        f"""SELECT ec.source_key,ec.cursor,ec.fingerprint,e.created_at,e.id
+        FROM evidence_checkpoints ec JOIN evidence e ON e.id=ec.evidence_id
+        WHERE e.status IN ({statuses})"""
+    ).fetchall()
+    candidates: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        candidate = dict(row)
+        source_key = str(candidate["source_key"])
+        current = candidates.get(source_key)
+        candidate_key = (
+            str(candidate["created_at"]),
+            _checkpoint_cursor_position(candidate.get("cursor")),
+            str(candidate["id"]),
+        )
+        current_key = (
+            (
+                str(current["created_at"]),
+                _checkpoint_cursor_position(current.get("cursor")),
+                str(current["id"]),
+            )
+            if current is not None
+            else None
+        )
+        if current_key is None or candidate_key > current_key:
+            candidates[source_key] = candidate
+    now = utc_now()
+    eligible: dict[str, dict[str, Any]] = {}
+    for source_key, candidate in candidates.items():
+        current = connection.execute(
+            "SELECT cursor FROM checkpoints WHERE source_key=?", (source_key,)
+        ).fetchone()
+        if current is not None and _checkpoint_cursor_position(
+            candidate.get("cursor")
+        ) < _checkpoint_cursor_position(current["cursor"]):
+            continue
+        connection.execute(
+            """INSERT INTO checkpoints(source_key,cursor,fingerprint,updated_at)
+            VALUES(?,?,?,?) ON CONFLICT(source_key) DO UPDATE SET
+            cursor=excluded.cursor,fingerprint=excluded.fingerprint,
+            updated_at=excluded.updated_at""",
+            (
+                source_key,
+                candidate.get("cursor"),
+                candidate.get("fingerprint"),
+                now,
+            ),
+        )
+        eligible[source_key] = candidate
+    return eligible
+
+
 class StateStore:
     def __init__(self, path: Path):
         self.path = path
@@ -496,6 +556,84 @@ class StateStore:
                 "SELECT value FROM meta WHERE key=?", (key,)
             ).fetchone()
         return row["value"] if row else None
+
+    def establish_governed_cutover_baseline(self, *, reason: str) -> dict[str, Any]:
+        """Atomically retire pre-cutover backlog without deleting knowledge."""
+
+        if not reason.strip():
+            raise ValueError("A governed cutover baseline requires an audit reason")
+        key = "daily-weekly-governed-cutover-baseline-v1"
+        with self.transaction() as connection:
+            existing = connection.execute(
+                "SELECT value FROM meta WHERE key=?", (key,)
+            ).fetchone()
+            checkpoints = _governed_baseline_checkpoints(
+                connection,
+                include_new=existing is None,
+            )
+            if existing is not None:
+                stored = json.loads(str(existing["value"]))
+                if int(stored.get("checkpoints_advanced", 0)) != len(checkpoints):
+                    stored["checkpoints_advanced"] = len(checkpoints)
+                    stored["checkpoint_reconciled_at"] = utc_now()
+                    connection.execute(
+                        "UPDATE meta SET value=? WHERE key=?",
+                        (
+                            json.dumps(stored, ensure_ascii=False, sort_keys=True),
+                            key,
+                        ),
+                    )
+                return {
+                    "status": "already_completed",
+                    "evidence_baselined": int(stored["evidence_baselined"]),
+                    "review_items_archived": int(stored["review_items_archived"]),
+                    "checkpoints_advanced": len(checkpoints),
+                }
+
+            evidence_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) AS count FROM evidence WHERE status='new'"
+                ).fetchone()["count"]
+            )
+            review_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) AS count FROM observations WHERE status='pending'"
+                ).fetchone()["count"]
+            )
+            now = utc_now()
+            connection.execute(
+                "UPDATE evidence SET status='processed' WHERE status='new'"
+            )
+            connection.execute(
+                """UPDATE observations SET status='rejected',rejection_reason=?,updated_at=?
+                WHERE status='pending'""",
+                (reason[:1000], now),
+            )
+            connection.execute(
+                """UPDATE pattern_signals SET status='rejected',rejection_reason=?,last_seen=?
+                WHERE observation_id IN (
+                    SELECT id FROM observations WHERE status='rejected'
+                    AND rejection_reason=?
+                )""",
+                (reason[:1000], now, reason[:1000]),
+            )
+            record = {
+                "completed_at": now,
+                "reason": reason[:1000],
+                "evidence_baselined": evidence_count,
+                "review_items_archived": review_count,
+                "checkpoints_advanced": len(checkpoints),
+            }
+            connection.execute(
+                "INSERT INTO meta(key,value) VALUES(?,?)",
+                (key, json.dumps(record, ensure_ascii=False, sort_keys=True)),
+            )
+        return {
+            "status": "completed",
+            "evidence_baselined": evidence_count,
+            "review_items_archived": review_count,
+            "checkpoints_advanced": len(checkpoints),
+        }
 
     @staticmethod
     def enqueue_search_refresh(
@@ -1137,16 +1275,10 @@ class StateStore:
                         payload.pop("project_id", None)
                 if "project_ids" in payload:
                     payload["project_ids"] = [project_id] if project_id else []
-                if (
-                    payload.get("session_id")
-                    and (
-                        payload.get("analysis_lane")
-                        or "project_ids" in payload
-                    )
+                if payload.get("session_id") and (
+                    payload.get("analysis_lane") or "project_ids" in payload
                 ):
-                    payload["analysis_lane"] = (
-                        "full" if project_id else "profile_only"
-                    )
+                    payload["analysis_lane"] = "full" if project_id else "profile_only"
                 connection.execute(
                     """UPDATE evidence SET project_id=?,payload_json=?,content_hash=?
                     WHERE id=?""",
@@ -1322,14 +1454,17 @@ class StateStore:
             )
 
     def add_learning_signal_event(self, record: dict[str, Any]) -> tuple[str, bool]:
-        event_id = "learn-" + canonical_hash(
-            {
-                "topic_key": record["topic_key"],
-                "signal_type": record["signal_type"],
-                "claim": record["claim"],
-                "evidence_refs": sorted(set(record["evidence_refs"])),
-            }
-        )[:24]
+        event_id = (
+            "learn-"
+            + canonical_hash(
+                {
+                    "topic_key": record["topic_key"],
+                    "signal_type": record["signal_type"],
+                    "claim": record["claim"],
+                    "evidence_refs": sorted(set(record["evidence_refs"])),
+                }
+            )[:24]
+        )
         with self.connect() as connection:
             cursor = connection.execute(
                 """INSERT OR IGNORE INTO learning_signal_events(
@@ -1432,11 +1567,7 @@ class StateStore:
 
     def learning_topic(self, topic_key: str) -> dict[str, Any] | None:
         return next(
-            (
-                item
-                for item in self.learning_topics()
-                if item["topic_key"] == topic_key
-            ),
+            (item for item in self.learning_topics() if item["topic_key"] == topic_key),
             None,
         )
 

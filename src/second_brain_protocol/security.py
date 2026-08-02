@@ -190,7 +190,7 @@ def assert_model_packet_safe(value: Any) -> None:
         if isinstance(item, str):
             findings.extend(scan_text(item, location, block_paths=True))
             return
-        if isinstance(item, list):
+        if isinstance(item, (list, tuple)):
             for index, child in enumerate(item):
                 scan_value(child, f"{location}[{index}]")
             return
@@ -241,7 +241,7 @@ def _safe_session_messages(
             continue
         considered += 1
         budget = min(EXTERNAL_SESSION_TEXT_CHARS, max(0, remaining_chars - used))
-        if budget < 80:
+        if budget <= 0:
             break
         text = sanitize_external_text(
             str(value.get("text") or ""),
@@ -287,7 +287,7 @@ def sanitize_model_payload(kind: str, payload: Any) -> Any:
                 if value
             ],
         }
-    if kind != "session_digest" or not isinstance(payload, dict):
+    if kind not in {"session_digest", "session_episode"} or not isinstance(payload, dict):
         return sanitize_packet(payload)
 
     safe: dict[str, Any] = {}
@@ -318,7 +318,11 @@ def sanitize_model_payload(kind: str, payload: Any) -> Any:
     safe["user_messages"] = user_messages
     safe["assistant_results"] = assistant_results
     safe["privacy_summary"] = {
-        "policy": "sanitized-session-digest-v4",
+        "policy": (
+            "sanitized-session-digest-v4"
+            if kind == "session_digest"
+            else "sanitized-session-episode-v1"
+        ),
         "raw_session_id_removed": True,
         "artifact_text_removed": True,
         "user_messages_included": len(user_messages),
@@ -327,6 +331,24 @@ def sanitize_model_payload(kind: str, payload: Any) -> Any:
         "included_text_chars": user_chars + assistant_chars,
     }
     return safe
+
+
+def sanitize_model_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Build the one allowlisted evidence shape permitted at the model seam."""
+
+    kind = str(item["kind"])
+    return {
+        "id": str(item["id"]),
+        "source_type": str(item["source_type"]),
+        "project_id": (
+            str(item["project_id"])
+            if item.get("project_id") is not None
+            else None
+        ),
+        "kind": kind,
+        "occurred_at": str(item.get("occurred_at") or "")[:80],
+        "payload": sanitize_model_payload(kind, item.get("payload")),
+    }
 
 
 def scan_text(text: str, location: str, *, block_paths: bool = True) -> list[Finding]:
@@ -338,6 +360,23 @@ def scan_text(text: str, location: str, *, block_paths: bool = True) -> list[Fin
         for pattern in (HOME_PATH, WINDOWS_PATH):
             for match in pattern.finditer(text):
                 findings.append(Finding("absolute-path", location, match.group(0)[:120]))
+    return findings
+
+
+def scan_untrusted_memory_text(text: str, location: str) -> list[Finding]:
+    """Find content that must not flow directly from model output to memory."""
+
+    findings = scan_text(text, location, block_paths=True)
+    for name, pattern in (
+        ("email", EMAIL),
+        ("url", URL),
+        ("network-address", IP_ADDRESS),
+        ("phone-number", PHONE_NUMBER),
+        ("absolute-path", UNIX_PATH),
+        ("code-block", CODE_BLOCK),
+    ):
+        for match in pattern.finditer(text):
+            findings.append(Finding(name, location, match.group(0)[:120]))
     return findings
 
 
