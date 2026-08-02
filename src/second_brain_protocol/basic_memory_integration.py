@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .canonical_paths import is_indexable_markdown
 from .config import RuntimePaths
 
 
 PROJECT_NAME = "personal-vault"
-MIRROR_EXCLUSIONS = {".git", ".obsidian", ".venv", "Inbox/Raw", "Evidence/Raw", "System/Local"}
 
 
 def _executable() -> str | None:
@@ -59,7 +59,9 @@ def _ensure_local_config(paths: RuntimePaths) -> None:
     config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def _run(paths: RuntimePaths, *args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
+def _run(
+    paths: RuntimePaths, *args: str, timeout: int = 300
+) -> subprocess.CompletedProcess[str]:
     _ensure_local_config(paths)
     executable = _executable()
     if not executable:
@@ -85,8 +87,7 @@ def build_index_mirror(paths: RuntimePaths, vault: Path) -> Path:
     pending.mkdir(parents=True)
     for source in vault.rglob("*.md"):
         relative = source.relative_to(vault)
-        label = relative.as_posix()
-        if any(label == item or label.startswith(item + "/") for item in MIRROR_EXCLUSIONS):
+        if not is_indexable_markdown(relative):
             continue
         target = pending / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -99,22 +100,41 @@ def build_index_mirror(paths: RuntimePaths, vault: Path) -> Path:
 
 def configure_project(paths: RuntimePaths, index_root: Path) -> None:
     _ensure_local_config(paths)
-    config = json.loads((paths.basic_memory / "config.json").read_text(encoding="utf-8"))
+    config = json.loads(
+        (paths.basic_memory / "config.json").read_text(encoding="utf-8")
+    )
     existing = config.get("projects", {}).get(PROJECT_NAME)
     if existing:
         configured = Path(existing["path"]).resolve()
         if configured != index_root.resolve():
-            result = _run(paths, "project", "move", PROJECT_NAME, str(index_root), timeout=120)
+            result = _run(
+                paths, "project", "move", PROJECT_NAME, str(index_root), timeout=120
+            )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr or result.stdout)
         return
-    result = _run(paths, "project", "add", PROJECT_NAME, str(index_root), "--local", "--default", timeout=120)
+    result = _run(
+        paths,
+        "project",
+        "add",
+        PROJECT_NAME,
+        str(index_root),
+        "--local",
+        "--default",
+        timeout=120,
+    )
     combined = (result.stdout + result.stderr).lower()
-    if result.returncode != 0 and "already" not in combined and "exists" not in combined:
+    if (
+        result.returncode != 0
+        and "already" not in combined
+        and "exists" not in combined
+    ):
         raise RuntimeError(result.stderr or result.stdout)
 
 
-def update_index_mirror(paths: RuntimePaths, vault: Path, relative_paths: list[str]) -> Path:
+def update_index_mirror(
+    paths: RuntimePaths, vault: Path, relative_paths: list[str]
+) -> Path:
     """Update only changed canonical notes in the existing runtime mirror."""
 
     destination = paths.basic_memory / "vault-mirror"
@@ -124,14 +144,7 @@ def update_index_mirror(paths: RuntimePaths, vault: Path, relative_paths: list[s
     mirror_root = destination.resolve()
     for value in sorted(set(relative_paths)):
         relative = Path(value)
-        label = relative.as_posix().lstrip("/")
-        if (
-            not relative.parts
-            or relative.is_absolute()
-            or ".." in relative.parts
-            or relative.suffix.casefold() != ".md"
-            or any(label == item or label.startswith(item + "/") for item in MIRROR_EXCLUSIONS)
-        ):
+        if not is_indexable_markdown(relative):
             raise ValueError("Invalid incremental index path")
         source = (vault_root / relative).resolve()
         target = (mirror_root / relative).resolve()
@@ -149,12 +162,25 @@ def _reindex_configured(paths: RuntimePaths, mirror: Path) -> str:
     configure_project(paths, mirror)
     result = _run(paths, "reindex", "--project", PROJECT_NAME, timeout=1800)
     if result.returncode != 0:
-        raise RuntimeError("Basic Memory reindex failed: " + (result.stderr or result.stdout))
+        raise RuntimeError(
+            "Basic Memory reindex failed: " + (result.stderr or result.stdout)
+        )
     status_result = _run(
-        paths, "status", "--project", PROJECT_NAME, "--wait", "--timeout", "300", "--json", timeout=360
+        paths,
+        "status",
+        "--project",
+        PROJECT_NAME,
+        "--wait",
+        "--timeout",
+        "300",
+        "--json",
+        timeout=360,
     )
     if status_result.returncode != 0:
-        raise RuntimeError("Basic Memory indexing did not settle: " + (status_result.stderr or status_result.stdout))
+        raise RuntimeError(
+            "Basic Memory indexing did not settle: "
+            + (status_result.stderr or status_result.stdout)
+        )
     return status_result.stdout.strip()
 
 
@@ -168,8 +194,27 @@ def reindex_changed(paths: RuntimePaths, vault: Path, relative_paths: list[str])
 
 def search(paths: RuntimePaths, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
     candidates = [
-        ("tool", "search-notes", query, "--project", PROJECT_NAME, "--local", "--hybrid", "--page-size", str(limit)),
-        ("tool", "search-notes", query, "--project", PROJECT_NAME, "--local", "--page-size", str(limit)),
+        (
+            "tool",
+            "search-notes",
+            query,
+            "--project",
+            PROJECT_NAME,
+            "--local",
+            "--hybrid",
+            "--page-size",
+            str(limit),
+        ),
+        (
+            "tool",
+            "search-notes",
+            query,
+            "--project",
+            PROJECT_NAME,
+            "--local",
+            "--page-size",
+            str(limit),
+        ),
     ]
     for args in candidates:
         result = _run(paths, *args, timeout=120)
@@ -177,18 +222,60 @@ def search(paths: RuntimePaths, query: str, *, limit: int = 10) -> list[dict[str
             continue
         try:
             data = json.loads(result.stdout)
-            if isinstance(data, list):
-                return data[:limit]
-            if isinstance(data, dict):
-                rows = data.get("results") or data.get("items") or [data]
-                return list(rows)[:limit]
+            rows = _search_rows(data, limit=limit)
+            if rows:
+                return rows
         except json.JSONDecodeError:
             continue
     return []
 
 
+def search_vector(
+    paths: RuntimePaths, query: str, *, limit: int = 10
+) -> list[dict[str, Any]]:
+    """Run vector-only retrieval so recall ablations are not internally hybrid."""
+
+    result = _run(
+        paths,
+        "tool",
+        "search-notes",
+        query,
+        "--project",
+        PROJECT_NAME,
+        "--local",
+        "--vector",
+        "--page-size",
+        str(limit),
+        timeout=120,
+    )
+    if result.returncode != 0:
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+    return _search_rows(data, limit=limit)
+
+
+def _search_rows(data: Any, *, limit: int) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [row for row in data if isinstance(row, dict)][:limit]
+    if not isinstance(data, dict):
+        return []
+    collection = data.get("results") or data.get("items")
+    if collection is not None:
+        if not isinstance(collection, list):
+            return []
+        return [row for row in collection if isinstance(row, dict)][:limit]
+    if "file_path" in data or "path" in data:
+        return [data]
+    return []
+
+
 def status(paths: RuntimePaths) -> dict[str, Any]:
-    result = _run(paths, "status", "--project", PROJECT_NAME, "--json", "--local", timeout=120)
+    result = _run(
+        paths, "status", "--project", PROJECT_NAME, "--json", "--local", timeout=120
+    )
     output = (result.stdout or result.stderr).strip()
     try:
         parsed = json.loads(output)

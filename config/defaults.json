@@ -65,8 +65,8 @@
   "limits": {
     "max_evidence_text_chars": 6000,
     "max_packet_chars": 180000,
-    "max_model_calls_daily": 1,
-    "max_model_calls_weekly": 2,
+    "max_model_calls_daily": 12,
+    "max_model_calls_weekly": 4,
     "max_model_calls_bootstrap": 64
   },
   "identity": {

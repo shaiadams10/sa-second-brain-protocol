@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "name": "recall-ablation-v1",
+  "cases": [
+    {
+      "name": "direct retrieval baseline",
+      "query": "scheduler cutover",
+      "include_graph": false,
+      "comparison_key": "scheduler-cutover",
+      "comparison_kind": "graph",
+      "graph_seed_source_ids": ["note-shadow-cutover"],
+      "max_results": 4,
+      "expected_source_ids": ["note-shadow-cutover", "note-checkpoint-gate"],
+      "lexical": [
+        {
+          "source_id": "note-shadow-cutover",
+          "note_path": "Memory/Decisions.md",
+          "title": "Shadow cutover",
+          "snippet": "Keep the current scheduler authoritative until shadow evaluation passes.",
+          "score": 0.95
+        }
+      ],
+      "vector": [],
+      "graph": [
+        {
+          "source_id": "note-checkpoint-gate",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Checkpoint gate",
+          "snippet": "Failed episodes prevent checkpoint advancement until replay succeeds.",
+          "score": 0.8,
+          "relations": ["shadow-cutover -> checkpoint-gate"]
+        }
+      ]
+    },
+    {
+      "name": "graph expansion ablation",
+      "query": "scheduler cutover",
+      "include_graph": true,
+      "comparison_key": "scheduler-cutover",
+      "comparison_kind": "graph",
+      "graph_seed_source_ids": ["note-shadow-cutover"],
+      "max_results": 4,
+      "expected_source_ids": ["note-shadow-cutover", "note-checkpoint-gate"],
+      "lexical": [
+        {
+          "source_id": "note-shadow-cutover",
+          "note_path": "Memory/Decisions.md",
+          "title": "Shadow cutover",
+          "snippet": "Keep the current scheduler authoritative until shadow evaluation passes.",
+          "score": 0.95
+        }
+      ],
+      "vector": [],
+      "graph": [
+        {
+          "source_id": "note-checkpoint-gate",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Checkpoint gate",
+          "snippet": "Failed episodes prevent checkpoint advancement until replay succeeds.",
+          "score": 0.8,
+          "relations": ["shadow-cutover -> checkpoint-gate"]
+        }
+      ]
+    },
+    {
+      "name": "lexical channel disabled",
+      "query": "bounded episode extraction",
+      "include_graph": false,
+      "use_lexical": false,
+      "use_vector": true,
+      "comparison_key": "lexical-extraction",
+      "comparison_kind": "lexical",
+      "max_results": 4,
+      "expected_source_ids": ["note-episode-boundary", "note-model-envelope"],
+      "lexical": [
+        {
+          "source_id": "note-episode-boundary",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Episode boundary",
+          "snippet": "Lossless bounded episodes preserve evidence before extraction.",
+          "score": 0.93
+        }
+      ],
+      "vector": [
+        {
+          "source_id": "note-model-envelope",
+          "note_path": "Protocol/docs/ImplementationGuide.md",
+          "title": "Model envelope",
+          "snippet": "Every model request uses a bounded evidence envelope.",
+          "score": 0.84
+        }
+      ],
+      "graph": []
+    },
+    {
+      "name": "lexical channel enabled",
+      "query": "bounded episode extraction",
+      "include_graph": false,
+      "use_lexical": true,
+      "use_vector": true,
+      "comparison_key": "lexical-extraction",
+      "comparison_kind": "lexical",
+      "max_results": 4,
+      "expected_source_ids": ["note-episode-boundary", "note-model-envelope"],
+      "lexical": [
+        {
+          "source_id": "note-episode-boundary",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Episode boundary",
+          "snippet": "Lossless bounded episodes preserve evidence before extraction.",
+          "score": 0.93
+        }
+      ],
+      "vector": [
+        {
+          "source_id": "note-model-envelope",
+          "note_path": "Protocol/docs/ImplementationGuide.md",
+          "title": "Model envelope",
+          "snippet": "Every model request uses a bounded evidence envelope.",
+          "score": 0.84
+        }
+      ],
+      "graph": []
+    },
+    {
+      "name": "vector channel disabled",
+      "query": "semantic memory retrieval",
+      "include_graph": false,
+      "use_lexical": true,
+      "use_vector": false,
+      "comparison_key": "vector-retrieval",
+      "comparison_kind": "vector",
+      "max_results": 4,
+      "expected_source_ids": ["note-recall-seam", "note-semantic-match"],
+      "lexical": [
+        {
+          "source_id": "note-recall-seam",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Recall seam",
+          "snippet": "RecallHarness returns bounded canonical context.",
+          "score": 0.91
+        }
+      ],
+      "vector": [
+        {
+          "source_id": "note-semantic-match",
+          "note_path": "Protocol/docs/ImplementationGuide.md",
+          "title": "Semantic match",
+          "snippet": "Vector retrieval may recover conceptually related canonical notes.",
+          "score": 0.82
+        }
+      ],
+      "graph": []
+    },
+    {
+      "name": "vector channel enabled",
+      "query": "semantic memory retrieval",
+      "include_graph": false,
+      "use_lexical": true,
+      "use_vector": true,
+      "comparison_key": "vector-retrieval",
+      "comparison_kind": "vector",
+      "max_results": 4,
+      "expected_source_ids": ["note-recall-seam", "note-semantic-match"],
+      "lexical": [
+        {
+          "source_id": "note-recall-seam",
+          "note_path": "Protocol/docs/Architecture.md",
+          "title": "Recall seam",
+          "snippet": "RecallHarness returns bounded canonical context.",
+          "score": 0.91
+        }
+      ],
+      "vector": [
+        {
+          "source_id": "note-semantic-match",
+          "note_path": "Protocol/docs/ImplementationGuide.md",
+          "title": "Semantic match",
+          "snippet": "Vector retrieval may recover conceptually related canonical notes.",
+          "score": 0.82
+        }
+      ],
+      "graph": []
+    }
+  ]
+}

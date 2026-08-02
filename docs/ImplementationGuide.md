@@ -105,9 +105,45 @@ The Windows task runs once each day at the configured local time:
 - Empty day: record the run without a model call.
 - Missed run: skip the missed window and wait for the next 10:30 PM schedule unless the owner directly requests one manual Daily.
 - Existing run: ignore the overlapping instance.
-- Failed run: preserve evidence and checkpoints for retry.
+- Failed run: preserve evidence and checkpoints for retry. Check the recorded pipeline stage; a failure before `synthesize` means the model was not called.
 
-Daily output leads with evidence-gated learning about the person: demonstrated judgment, capabilities, preferences, voice, work style, goals, and longitudinal movement. A concise named project-change ledger and one sanitized recap for every attributed session remain as supporting work context. Late-arriving sessions are labeled as backfill instead of being presented as same-day work. Weekly output connects trajectories, wins, lessons, repeated work patterns, stale claims, contradictions, and next-focus suggestions, then adds deterministic stewardship checks for attribution coverage, review load, missing projects, journal continuity, and recent pipeline failures. Daily and weekly indexes are rebuilt inside bounded generated sections.
+Daily output leads with evidence-gated learning about the person: demonstrated judgment, capabilities, preferences, voice, work style, goals, and longitudinal movement. A concise named project-change ledger and one sanitized recap for every attributed session remain as supporting work context. Late-arriving sessions are labeled as backfill instead of being presented as same-day work. Weekly output connects trajectories, wins, lessons, repeated work patterns, stale claims, contradictions, and next-focus suggestions, then adds deterministic stewardship checks for attribution coverage, review load, missing projects, journal continuity, and recent pipeline failures. Journal indexes are rebuilt inside bounded generated sections. Search refresh is now change-set driven: the scheduled result reports `changed_index_paths` and `index_refresh`, and only added, changed, or deleted canonical notes are copied into the Basic Memory mirror before its configured index settles.
+
+Maintainers can evaluate the extraction harness without changing runtime state:
+
+```powershell
+uv run --locked sb harness evaluate
+uv run --locked sb harness evaluate --corpus quality
+uv run --locked sb harness recall
+```
+
+These commands replay versioned fixtures and make no external model calls. The recall report measures lexical, vector, and graph channels independently; its synthetic lift validates benchmark wiring, not production usefulness. A live extraction-quality run is deliberately harder to invoke: it requires `--live`, `--confirm-cost`, and a positive `--max-model-calls <N>`. Live evaluation is diagnostic only; it writes a machine-local run receipt but cannot publish canonical notes or advance evidence checkpoints. Do not use a live harness result as authorization for a manual Daily run or scheduler cutover.
+
+The authoritative `DailyWeeklyRunner` consumes `ExtractionResult`, produces deterministic session/period summaries, procedure counts, and a stored artifact, and reuses an eligible artifact on exact replay before invoking a model again. A blocked artifact remains retryable for the same input and may be replaced only until an eligible attempt succeeds. The artifact binds every processed evidence ID, sanitized episode and source-evidence edge, intended checkpoint advance, deterministic memory-mutation plan, and review-only procedure proposal. One pre-extraction prompt/schema/policy fingerprint binds both replay and artifact identity; a changed contract before persistence aborts the run. Malformed session entries increment the omission ledger and block checkpoint eligibility. `sb daily`, `sb weekly`, and `sb scheduled` now enter this runner.
+
+SQLite adapters persist run artifacts, issued per-artifact authorizations under the owner-approved cutover contract, the apply recovery journal, and transactional apply receipts. An interrupted apply reopens durable staging, revalidates the canonical write policy, verifies the exact path/content-hash manifest, and only then commits checkpoints, review proposals, and the changed-note search queue. Preflight persists every cited sanitized episode and exact derivation edge before any canonical file commit, so memory/procedure proposal staging cannot discover missing evidence after files have changed. Existing notes can change only within stable `sb:generated` marker pairs; an entire new Daily/Weekly note is privacy-scanned, including its scaffold. Existing journal notes must also belong to the authorized run kind and period. Apply requires each selected digest or direct item to remain `new`, but accepts its authoritative source closure in `compacted` or already-`processed` state before atomically closing the eligible remainder.
+
+`MemoryMutationPlanner` and `SQLiteMemoryRegistry` provide review-gated memory storage. The planner creates deterministic entity, mutation, and version IDs for create, reinforce, update, supersede, and contradict operations. The plan is artifact-bound and staged in the atomic apply transaction. Governed proposals are mirrored into the existing review dashboard. Approval writes the matching canonical destination with a mutation marker, then verifies exact SHA-256 bytes and a non-symlink path before the operational registry changes. Rejection closes both the review observation and registry proposal. Markdown remains canon.
+
+The cutover baseline is one-time and idempotent: `sb cutover daily-weekly --owner-authorized` backs up runtime SQLite, marks the pre-cutover evidence queue processed, archives the pre-cutover pending-review queue with its audit reason, reconciles source checkpoints through compacted ancestry, rebuilds review/search/dashboard artifacts, and never deletes canonical knowledge. After cutover, host-side novelty filtering checks promoted, pending, superseded, and rejected observations, prior governed proposals, and canonical Markdown. The lookup is local and consumes no model tokens. Exact and near-identical repeats are suppressed within the same project scope; rejected repeats remain local tombstones, while materially changed evidence may produce an update. Daily output contains only newly eligible review proposals and governed coverage; Weekly consumes `daily_run_summary` evidence for its ISO week so it does not reprocess raw Daily evidence. Dashboard and health history show only governed Daily/Weekly notes and receipts after cutover; pre-cutover records remain private audit history rather than active output.
+
+`procedure_candidate` extraction is narrower than professional skill evidence. It requires a full session lane, direct owner direction, a validated outcome, prerequisites, ordered steps, failure branches, tests, and exact evidence. Atomic apply can stage it only as pending review. Approval returns a skill-authoring handoff; session mining never patches executable instructions.
+
+`ChangedSegmentIndexer` and `SQLiteSegmentManifest` provide the changed-only segment foundation. A first pass upserts all bounded heading-aware segments; later passes send only new/changed segments and deleted IDs to a backend while retaining stable IDs for reordered unchanged text. Malformed frontmatter and path aliases fail closed, and backend/manifest mutation serializes across processes. The scheduled Basic Memory mirror now refreshes exact changed notes, while direct per-segment embedding remains a separate backend integration.
+
+The governed Recall Gateway is an internal read-only seam. Returned excerpts must still exist in current canon; aggregate/generated notes require current segment/observation/claim bindings, and classification plus public readiness are derived from current review state. Purpose profiles enforce scope and sensitivity, and optional retrieval-use telemetry stores no query text or excerpts. MCP remains disabled.
+
+The relevant model-free checks are:
+
+```powershell
+uv run --locked pytest tests/test_daily_weekly_runner.py tests/test_atomic_apply.py
+uv run --locked pytest tests/test_apply_persistence.py tests/test_publication_policy.py
+uv run --locked pytest tests/test_memory_mutations.py tests/test_memory_registry.py
+uv run --locked pytest tests/test_segment_index.py
+uv run --locked pytest tests/test_recall_gateway.py tests/test_procedure_review.py
+```
+
+These tests do not authorize a manual Daily, change the scheduler, publish canonical Markdown, advance checkpoints, or run an external model.
 
 ## 8. Use the natural-language interface and local dashboard
 

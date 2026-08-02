@@ -10,6 +10,8 @@ This document is the operational contract for turning project folders and coding
 - A leaf folder with deterministic project content becomes a project. A content-free folder remains visible as an other folder rather than masquerading as a project.
 - Current paths, validated historical aliases, and unique Git identities preserve stable project identity across moves and renames.
 - The generated project index is rebuilt from scanner truth. Model output cannot add project aliases, combine folders, or invent catalog entries.
+- The main vault is registered as one content-free managed project identity even when it sits outside the configured project scan root. It is not recursively scanned as project evidence. This keeps work on the Brain itself distinct from a similarly named protocol/package repository.
+- Owner-interaction capture defaults to the managed vault. Writing project knowledge to any other project requires explicit owner naming plus the cross-project authorization guard; similar names and shared terminology are never sufficient.
 
 Both daily and weekly runs perform the read-only project scan. A newly created project is therefore detected on the next incremental run. There is no always-on watcher, and source projects are never modified.
 

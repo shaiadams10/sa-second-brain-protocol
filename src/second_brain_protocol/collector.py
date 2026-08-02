@@ -39,6 +39,47 @@ ANTIGRAVITY_TRANSCRIPT_COLLECTOR_VERSION = 3
 ANTIGRAVITY_DATABASE_COLLECTOR_VERSION = 2
 
 
+def managed_vault_project(vault: Path, *, name: str) -> dict[str, Any]:
+    """Return a content-free project identity for the managed private vault."""
+
+    clean_name = str(name).strip()
+    if not clean_name:
+        raise ValueError("Managed vault project requires an explicit name")
+    project_id = "project-vault-" + hashlib.sha256(
+        clean_name.casefold().encode("utf-8")
+    ).hexdigest()[:16]
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {"id": project_id, "name": clean_name, "managed_vault": True},
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "id": project_id,
+        "name": clean_name,
+        "local_path": str(vault.resolve()),
+        "remote_url": None,
+        "upstream_url": None,
+        "remote_owner": None,
+        "head_commit": None,
+        "initial_commit": None,
+        "classification": "first-party",
+        "classification_reasons": ["explicit managed vault project"],
+        "lifecycle": "active",
+        "authors": [],
+        "tech_stack": ["second-brain"],
+        "second_brain_files": [],
+        "language_counts": {},
+        "artifact_categories": ["knowledge-system"],
+        "evidence_excerpts": [],
+        "git_history": {},
+        "tracked_file_count": 1,
+        "fingerprint": fingerprint,
+        "manifest": {},
+        "managed_vault": True,
+    }
+
+
 def _file_fingerprint(path: Path) -> str:
     digest = hashlib.sha256()
     try:
@@ -280,6 +321,7 @@ def collect_projects(
     ignored_paths: list[Path] | None = None,
     collection_paths: list[Path] | None = None,
     classification_overrides: dict[str, Any] | None = None,
+    managed_projects: list[dict[str, Any]] | None = None,
     baseline: bool = False,
 ) -> dict[str, Any]:
     scanner = ProjectScanner(
@@ -289,6 +331,26 @@ def collect_projects(
         tuple(collection_paths or ()),
     )
     projects = scanner.scan_all()
+    existing_ids = {str(project["id"]) for project in projects}
+    existing_paths = {
+        str(Path(project["local_path"]).resolve()).casefold()
+        for project in projects
+        if project.get("local_path")
+    }
+    for project in managed_projects or ():
+        project_id = str(project.get("id") or "")
+        local_path = str(project.get("local_path") or "")
+        if not project_id or not local_path or not project.get("managed_vault"):
+            raise ValueError("Managed project identity is incomplete")
+        normalized_path = str(Path(local_path).resolve()).casefold()
+        if project_id in existing_ids or normalized_path in existing_paths:
+            raise ValueError("Managed project identity conflicts with scanner truth")
+        projects.append(project)
+        existing_ids.add(project_id)
+        existing_paths.add(normalized_path)
+    projects.sort(
+        key=lambda item: (str(item.get("name") or "").casefold(), item["id"])
+    )
     previous_projects_list = store.projects()
     previous_by_path: dict[str, dict[str, Any]] = {}
     for previous in previous_projects_list:

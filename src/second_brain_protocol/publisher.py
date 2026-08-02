@@ -168,12 +168,23 @@ def _update_journal_index(vault: Path, kind: str) -> Path:
     pattern = "20??-??-??.md" if kind == "daily" else "20??-W??.md"
     notes = sorted(folder.glob(pattern), key=lambda item: item.stem, reverse=True)
     label = "Daily summary" if kind == "daily" else "Weekly reflection"
-    body = "\n".join(
-        f"- [[Journal/{folder_name}/{note.stem}|{note.stem}]] — {label}"
-        for note in notes
-    ) or "_No generated entries yet._"
+    body = (
+        "\n".join(
+            f"- [[Journal/{folder_name}/{note.stem}|{note.stem}]] — {label}"
+            for note in notes
+        )
+        or "_No generated entries yet._"
+    )
     update_generated_file(path, section, body)
     return path
+
+
+def refresh_journal_index(vault: Path, kind: str) -> Path:
+    """Refresh the bounded Daily or Weekly index after governed publication."""
+
+    if kind not in {"daily", "weekly"}:
+        raise ValueError("Journal index kind must be daily or weekly")
+    return _update_journal_index(vault, kind)
 
 
 def _weekly_stewardship_markdown(vault: Path, store: StateStore) -> str:
@@ -250,15 +261,15 @@ def _learning_markdown(output: dict[str, Any]) -> str:
     for signal in output.get("learning_signals", []):
         claim = sanitize_text(str(signal.get("claim") or ""), max_chars=700).strip()
         if claim:
-            signal_type = str(signal.get("signal_type") or "learning").replace(
-                "_", " "
-            )
+            signal_type = str(signal.get("signal_type") or "learning").replace("_", " ")
             learning_items.append(
                 f"- Learning - {signal.get('label', 'Topic')} ({signal_type}): {claim}"
             )
     for observation in output.get("observations", []):
         label = str(observation.get("kind") or "insight").replace("_", " ").title()
-        claim = sanitize_text(str(observation.get("claim") or ""), max_chars=700).strip()
+        claim = sanitize_text(
+            str(observation.get("claim") or ""), max_chars=700
+        ).strip()
         if claim:
             item = f"- {label}: {claim}"
             if observation.get("kind") in project_kinds:
@@ -279,11 +290,7 @@ def _learning_markdown(output: dict[str, Any]) -> str:
             )
     # Keep person-level learning visible even on project-heavy days.
     items = (
-        learning_items
-        + person_items
-        + pattern_items
-        + capability_items
-        + project_items
+        learning_items + person_items + pattern_items + capability_items + project_items
     )
     if not items:
         items.append(
@@ -327,8 +334,7 @@ def _evidence_project_ids(store: StateStore, refs: list[str]) -> set[str]:
 
 def _evidence_context_keys(store: StateStore, refs: list[str]) -> set[str]:
     contexts = {
-        f"project:{project_id}"
-        for project_id in _evidence_project_ids(store, refs)
+        f"project:{project_id}" for project_id in _evidence_project_ids(store, refs)
     }
     for row in store.evidence_by_ids(refs):
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
@@ -358,10 +364,7 @@ def _profile_only_session_refs(store: StateStore, refs: list[str]) -> set[str]:
             and row.get("kind") == "session_digest"
             and (
                 payload.get("analysis_lane") == "profile_only"
-                or (
-                    not row.get("project_id")
-                    and not payload.get("project_ids")
-                )
+                or (not row.get("project_id") and not payload.get("project_ids"))
             )
         ):
             profile_only.add(str(row["id"]))
@@ -426,10 +429,9 @@ def _validate_evidence_lane_isolation(
             )
 
     for item in output.get("learning_signals", []):
-        if (
-            item.get("signal_type") == "validated_outcome"
-            and _profile_only_session_refs(store, refs(item))
-        ):
+        if item.get(
+            "signal_type"
+        ) == "validated_outcome" and _profile_only_session_refs(store, refs(item)):
             raise ValueError(
                 "A validated learning outcome requires attributed project evidence"
             )
@@ -493,9 +495,7 @@ def _promotion_status(
     ):
         return "promoted", "authoritative or corroborated project fact"
     if pattern_kind:
-        context_count = len(
-            _evidence_context_keys(store, observation["evidence_refs"])
-        )
+        context_count = len(_evidence_context_keys(store, observation["evidence_refs"]))
         if (
             observation.get("explicit") and scope == "global" and explicit_user_evidence
         ) or (session_count >= 3 and date_count >= 2 and context_count >= 2):
@@ -783,9 +783,7 @@ LEARNING_STATE_LABELS = {
 }
 
 
-def _learning_event_record(
-    store: StateStore, signal: dict[str, Any]
-) -> dict[str, Any]:
+def _learning_event_record(store: StateStore, signal: dict[str, Any]) -> dict[str, Any]:
     refs = [str(value) for value in signal["evidence_refs"]]
     rows = store.evidence_by_ids(refs)
     project_ids = sorted(_evidence_project_ids(store, refs))
@@ -811,11 +809,7 @@ def _rebuild_learning_topic(store: StateStore, topic_key: str) -> dict[str, Any]
     if not events:
         raise RuntimeError(f"Learning topic has no events: {topic_key}")
     refs = sorted(
-        {
-            evidence_ref
-            for event in events
-            for evidence_ref in event["evidence_refs"]
-        }
+        {evidence_ref for event in events for evidence_ref in event["evidence_refs"]}
     )[:200]
     _source_count, project_count, date_count, session_count = _evidence_dimensions(
         store, refs
@@ -824,13 +818,9 @@ def _rebuild_learning_topic(store: StateStore, topic_key: str) -> dict[str, Any]
     counts = Counter(str(event["signal_type"]) for event in events)
     ordered = sorted(events, key=lambda item: (item["occurred_at"], item["id"]))
     positive = [
-        event
-        for event in ordered
-        if event["signal_type"] in LEARNING_PROGRESS_TYPES
+        event for event in ordered if event["signal_type"] in LEARNING_PROGRESS_TYPES
     ]
-    edges = [
-        event for event in ordered if event["signal_type"] == "learning_edge"
-    ]
+    edges = [event for event in ordered if event["signal_type"] == "learning_edge"]
     counterevidence = [
         event for event in ordered if event["signal_type"] == "counterevidence"
     ]
@@ -870,9 +860,7 @@ def _rebuild_learning_topic(store: StateStore, topic_key: str) -> dict[str, Any]
         current_state = "mixed"
 
     assessment_event = (
-        latest_edge
-        if open_edge and latest_edge
-        else (latest_progress or ordered[-1])
+        latest_edge if open_edge and latest_edge else (latest_progress or ordered[-1])
     )
     record = {
         "topic_key": topic_key,
@@ -945,11 +933,7 @@ def _write_learning_tracker(vault: Path, store: StateStore) -> Path:
         body = "\n".join(sections).rstrip()
     update_generated_file(path, "learning", body)
     all_refs = sorted(
-        {
-            evidence_ref
-            for topic in topics
-            for evidence_ref in topic["evidence_refs"]
-        }
+        {evidence_ref for topic in topics for evidence_ref in topic["evidence_refs"]}
     )
     if all_refs:
         _update_frontmatter(path, evidence_refs=all_refs, confidence=0.8)
@@ -989,8 +973,7 @@ def _publish_learning_signals(
             )
         supporting_rows = store.evidence_by_ids(signal["evidence_refs"])
         if not any(
-            row.get("kind") == "session_digest"
-            or row.get("source_type") == "interview"
+            row.get("kind") == "session_digest" or row.get("source_type") == "interview"
             for row in supporting_rows
         ):
             raise ValueError(
@@ -1022,8 +1005,7 @@ def _publish_learning_signals(
         learning_evidence_id, _added = store.add_evidence(
             source_type="learning-registry",
             source_ref=(
-                f"learning-topic:{topic_key}:"
-                f"{canonical_hash(registry_payload)[:20]}"
+                f"learning-topic:{topic_key}:{canonical_hash(registry_payload)[:20]}"
             ),
             kind="learning_topic",
             payload=registry_payload,
@@ -1891,9 +1873,7 @@ def publish_model_output(
         voice_samples_written += 1
 
     stewardship = (
-        _weekly_stewardship_markdown(vault, store)
-        if run_kind == "weekly"
-        else None
+        _weekly_stewardship_markdown(vault, store) if run_kind == "weekly" else None
     )
     activity = activity_markdown(
         store.evidence_by_ids(evidence_ids),
@@ -1903,7 +1883,8 @@ def publish_model_output(
             for project_id, project in known_projects.items()
         },
         session_summaries=session_summaries,
-        period=summary_period or (date.today().isoformat() if run_kind == "daily" else None),
+        period=summary_period
+        or (date.today().isoformat() if run_kind == "daily" else None),
         learning=_learning_markdown(output),
         stewardship=stewardship,
     )
@@ -1958,8 +1939,13 @@ def promote_approved_observation(
     if not matches:
         raise KeyError(f"Approved observation not found: {observation_id}")
     item = matches[0]
+    mutation_id = str((item.get("payload") or {}).get("memory_mutation_id") or "")
+    mutation_marker = (
+        f" <!-- sb:memory-mutation {mutation_id} -->" if mutation_id else ""
+    )
     _append_generated_bullet(
-        _observation_note(vault, item["kind"]), f"- {item['claim']} ^{item['id']}"
+        _observation_note(vault, item["kind"]),
+        f"- {item['claim']} ^{item['id']}{mutation_marker}",
     )
     store.decide_observation(observation_id, "promoted")
 
@@ -1992,9 +1978,9 @@ def publish_curate_candidate(
             "Curate candidate conflicts with existing canonical knowledge for this subject"
         )
 
-    expected_id = "obs-" + canonical_hash(
-        {"kind": kind, "subject": subject, "claim": claim}
-    )[:24]
+    expected_id = (
+        "obs-" + canonical_hash({"kind": kind, "subject": subject, "claim": claim})[:24]
+    )
     existed = store.observation(expected_id) is not None
     observation_id = store.add_observation(
         {

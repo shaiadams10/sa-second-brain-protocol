@@ -8,13 +8,25 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .basic_memory_integration import reindex
+from .basic_memory_integration import reindex, reindex_changed
+from .canonical_paths import (
+    canonical_markdown_fingerprints,
+    changed_canonical_markdown_paths,
+)
 from .collector import (
     collect_projects,
     collect_sessions,
+    managed_vault_project,
     reconcile_existing_session_attribution,
 )
-from .config import RuntimePaths, load_defaults, load_runtime_config, protocol_root, setup_runtime, vault_root
+from .config import (
+    RuntimePaths,
+    load_defaults,
+    load_runtime_config,
+    protocol_root,
+    setup_runtime,
+    vault_root,
+)
 from .evidence_compaction import (
     SESSION_EVENT_KINDS,
     SESSION_SOURCE_TYPES,
@@ -27,8 +39,14 @@ from .gitops import (
     safe_push_private,
     snapshot_manual_markdown,
 )
-from .graphify_integration import build_cross_project_graph, graph_summary, update_project_graph
+from .graphify_integration import (
+    build_cross_project_graph,
+    graph_summary,
+    update_project_graph,
+)
+from .governed_pipeline import GovernedDailyWeeklyPipeline
 from .locking import single_instance
+from .extraction_model import ProtocolExtractionModel
 from .model_runner import (
     ModelRunError,
     ModelRole,
@@ -36,6 +54,11 @@ from .model_runner import (
     run_model,
     select_evidence_for_packet,
     usage_from_receipt,
+)
+from .memory_registry import (
+    CanonicalMemoryPublicationVerifier,
+    MemoryPublicationReceipt,
+    SQLiteMemoryRegistry,
 )
 from .notifications import notify
 from .profile import create_interview, import_linkedin_export, interview_status
@@ -48,6 +71,7 @@ from .publisher import (
     promote_observation_group,
     publish_interview_profile,
     publish_model_output,
+    refresh_journal_index,
     repair_generated_markdown,
     write_bootstrap_review_artifacts,
     write_review_artifacts,
@@ -70,7 +94,11 @@ def context() -> tuple[RuntimePaths, dict[str, Any], dict[str, Any], StateStore]
     config = load_runtime_config(paths)
     defaults = load_defaults(config)
     store = StateStore(paths.state)
-    store.backup(paths.runs / "backups" / f"state-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}.sqlite")
+    store.backup(
+        paths.runs
+        / "backups"
+        / f"state-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}.sqlite"
+    )
     return paths, config, defaults, store
 
 
@@ -79,6 +107,65 @@ def _refresh_review_artifacts(store: StateStore) -> None:
         write_bootstrap_review_artifacts(vault_root(), store)
     else:
         write_review_artifacts(vault_root(), store)
+
+
+def _managed_projects() -> list[dict[str, Any]]:
+    return [
+        managed_vault_project(
+            vault_root(),
+            name=vault_root().name,
+        )
+    ]
+
+
+def _governed_memory_mutation_id(observation: dict[str, Any] | None) -> str | None:
+    if observation is None:
+        return None
+    value = str(
+        (observation.get("payload") or {}).get("memory_mutation_id") or ""
+    ).strip()
+    return value or None
+
+
+def _approve_governed_memory_proposal(
+    store: StateStore,
+    observation: dict[str, Any],
+) -> None:
+    mutation_id = _governed_memory_mutation_id(observation)
+    if mutation_id is None:
+        return
+    registry = SQLiteMemoryRegistry(
+        store,
+        publication_verifier=CanonicalMemoryPublicationVerifier(vault_root()),
+    )
+    matches = [item for item in registry.proposals() if item.mutation_id == mutation_id]
+    if len(matches) != 1:
+        raise RuntimeError("Governed memory proposal is unavailable")
+    destination = matches[0].item.destination
+    canonical = vault_root() / Path(destination)
+    registry.approve(
+        mutation_id,
+        MemoryPublicationReceipt(
+            mutation_id=mutation_id,
+            destination=destination,
+            content_hash=hashlib.sha256(canonical.read_bytes()).hexdigest(),
+        ),
+    )
+
+
+def _reject_governed_memory_proposal(
+    store: StateStore,
+    observation: dict[str, Any],
+    *,
+    reason: str,
+) -> None:
+    mutation_id = _governed_memory_mutation_id(observation)
+    if mutation_id is None:
+        return
+    SQLiteMemoryRegistry(
+        store,
+        publication_verifier=CanonicalMemoryPublicationVerifier(vault_root()),
+    ).reject(mutation_id, reason=reason)
 
 
 def _inventory_report(vault: Path, projects: list[dict[str, Any]]) -> Path:
@@ -95,7 +182,9 @@ def _inventory_report(vault: Path, projects: list[dict[str, Any]]) -> Path:
         f"Repositories discovered: {len(projects)}",
         "",
     ]
-    for project in sorted(projects, key=lambda item: (item["name"].casefold(), item["id"])):
+    for project in sorted(
+        projects, key=lambda item: (item["name"].casefold(), item["id"])
+    ):
         lines.extend(
             [
                 f"## {project['name']}",
@@ -153,7 +242,10 @@ def _update_graphs(
     for project in projects:
         if only_project_ids is not None and project["id"] not in only_project_ids:
             continue
-        graph_changed = store.get_meta(f"graph-fingerprint:{project['id']}") != project["fingerprint"]
+        graph_changed = (
+            store.get_meta(f"graph-fingerprint:{project['id']}")
+            != project["fingerprint"]
+        )
         if project["classification"] != "first-party" or not graph_changed:
             continue
         try:
@@ -163,7 +255,11 @@ def _update_graphs(
                 source_type="graphify",
                 source_ref=f"graphify:{project['id']}:{project['fingerprint']}",
                 kind="code_graph_summary",
-                payload={"project_id": project["id"], "project_name": project["name"], **summary},
+                payload={
+                    "project_id": project["id"],
+                    "project_name": project["name"],
+                    **summary,
+                },
                 project_id=project["id"],
             )
             store.set_meta(f"graph-fingerprint:{project['id']}", project["fingerprint"])
@@ -189,7 +285,9 @@ def _update_graphs(
         )
         store.set_meta("graph-fingerprint:cross-project", cross_fingerprint)
     if strict and errors:
-        raise RuntimeError("Graphify failed for first-party repositories: " + " | ".join(errors))
+        raise RuntimeError(
+            "Graphify failed for first-party repositories: " + " | ".join(errors)
+        )
     return updated
 
 
@@ -197,7 +295,9 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
     paths, config, defaults, store = context()
     state = store.bootstrap_state()
     if state["state"] == "completed":
-        raise RuntimeError("Bootstrap is completed and cannot rerun. Use refresh-project or interview.")
+        raise RuntimeError(
+            "Bootstrap is completed and cannot rerun. Use refresh-project or interview."
+        )
     if state["state"] == "awaiting_review":
         return {
             "state": "awaiting_review",
@@ -206,13 +306,19 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
         }
     if state["state"] == "synthesis_ready":
         with single_instance(paths.locks / "pipeline.lock"):
-            return _bootstrap_synthesis_step(store=store, paths=paths, defaults=defaults)
+            return _bootstrap_synthesis_step(
+                store=store, paths=paths, defaults=defaults
+            )
     with single_instance(paths.locks / "pipeline.lock"):
         if state["state"] == "not_started":
             store.set_bootstrap_state("collecting")
         integrity_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        integrity_before = paths.runs / f"bootstrap-{integrity_id}-projects-before.json.gz"
-        integrity_after = paths.runs / f"bootstrap-{integrity_id}-projects-after.json.gz"
+        integrity_before = (
+            paths.runs / f"bootstrap-{integrity_id}-projects-before.json.gz"
+        )
+        integrity_after = (
+            paths.runs / f"bootstrap-{integrity_id}-projects-after.json.gz"
+        )
         capture_integrity(Path(config["projects_root"]), integrity_before)
         interview_note = create_interview(vault_root(), paths.root)
         if linkedin_export:
@@ -221,9 +327,14 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
             store,
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
-            ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
-            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
+            ignored_paths=[
+                Path(item) for item in config.get("ignored_project_paths", [])
+            ],
+            collection_paths=[
+                Path(item) for item in config.get("project_collection_paths", [])
+            ],
             classification_overrides=config.get("project_classification_overrides", {}),
+            managed_projects=_managed_projects(),
         )
         publish_project_catalog(vault_root(), project_result["projects"])
         _inventory_report(vault_root(), project_result["projects"])
@@ -244,7 +355,9 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
         finally:
             capture_integrity(Path(config["projects_root"]), integrity_after)
         integrity = compare_integrity(integrity_before, integrity_after)
-        integrity_note = vault_root() / "System" / "Audits" / "Bootstrap" / "SourceIntegrity.md"
+        integrity_note = (
+            vault_root() / "System" / "Audits" / "Bootstrap" / "SourceIntegrity.md"
+        )
         integrity_note.write_text(
             "---\nid: bootstrap-source-integrity\ntype: audit-report\n---\n\n"
             "# Source integrity\n\n"
@@ -254,7 +367,9 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
             encoding="utf-8",
         )
         if not integrity.unchanged:
-            receipt = paths.runs / f"bootstrap-{integrity_id}-source-integrity-failure.json"
+            receipt = (
+                paths.runs / f"bootstrap-{integrity_id}-source-integrity-failure.json"
+            )
             receipt.write_text(
                 json.dumps(
                     {
@@ -268,7 +383,9 @@ def bootstrap(*, linkedin_export: Path | None = None) -> dict[str, Any]:
                 + "\n",
                 encoding="utf-8",
             )
-            raise RuntimeError(f"Configured project sources changed during audit; review {receipt} and resume.")
+            raise RuntimeError(
+                f"Configured project sources changed during audit; review {receipt} and resume."
+            )
         if graph_error:
             raise graph_error
         _methodology_report(vault_root(), store, counts, len(updated))
@@ -296,16 +413,23 @@ def refresh_bootstrap_evidence() -> dict[str, Any]:
     with single_instance(paths.locks / "pipeline.lock"):
         snapshot_manual_markdown(vault_root())
         integrity_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        integrity_before = paths.runs / f"bootstrap-refresh-{integrity_id}-before.json.gz"
+        integrity_before = (
+            paths.runs / f"bootstrap-refresh-{integrity_id}-before.json.gz"
+        )
         integrity_after = paths.runs / f"bootstrap-refresh-{integrity_id}-after.json.gz"
         capture_integrity(Path(config["projects_root"]), integrity_before)
         project_result = collect_projects(
             store,
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
-            ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
-            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
+            ignored_paths=[
+                Path(item) for item in config.get("ignored_project_paths", [])
+            ],
+            collection_paths=[
+                Path(item) for item in config.get("project_collection_paths", [])
+            ],
             classification_overrides=config.get("project_classification_overrides", {}),
+            managed_projects=_managed_projects(),
         )
         publish_project_catalog(vault_root(), project_result["projects"])
         session_counts = collect_sessions(store, config)
@@ -459,9 +583,7 @@ def _project_session_digest_groups(
     return groups
 
 
-def _latest_project_inventory(
-    store: StateStore, project_id: str
-) -> dict[str, Any]:
+def _latest_project_inventory(store: StateStore, project_id: str) -> dict[str, Any]:
     matches = [
         row
         for row in store.evidence()
@@ -528,9 +650,7 @@ def _analyze_one_project_session_history(
                 evidence=selected,
                 run_id=run_id,
                 max_packet_chars=int(defaults["limits"]["max_packet_chars"]),
-                max_evidence_chars=int(
-                    defaults["limits"]["max_evidence_text_chars"]
-                ),
+                max_evidence_chars=int(defaults["limits"]["max_evidence_text_chars"]),
                 schema_name="project-history-output.schema.json",
                 feedback_profile={},
             )
@@ -623,9 +743,7 @@ def analyze_project_sessions(*, force: bool = False) -> dict[str, Any]:
             "Project-session analysis is available after bootstrap approval."
         )
     with single_instance(paths.locks / "pipeline.lock"):
-        projects = {
-            str(project["id"]): project for project in store.present_projects()
-        }
+        projects = {str(project["id"]): project for project in store.present_projects()}
         register_current_project_paths(
             store,
             list(projects.values()),
@@ -699,6 +817,48 @@ def _role(defaults: dict[str, Any], kind: str) -> ModelRole:
     return ModelRole(name=values["name"], reasoning=values["reasoning"])
 
 
+def _governed_synthesize(
+    kind: str,
+    *,
+    store: StateStore,
+    paths: RuntimePaths,
+    defaults: dict[str, Any],
+    summary_period: str | None = None,
+) -> dict[str, Any]:
+    if kind == "daily":
+        compact_session_evidence(store)
+    period = (
+        summary_period or _weekly_target_period(date.today())
+        if kind == "weekly"
+        else summary_period or date.today().isoformat()
+    )
+    role = _role(defaults, kind)
+    max_packet_chars = int(defaults["limits"]["max_packet_chars"])
+    pipeline = GovernedDailyWeeklyPipeline(
+        vault=vault_root(),
+        staging_root=paths.runs / "governed-publication",
+        store=store,
+        model_factory=lambda run_id: ProtocolExtractionModel(
+            paths=paths,
+            role=role,
+            run_id=run_id,
+            max_packet_chars=max_packet_chars,
+            max_evidence_chars=max_packet_chars,
+        ),
+        model_contract=f"{role.name}:{role.reasoning}",
+        max_model_calls=int(defaults["limits"][f"max_model_calls_{kind}"]),
+        max_packet_chars=max_packet_chars,
+    )
+    result = pipeline.run(run_kind=kind, period=period)
+    if result["status"] == "completed":
+        result["journal_index_path"] = str(refresh_journal_index(vault_root(), kind))
+        review = write_review_artifacts(vault_root(), store)
+        result.update(review)
+        result["pending"] = len(store.observations("pending"))
+        result["promoted"] = 0
+    return result
+
+
 def _synthesize(
     kind: str,
     *,
@@ -716,10 +876,14 @@ def _synthesize(
         evidence = evidence_override
     elif kind == "weekly":
         if summary_period and re.fullmatch(r"\d{4}-W\d{2}", summary_period):
-            year, week = (int(value) for value in summary_period.replace("W", "").split("-"))
+            year, week = (
+                int(value) for value in summary_period.replace("W", "").split("-")
+            )
             start_date = date.fromisocalendar(year, week, 1)
             local_tz = datetime.now().astimezone().tzinfo
-            start = datetime.combine(start_date, datetime.min.time(), tzinfo=local_tz).astimezone(UTC)
+            start = datetime.combine(
+                start_date, datetime.min.time(), tzinfo=local_tz
+            ).astimezone(UTC)
             end = start + timedelta(days=7)
         else:
             start = datetime.now(UTC) - timedelta(days=7)
@@ -727,7 +891,8 @@ def _synthesize(
         evidence = [
             item
             for item in store.evidence_since(start.isoformat())
-            if str(item.get("occurred_at") or item.get("created_at") or "") < end.isoformat()
+            if str(item.get("occurred_at") or item.get("created_at") or "")
+            < end.isoformat()
             if item.get("status") not in {"compacted", "superseded"}
             and not (
                 item["source_type"] in SESSION_SOURCE_TYPES
@@ -783,7 +948,12 @@ def _synthesize(
             }
         )
         if store.get_meta("weekly-evidence-fingerprint") == weekly_fingerprint:
-            return {"status": "empty", "evidence_count": 0, "model_called": False, "reason": "weekly evidence unchanged"}
+            return {
+                "status": "empty",
+                "evidence_count": 0,
+                "model_called": False,
+                "reason": "weekly evidence unchanged",
+            }
     max_calls = int(defaults["limits"][f"max_model_calls_{model_kind}"])
     remaining = list(evidence)
     processed: list[dict[str, Any]] = []
@@ -839,7 +1009,9 @@ def _synthesize(
                 used_ids.update(item.get("evidence_refs", []))
             unknown = used_ids - packet_ids
             if unknown:
-                raise RuntimeError(f"Model output referenced unknown evidence: {sorted(unknown)}")
+                raise RuntimeError(
+                    f"Model output referenced unknown evidence: {sorted(unknown)}"
+                )
             outputs.append(output)
             processed.extend(selected)
             selected_ids = {item["id"] for item in selected}
@@ -854,7 +1026,9 @@ def _synthesize(
                 usage=usage,
             )
         except Exception as error:
-            store.finish_run(run_id, "failed", evidence_count=len(selected), error=str(error))
+            store.finish_run(
+                run_id, "failed", evidence_count=len(selected), error=str(error)
+            )
             raise
     if not outputs:
         return {"status": "empty", "evidence_count": 0, "model_called": False}
@@ -906,7 +1080,9 @@ def _synthesize(
             else:
                 if item["summary"] not in existing["summary"]:
                     existing["summary"] += "\n\n" + item["summary"]
-                existing["evidence_refs"] = sorted(set(existing["evidence_refs"] + item["evidence_refs"]))
+                existing["evidence_refs"] = sorted(
+                    set(existing["evidence_refs"] + item["evidence_refs"])
+                )
         for item in output["skill_updates"]:
             existing = skill_updates.get(item["skill_id"])
             if not existing:
@@ -914,10 +1090,17 @@ def _synthesize(
             else:
                 if item["claim"] not in existing["claim"]:
                     existing["claim"] += "\n\n" + item["claim"]
-                existing["evidence_refs"] = sorted(set(existing["evidence_refs"] + item["evidence_refs"]))
+                existing["evidence_refs"] = sorted(
+                    set(existing["evidence_refs"] + item["evidence_refs"])
+                )
                 existing["confidence"] = max(existing["confidence"], item["confidence"])
-                existing["authorship_confirmed"] = existing["authorship_confirmed"] and item["authorship_confirmed"]
-                existing["successful_implementation"] = existing["successful_implementation"] and item["successful_implementation"]
+                existing["authorship_confirmed"] = (
+                    existing["authorship_confirmed"] and item["authorship_confirmed"]
+                )
+                existing["successful_implementation"] = (
+                    existing["successful_implementation"]
+                    and item["successful_implementation"]
+                )
     voice_samples = []
     seen_voice = set()
     for output in outputs:
@@ -935,7 +1118,9 @@ def _synthesize(
         "session_summaries": list(session_summaries.values()),
         "skill_updates": list(skill_updates.values()),
         "voice_samples": voice_samples,
-        "review_items": [item for output in outputs for item in output.get("review_items", [])],
+        "review_items": [
+            item for output in outputs for item in output.get("review_items", [])
+        ],
         "question_resolutions": list(question_resolutions.values()),
     }
     if kind == "bootstrap" and not any(
@@ -1013,7 +1198,9 @@ def _bootstrap_synthesis_step(
     profile_result = publish_interview_profile(vault_root(), store, paths.root)
     repaired_files = repair_generated_markdown(vault_root())
     review_artifacts = write_bootstrap_review_artifacts(vault_root(), store)
-    review_path = review_artifacts.get("review_path") or str(vault_root() / "Inbox" / "Review")
+    review_path = review_artifacts.get("review_path") or str(
+        vault_root() / "Inbox" / "Review"
+    )
     store.set_bootstrap_state("awaiting_review", review_path=review_path)
     return {
         **result,
@@ -1037,7 +1224,9 @@ def incremental(
             "Daily runs at 10:30 PM by default. A manual Daily requires one explicit "
             "owner request and the --owner-requested authorization."
         )
-    if not publish_git and (kind != "daily" or trigger == "scheduled" or not manual_authorized):
+    if not publish_git and (
+        kind != "daily" or trigger == "scheduled" or not manual_authorized
+    ):
         raise RuntimeError(
             "Local test publication is available only for an explicitly owner-requested manual Daily."
         )
@@ -1053,6 +1242,7 @@ def incremental(
 
     try:
         with single_instance(paths.locks / "pipeline.lock"):
+            index_baseline = canonical_markdown_fingerprints(vault_root())
             previous_projects = store.present_projects()
             if publish_git:
                 stage("snapshot_manual_notes")
@@ -1064,9 +1254,16 @@ def incremental(
                 store,
                 projects_root=Path(config["projects_root"]),
                 defaults=defaults,
-                ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
-                collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
-                classification_overrides=config.get("project_classification_overrides", {}),
+                ignored_paths=[
+                    Path(item) for item in config.get("ignored_project_paths", [])
+                ],
+                collection_paths=[
+                    Path(item) for item in config.get("project_collection_paths", [])
+                ],
+                classification_overrides=config.get(
+                    "project_classification_overrides", {}
+                ),
+                managed_projects=_managed_projects(),
             )
             stage("publish_project_catalog")
             publish_project_catalog(vault_root(), project_result["projects"])
@@ -1099,8 +1296,8 @@ def incremental(
                 project_result["changed_project_ids"],
                 strict=False,
             )
-            stage("synthesize")
-            result = _synthesize(
+            stage("governed_extract_apply")
+            result = _governed_synthesize(
                 kind,
                 store=store,
                 paths=paths,
@@ -1108,6 +1305,13 @@ def incremental(
                 summary_period=summary_period,
             )
             if result["status"] == "empty":
+                changed_paths = changed_canonical_markdown_paths(
+                    index_baseline,
+                    canonical_markdown_fingerprints(vault_root()),
+                )
+                if changed_paths:
+                    stage("reindex_changed")
+                    reindex_changed(paths, vault_root(), changed_paths)
                 stage("notify")
                 notify(
                     "Second brain",
@@ -1121,21 +1325,31 @@ def incremental(
                     "publication": "private-git" if publish_git else "local-test",
                     "git_commit_created": False,
                     "git_push_attempted": False,
+                    "changed_index_paths": changed_paths,
+                    "index_refresh": "changed-only" if changed_paths else "none",
                 }
-            stage("reindex")
-            reindex(paths, vault_root())
+            changed_paths = changed_canonical_markdown_paths(
+                index_baseline,
+                canonical_markdown_fingerprints(vault_root()),
+            )
+            if changed_paths:
+                stage("reindex_changed")
+                reindex_changed(paths, vault_root(), changed_paths)
             git_commit_created = False
             if publish_git:
                 stage("commit")
                 git_commit_created = commit_if_changed(
-                    vault_root(), f"Second brain {kind} update {date.today().isoformat()}"
+                    vault_root(),
+                    f"Second brain {kind} update {date.today().isoformat()}",
                 )
                 stage("push")
                 safe_push_private(vault_root())
             review = Path(result["review_path"]) if result.get("review_path") else None
             stage("notify")
             notify(
-                "Second brain test updated" if not publish_git else "Second brain updated",
+                "Second brain test updated"
+                if not publish_git
+                else "Second brain updated",
                 (
                     f"{result.get('promoted', 0)} promoted, "
                     f"{result.get('pending', 0)} need review"
@@ -1150,6 +1364,8 @@ def incremental(
                 "publication": "private-git" if publish_git else "local-test",
                 "git_commit_created": git_commit_created,
                 "git_push_attempted": bool(publish_git),
+                "changed_index_paths": changed_paths,
+                "index_refresh": "changed-only" if changed_paths else "none",
             }
     except Exception as error:
         store.finish_pipeline_run(
@@ -1165,15 +1381,22 @@ def sync_project_index() -> dict[str, Any]:
 
     paths, config, defaults, store = context()
     if store.bootstrap_state()["state"] != "completed":
-        raise RuntimeError("Complete and approve bootstrap before refreshing the project catalog.")
+        raise RuntimeError(
+            "Complete and approve bootstrap before refreshing the project catalog."
+        )
     with single_instance(paths.locks / "pipeline.lock"):
         project_result = collect_projects(
             store,
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
-            ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
-            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
+            ignored_paths=[
+                Path(item) for item in config.get("ignored_project_paths", [])
+            ],
+            collection_paths=[
+                Path(item) for item in config.get("project_collection_paths", [])
+            ],
             classification_overrides=config.get("project_classification_overrides", {}),
+            managed_projects=_managed_projects(),
         )
         catalog = publish_project_catalog(vault_root(), project_result["projects"])
         reindex(paths, vault_root())
@@ -1216,18 +1439,26 @@ def refresh_project(identifier: str) -> dict[str, Any]:
             store,
             projects_root=Path(config["projects_root"]),
             defaults=defaults,
-            ignored_paths=[Path(item) for item in config.get("ignored_project_paths", [])],
-            collection_paths=[Path(item) for item in config.get("project_collection_paths", [])],
+            ignored_paths=[
+                Path(item) for item in config.get("ignored_project_paths", [])
+            ],
+            collection_paths=[
+                Path(item) for item in config.get("project_collection_paths", [])
+            ],
             classification_overrides=config.get("project_classification_overrides", {}),
+            managed_projects=_managed_projects(),
         )
         publish_project_catalog(vault_root(), project_result["projects"])
         matches = [
             item
             for item in project_result["projects"]
-            if item["id"].casefold() == identifier.casefold() or item["name"].casefold() == identifier.casefold()
+            if item["id"].casefold() == identifier.casefold()
+            or item["name"].casefold() == identifier.casefold()
         ]
         if len(matches) != 1:
-            raise RuntimeError(f"Project lookup returned {len(matches)} matches for {identifier!r}.")
+            raise RuntimeError(
+                f"Project lookup returned {len(matches)} matches for {identifier!r}."
+            )
         project = matches[0]
         collect_sessions(store, config)
         _update_graphs(
@@ -1238,9 +1469,17 @@ def refresh_project(identifier: str) -> dict[str, Any]:
             strict=project["classification"] == "first-party",
             only_project_ids={project["id"]},
         )
-        evidence = [item for item in store.evidence(status="new") if item.get("project_id") == project["id"]]
+        evidence = [
+            item
+            for item in store.evidence(status="new")
+            if item.get("project_id") == project["id"]
+        ]
         if not evidence:
-            return {"status": "empty", "project_id": project["id"], "model_called": False}
+            return {
+                "status": "empty",
+                "project_id": project["id"],
+                "model_called": False,
+            }
         result = _synthesize(
             f"project-refresh:{project['id']}",
             store=store,
@@ -1250,7 +1489,9 @@ def refresh_project(identifier: str) -> dict[str, Any]:
             model_kind="daily",
         )
         reindex(paths, vault_root())
-        commit_if_changed(vault_root(), f"Refresh second-brain project {project['name']}")
+        commit_if_changed(
+            vault_root(), f"Refresh second-brain project {project['name']}"
+        )
         safe_push_private(vault_root())
         return {"project_id": project["id"], "project": project["name"], **result}
 
@@ -1281,7 +1522,9 @@ def scheduled() -> dict[str, Any]:
             "Second brain run failed",
             f"Evidence was preserved for retry. {str(error)[:180]}",
             vault=vault_root(),
-            note=vault_root() / "System" / "Health.md" if (vault_root() / "System" / "Health.md").exists() else None,
+            note=vault_root() / "System" / "Health.md"
+            if (vault_root() / "System" / "Health.md").exists()
+            else None,
         )
         raise
 
@@ -1304,7 +1547,9 @@ def approve_bootstrap() -> dict[str, Any]:
         check=False,
     )
     if tests.returncode != 0:
-        raise RuntimeError("Protocol tests failed: " + (tests.stdout + tests.stderr)[-4000:])
+        raise RuntimeError(
+            "Protocol tests failed: " + (tests.stdout + tests.stderr)[-4000:]
+        )
     reindex(paths, vault_root())
     marker = vault_root() / "System" / "Audits" / "Bootstrap" / "COMPLETED.md"
     marker.write_text(
@@ -1347,24 +1592,39 @@ def approve_bootstrap() -> dict[str, Any]:
     }
 
 
-def decide_review(observation_id: str, decision: str, *, reason: str | None = None) -> dict[str, Any]:
+def decide_review(
+    observation_id: str, decision: str, *, reason: str | None = None
+) -> dict[str, Any]:
     paths, config, _defaults, store = context()
     if decision == "approved":
-        matches = [item for item in store.observations("pending") if item["id"] == observation_id]
+        matches = [
+            item
+            for item in store.observations("pending")
+            if item["id"] == observation_id
+        ]
         if matches and matches[0]["kind"] == "clarification":
-            raise RuntimeError("Clarification items need `sb review resolve <id> --answer ...`, not approval.")
+            raise RuntimeError(
+                "Clarification items need `sb review resolve <id> --answer ...`, not approval."
+            )
         store.decide_observation(observation_id, "approved")
         promote_approved_observation(vault_root(), store, observation_id)
+        if matches:
+            _approve_governed_memory_proposal(store, matches[0])
         _refresh_review_artifacts(store)
         reindex(paths, vault_root())
-        commit_if_changed(vault_root(), f"Approve second-brain observation {observation_id}")
+        commit_if_changed(
+            vault_root(), f"Approve second-brain observation {observation_id}"
+        )
         if store.bootstrap_state()["state"] == "completed":
             safe_push_private(vault_root())
         return {"id": observation_id, "status": "promoted"}
     if decision == "rejected":
         if not reason:
             raise ValueError("A rejection reason is required")
+        observation = store.observation(observation_id)
         store.decide_observation(observation_id, "rejected", reason)
+        if observation is not None:
+            _reject_governed_memory_proposal(store, observation, reason=reason)
         _refresh_review_artifacts(store)
         return {"id": observation_id, "status": "rejected", "reason": reason}
     if decision == "resolved":
@@ -1380,7 +1640,9 @@ def decide_review(observation_id: str, decision: str, *, reason: str | None = No
     raise ValueError(decision)
 
 
-def decide_review_group(group_id: str, decision: str, *, reason: str | None = None) -> dict[str, Any]:
+def decide_review_group(
+    group_id: str, decision: str, *, reason: str | None = None
+) -> dict[str, Any]:
     paths, _config, _defaults, store = context()
     group = find_review_group(store.observations("pending"), group_id)
     if group["mode"] == "answer":
@@ -1388,11 +1650,18 @@ def decide_review_group(group_id: str, decision: str, *, reason: str | None = No
             "Clarification groups are answer-only. Resolve individual questions or leave them pending."
         )
     ids = [item["id"] for item in group["items"]]
+    observations = {
+        item["id"]: item for item in store.observations("pending") if item["id"] in ids
+    }
     if decision == "approved":
         promote_observation_group(vault_root(), store, ids)
+        for observation_id in ids:
+            _approve_governed_memory_proposal(store, observations[observation_id])
         _refresh_review_artifacts(store)
         reindex(paths, vault_root())
-        commit_if_changed(vault_root(), f"Approve second-brain review group {group['key']}")
+        commit_if_changed(
+            vault_root(), f"Approve second-brain review group {group['key']}"
+        )
         if store.bootstrap_state()["state"] == "completed":
             safe_push_private(vault_root())
         return {"group": group_id, "status": "promoted", "count": len(ids), "ids": ids}
@@ -1400,6 +1669,12 @@ def decide_review_group(group_id: str, decision: str, *, reason: str | None = No
         if not reason:
             raise ValueError("A batch rejection reason is required")
         store.decide_observations(ids, "rejected", reason)
+        for observation_id in ids:
+            _reject_governed_memory_proposal(
+                store,
+                observations[observation_id],
+                reason=reason,
+            )
         _refresh_review_artifacts(store)
         return {
             "group": group_id,
