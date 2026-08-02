@@ -287,3 +287,79 @@ def test_missing_projects_are_reported_without_local_paths(tmp_path: Path) -> No
     assert missing[0]["project"] == "Old Project"
     assert missing[0]["missing_since"]
     assert "local_path" not in missing[0]
+
+
+def test_governed_cutover_baseline_is_atomic_auditable_and_idempotent(
+    tmp_path: Path,
+) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    first_id, _ = store.add_evidence(
+        source_type="codex",
+        source_ref="codex:baseline:1",
+        kind="visible_message",
+        payload={"text": "historical one"},
+    )
+    second_id, _ = store.add_evidence(
+        source_type="codex",
+        source_ref="codex:baseline:2",
+        kind="visible_message",
+        payload={"text": "historical two"},
+    )
+    store.attach_checkpoint_candidate(
+        first_id,
+        source_key="codex:baseline",
+        cursor='{"kind":"jsonl","offset":10}',
+        fingerprint="baseline-1",
+    )
+    store.attach_checkpoint_candidate(
+        second_id,
+        source_key="codex:baseline",
+        cursor='{"kind":"jsonl","offset":20}',
+        fingerprint="baseline-2",
+    )
+    pending = store.add_observation(
+        {
+            "kind": "preference",
+            "subject": "Old dashboard item",
+            "claim": "This established item should leave the active queue.",
+            "evidence_refs": [first_id],
+            "confidence": 0.8,
+            "status": "pending",
+        }
+    )
+    promoted = store.add_observation(
+        {
+            "kind": "preference",
+            "subject": "Canonical knowledge",
+            "claim": "This confirmed knowledge must remain promoted.",
+            "evidence_refs": [second_id],
+            "confidence": 1.0,
+            "status": "promoted",
+        }
+    )
+
+    first = store.establish_governed_cutover_baseline(
+        reason="Owner-authorized governed Daily/Weekly cutover",
+    )
+    second = store.establish_governed_cutover_baseline(
+        reason="Owner-authorized governed Daily/Weekly cutover",
+    )
+
+    assert first == {
+        "status": "completed",
+        "evidence_baselined": 2,
+        "review_items_archived": 1,
+        "checkpoints_advanced": 1,
+    }
+    assert second == {
+        "status": "already_completed",
+        "evidence_baselined": 2,
+        "review_items_archived": 1,
+        "checkpoints_advanced": 1,
+    }
+    assert not store.evidence(status="new")
+    assert store.checkpoint("codex:baseline")["cursor"] == (
+        '{"kind":"jsonl","offset":20}'
+    )
+    assert store.observation(pending)["status"] == "rejected"
+    assert store.observation(promoted)["status"] == "promoted"

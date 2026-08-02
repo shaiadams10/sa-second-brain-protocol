@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/second-brain/recall-corpus.schema.json",
+  "title": "Recall benchmark corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "cases"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "sourceId": {
+      "type": "string",
+      "pattern": "^note-[a-z0-9][a-z0-9-]{2,95}$"
+    },
+    "sourceIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sourceId" }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "note_path", "title", "snippet", "score"],
+      "properties": {
+        "source_id": { "$ref": "#/$defs/sourceId" },
+        "note_path": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 512,
+          "pattern": "^(?!\\.)(?![A-Za-z][A-Za-z0-9+.-]*:)(?![\\\\/])(?!Inbox[\\\\/]Raw(?:[\\\\/]|$))(?!Evidence[\\\\/]Raw(?:[\\\\/]|$))(?!System[\\\\/]Local(?:[\\\\/]|$))(?!.*[\\\\/]\\.)(?!.*(?:[\\\\/]|^)(?:node_modules|__pycache__)(?:[\\\\/]|$))(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+\\.md$"
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "snippet": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "score": { "type": "number" },
+        "canonical": { "type": "boolean" },
+        "relations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "query",
+        "include_graph",
+        "expected_source_ids",
+        "lexical",
+        "vector",
+        "graph"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "query": { "type": "string", "minLength": 1, "maxLength": 1000, "pattern": "\\S" },
+        "include_graph": { "type": "boolean" },
+        "use_lexical": { "type": "boolean" },
+        "use_vector": { "type": "boolean" },
+        "comparison_key": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "comparison_kind": {
+          "type": "string",
+          "enum": ["lexical", "vector", "graph"]
+        },
+        "max_results": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_packet_chars": { "type": "integer", "minimum": 128, "maximum": 100000 },
+        "max_packet_tokens": { "type": "integer", "minimum": 32, "maximum": 25000 },
+        "expected_source_ids": {
+          "$ref": "#/$defs/sourceIds",
+          "minItems": 1
+        },
+        "forbidden_source_ids": { "$ref": "#/$defs/sourceIds" },
+        "graph_seed_source_ids": { "$ref": "#/$defs/sourceIds" },
+        "lexical": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidate" }
+        },
+        "vector": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidate" }
+        },
+        "graph": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/candidate" }
+        }
+      },
+      "dependentRequired": {
+        "comparison_key": ["comparison_kind"],
+        "comparison_kind": ["comparison_key"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "include_graph": { "const": true } },
+            "required": ["include_graph"]
+          },
+          "then": {
+            "required": ["graph_seed_source_ids"],
+            "properties": {
+              "graph_seed_source_ids": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

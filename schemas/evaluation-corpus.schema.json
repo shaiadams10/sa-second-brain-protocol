@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "name", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "name": {"type": "string", "minLength": 1, "maxLength": 120},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "required": [
+        "name",
+        "run_kind",
+        "evidence",
+        "scripted_responses",
+        "expected",
+        "live_enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 160},
+        "run_kind": {"enum": ["daily", "weekly"]},
+        "live_enabled": {"type": "boolean"},
+        "max_input_tokens": {"type": "integer", "minimum": 0},
+        "meaning_terms": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_episode_messages": {"type": "integer", "minimum": 1},
+            "max_episode_chars": {"type": "integer", "minimum": 1}
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "source_type", "kind", "payload"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^ev-[a-z0-9-]{3,96}$"},
+              "source_type": {"type": "string", "minLength": 1},
+              "kind": {"type": "string", "minLength": 1},
+              "project_id": {"type": ["string", "null"]},
+              "occurred_at": {"type": ["string", "null"]},
+              "payload": {"type": "object"}
+            },
+            "additionalProperties": true
+          }
+        },
+        "scripted_responses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "object"}
+        },
+        "expected": {
+          "type": "object",
+          "required": ["status", "candidates", "rejection_codes"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {"enum": ["empty", "accepted", "partial", "rejected", "failed"]},
+            "candidates": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/candidate"}
+            },
+            "rejection_codes": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "failure_codes": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "type",
+        "operation",
+        "kind",
+        "subject",
+        "claim",
+        "scope",
+        "project_id",
+        "evidence_refs",
+        "confidence",
+        "explicit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "memory_mutation"},
+        "operation": {"enum": ["create", "reinforce", "update", "supersede", "contradict"]},
+        "kind": {"type": "string", "minLength": 1},
+        "subject": {"type": "string", "minLength": 1},
+        "claim": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["global", "project", "context"]},
+        "project_id": {"type": ["string", "null"]},
+        "target_memory_id": {"type": ["string", "null"]},
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "explicit": {"type": "boolean"}
+      }
+    }
+  }
+}

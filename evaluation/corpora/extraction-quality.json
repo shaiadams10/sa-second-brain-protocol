@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "name": "extraction-quality-v1",
+  "cases": [
+    {
+      "name": "explicit global preference becomes one memory candidate",
+      "run_kind": "daily",
+      "live_enabled": true,
+      "max_input_tokens": 2500,
+      "meaning_terms": [[
+        ["review"],
+        ["memory", "memories"],
+        ["before"],
+        ["stor"]
+      ]],
+      "evidence": [
+        {
+          "id": "ev-quality-preference",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "occurred_at": "2026-08-01T11:00:00Z",
+          "payload": {
+            "source": "synthetic",
+            "analysis_lane": "profile_only",
+            "project_ids": [],
+            "user_messages": [
+              {
+                "occurred_at": "2026-08-01T11:00:00Z",
+                "text": "Across all my projects, always show me uncertain memory changes for review before storing them."
+              }
+            ],
+            "assistant_results": []
+          }
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "preference",
+              "subject": "Review uncertain memory changes",
+              "claim": "the user wants uncertain memory changes shown for review before they are stored.",
+              "scope": "global",
+              "project_id": null,
+              "evidence_refs": ["ev-quality-preference"],
+              "confidence": 0.98,
+              "explicit": true
+            }
+          ],
+          "usage": {"input_tokens": 450, "output_tokens": 110, "total_tokens": 560}
+        }
+      ],
+      "expected": {
+        "status": "accepted",
+        "candidates": [
+          {
+            "type": "memory_mutation",
+            "operation": "create",
+            "kind": "preference",
+            "subject": "Review uncertain memory changes",
+            "claim": "the user wants uncertain memory changes shown for review before they are stored.",
+            "scope": "global",
+            "project_id": null,
+            "target_memory_id": null,
+            "evidence_refs": ["ev-quality-preference"],
+            "confidence": 0.98,
+            "explicit": true
+          }
+        ],
+        "rejection_codes": []
+      }
+    },
+    {
+      "name": "full-lane decision stays with its authoritative project",
+      "run_kind": "daily",
+      "live_enabled": true,
+      "max_input_tokens": 2500,
+      "meaning_terms": [[
+        ["scheduler"],
+        ["authoritative"],
+        ["shadow"],
+        ["evaluation"],
+        ["pass"]
+      ]],
+      "evidence": [
+        {
+          "id": "ev-quality-project-decision",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": "project-memory",
+          "occurred_at": "2026-08-01T12:00:00Z",
+          "payload": {
+            "source": "synthetic",
+            "analysis_lane": "full",
+            "attribution_status": "matched",
+            "project_ids": ["project-memory"],
+            "user_messages": [
+              {
+                "occurred_at": "2026-08-01T12:00:00Z",
+                "text": "For project-memory, keep the current scheduler authoritative until the shadow evaluation passes."
+              }
+            ],
+            "assistant_results": []
+          }
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "decision",
+              "subject": "Shadow-gated scheduler cutover",
+              "claim": "Project-memory keeps the current scheduler authoritative until shadow evaluation passes.",
+              "scope": "project",
+              "project_id": "project-memory",
+              "evidence_refs": ["ev-quality-project-decision"],
+              "confidence": 0.97,
+              "explicit": true
+            }
+          ],
+          "usage": {"input_tokens": 470, "output_tokens": 115, "total_tokens": 585}
+        }
+      ],
+      "expected": {
+        "status": "accepted",
+        "candidates": [
+          {
+            "type": "memory_mutation",
+            "operation": "create",
+            "kind": "decision",
+            "subject": "Shadow-gated scheduler cutover",
+            "claim": "Project-memory keeps the current scheduler authoritative until shadow evaluation passes.",
+            "scope": "project",
+            "project_id": "project-memory",
+            "target_memory_id": null,
+            "evidence_refs": ["ev-quality-project-decision"],
+            "confidence": 0.97,
+            "explicit": true
+          }
+        ],
+        "rejection_codes": []
+      }
+    },
+    {
+      "name": "routine transient request produces no durable memory",
+      "run_kind": "daily",
+      "live_enabled": true,
+      "max_input_tokens": 2000,
+      "meaning_terms": [],
+      "evidence": [
+        {
+          "id": "ev-quality-empty",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "occurred_at": "2026-08-01T13:00:00Z",
+          "payload": {
+            "source": "synthetic",
+            "analysis_lane": "profile_only",
+            "project_ids": [],
+            "user_messages": [
+              {
+                "occurred_at": "2026-08-01T13:00:00Z",
+                "text": "What time is it?"
+              }
+            ],
+            "assistant_results": []
+          }
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [],
+          "usage": {"input_tokens": 300, "output_tokens": 20, "total_tokens": 320}
+        }
+      ],
+      "expected": {
+        "status": "empty",
+        "candidates": [],
+        "rejection_codes": []
+      }
+    }
+  ]
+}

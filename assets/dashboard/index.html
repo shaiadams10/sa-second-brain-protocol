@@ -374,6 +374,30 @@
     .briefing-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; font-family: var(--mono); font-size: 11px; }
     .briefing-foot a { color: var(--pink-soft); border-bottom: 1px solid currentColor; }
 
+    .personality-panel { grid-column: span 12; overflow: visible; background: linear-gradient(128deg, var(--paper-bright) 0 32%, var(--purple-soft) 32% 100%); }
+    .personality-panel::before { z-index: 4; }
+    .personality-map { display: grid; grid-template-columns: minmax(210px, 0.7fr) minmax(0, 2.3fr); gap: clamp(22px, 4vw, 54px); align-items: center; }
+    .personality-core { position: relative; display: grid; place-items: center; min-height: 250px; }
+    .personality-core::before, .personality-core::after { content: ""; position: absolute; border: 1.5px dashed var(--purple); border-radius: 50%; }
+    .personality-core::before { width: 218px; height: 218px; animation: personality-orbit 26s linear infinite; }
+    .personality-core::after { width: 180px; height: 180px; border-color: var(--pink); animation: personality-orbit 18s linear infinite reverse; }
+    .personality-orb { position: relative; z-index: 1; display: grid; place-items: center; width: 144px; height: 144px; padding: 14px; border: 3px solid var(--ink); border-radius: 50%; background: var(--purple-deep); color: white; box-shadow: 8px 8px 0 var(--pink); text-align: center; }
+    .personality-initials { font-family: var(--mono); font-size: 42px; font-weight: 950; line-height: 0.95; letter-spacing: -0.08em; }
+    .personality-status { margin-top: 7px; color: var(--pink-soft); font-family: var(--mono); font-size: 9px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+    .personality-measure { position: absolute; z-index: 2; right: 4px; bottom: 7px; padding: 7px 9px; border: 1.5px solid var(--ink); background: var(--paper-bright); box-shadow: 3px 3px 0 var(--ink); font-family: var(--mono); font-size: 9px; font-weight: 900; text-align: center; text-transform: uppercase; }
+    .personality-measure strong { display: block; color: var(--purple-deep); font-size: 18px; }
+    .personality-facets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .personality-facet { position: relative; min-width: 0; min-height: 135px; padding: 14px; border: 1.5px solid var(--ink); background: rgba(255, 255, 255, 0.82); box-shadow: 3px 3px 0 var(--ink); transition: transform var(--motion-fast) var(--ease-smooth), box-shadow var(--motion-fast) var(--ease-smooth); }
+    .personality-facet:hover { transform: translateY(-3px); box-shadow: 4px 6px 0 var(--ink); }
+    .personality-facet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+    .personality-marker { display: grid; place-items: center; min-width: 38px; height: 24px; padding-inline: 5px; background: var(--ink); color: white; font-family: var(--mono); font-size: 8px; font-weight: 950; letter-spacing: 0.06em; }
+    .personality-facet-title { min-width: 0; font-family: var(--mono); font-size: 11px; font-weight: 950; text-transform: uppercase; }
+    .personality-facet-count { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .personality-signals { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+    .personality-signal { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .personality-signal::before { content: "\25AA"; margin-right: 6px; color: var(--pink); }
+    .personality-forming { color: var(--muted); font-family: var(--mono); font-size: 10px; font-style: italic; }
+
     .summary-panel { grid-column: span 12; }
     .summary-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
     .summary-tab { padding: 8px 11px; border: 1.5px solid var(--ink); background: var(--paper-bright); cursor: pointer; font-family: var(--mono); font-size: 11px; font-weight: 900; text-transform: uppercase; }
@@ -1259,85 +1283,120 @@
     .skills-source blockquote { margin: 14px 0; padding-left: 14px; border-left: 3px solid var(--skills-accent); }
     .skills-library-note { margin: 18px 0 0; color: var(--skills-muted); font-size: 13px; text-align: center; }
 
+    /* Solid, High-Contrast Animate-UI Design (No Glassmorphism, 60fps Micro-Animations) */
     .skills-library {
-      --reader-bg: #0b0b0c;
-      --reader-panel: #111113;
-      --reader-panel-raised: #18181b;
-      --reader-line: #2a2a2e;
-      --reader-text: #f2f1f3;
-      --reader-muted: #a6a3aa;
-      --reader-accent: #f1b832;
-      overflow: clip;
-      border: 1px solid #26262a;
-      border-radius: 22px;
+      --reader-bg: #09090b;
+      --reader-panel: #121215;
+      --reader-panel-raised: #18181c;
+      --reader-line: #27272a;
+      --reader-text: #ffffff;
+      --reader-muted: #a1a1aa;
+      --reader-accent: #f59e0b;
+      --reader-accent-dark: #271e0c;
+      overflow: hidden;
+      border: 1px solid #27272a;
+      border-radius: 16px;
       background: var(--reader-bg);
       color: var(--reader-text);
       font-family: var(--sans);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
     }
     .skills-library-bar {
       display: flex;
       justify-content: space-between;
       gap: 18px;
       align-items: center;
-      min-height: 78px;
-      padding: 14px 20px;
+      min-height: 70px;
+      padding: 14px 24px;
       border-bottom: 1px solid var(--reader-line);
-      background: #101012;
+      background: #111115;
     }
     .skills-library-kicker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       color: var(--reader-accent);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
-      letter-spacing: 0.09em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
-    .skills-library-bar h2 {
-      margin: 3px 0 0;
-      font-size: clamp(23px, 2.4vw, 31px);
-      line-height: 1;
-      letter-spacing: -0.045em;
+    .skills-library-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--reader-accent);
+      box-shadow: 0 0 10px var(--reader-accent);
+      animation: animateUiPulse 2s infinite ease-in-out;
     }
-    .skills-library-toolbar { display: flex; gap: 8px; align-items: center; }
+    @keyframes animateUiPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.6; }
+    }
+    .skills-library-bar h2 {
+      margin: 2px 0 0;
+      font-size: clamp(22px, 2.2vw, 26px);
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .skills-library-toolbar { display: flex; gap: 10px; align-items: center; }
     .skills-library-meta {
-      display: grid;
-      grid-template-columns: auto auto;
-      gap: 9px;
+      display: flex;
       align-items: baseline;
+      gap: 6px;
       color: var(--reader-muted);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 650;
     }
-    .skills-library-meta strong { color: var(--reader-text); font-size: 23px; letter-spacing: -0.04em; }
+    .skills-library-meta strong { color: var(--reader-text); font-size: 20px; letter-spacing: -0.04em; }
     .skills-library-tool,
     .skills-view-tab,
     .skills-package-file {
-      border: 1px solid #3b3a3f;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid #27272a;
       border-radius: 8px;
-      background: transparent;
-      color: #b9b6bd;
+      background: #18181b;
+      color: #a1a1aa;
       cursor: pointer;
-      font: 750 12px/1 var(--sans);
+      font: 700 12px/1 var(--sans);
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
     }
-    .skills-library-tool { min-height: 36px; padding: 0 12px; }
     .skills-library-tool:hover,
-    .skills-library-tool:focus-visible,
-    .skills-library-tool.active,
     .skills-view-tab:hover,
-    .skills-view-tab:focus-visible,
+    .skills-package-file:hover {
+      border-color: #3f3f46;
+      background: #27272a;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+    .skills-library-tool:active,
+    .skills-view-tab:active,
+    .skills-package-file:active {
+      transform: scale(0.96);
+    }
+    .skills-library-tool.active,
     .skills-view-tab.active,
-    .skills-package-file:hover,
-    .skills-package-file:focus-visible,
     .skills-package-file.active {
       border-color: var(--reader-accent);
-      background: #28231a;
+      background: #271e0c;
       color: var(--reader-accent);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
     }
     .skills-workbench {
       display: grid;
-      grid-template-columns: minmax(250px, 286px) minmax(0, 1fr);
+      grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
       align-items: start;
-      min-height: 640px;
-      transition: grid-template-columns 160ms ease;
+      min-height: 660px;
+      transition: grid-template-columns 240ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .skills-workbench.catalog-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
     .skills-workbench.catalog-collapsed .skills-navigation {
@@ -1351,130 +1410,340 @@
       position: sticky;
       top: 0;
       max-height: 100vh;
-      overflow: auto;
+      overflow-y: auto;
       border-right: 1px solid var(--reader-line);
-      background: #0e0e10;
-      scrollbar-color: #3c3b40 transparent;
+      background: #111115;
+      scrollbar-color: #27272a transparent;
       scrollbar-width: thin;
-      transition: opacity 140ms ease;
     }
     .skills-navigation-head {
-      padding: 16px;
+      padding: 16px 18px;
       border-bottom: 1px solid var(--reader-line);
-      background: #141416;
+      background: #16161c;
     }
     .skills-navigation-head > p:first-child {
-      margin: 0 0 13px;
-      color: #c8c5cc;
-      font-size: 12px;
+      margin: 0 0 12px;
+      color: var(--reader-muted);
+      font-size: 11.5px;
       line-height: 1.45;
     }
-    .skills-navigation-search { display: grid; gap: 8px; }
-    .skills-navigation-search span {
+    .search-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-input-wrapper .search-icon {
+      position: absolute;
+      left: 12px;
       color: var(--reader-muted);
-      font-size: 12px;
-      font-weight: 750;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+      pointer-events: none;
+      transition: color 180ms ease, transform 180ms ease;
     }
     .skills-navigation-search input {
       width: 100%;
-      min-height: 39px;
-      padding: 0 13px;
-      border: 1px solid #3a393e;
-      border-radius: 9px;
-      background: #0b0b0d;
-      color: white;
-      font: 600 15px/1 var(--sans);
+      min-height: 38px;
+      padding: 0 38px 0 34px;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      background: #09090b;
+      color: #ffffff;
+      font: 600 13px/1 var(--sans);
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .skills-navigation-search input:focus {
-      outline: 2px solid color-mix(in srgb, var(--reader-accent) 55%, transparent);
-      outline-offset: 2px;
+      outline: none;
       border-color: var(--reader-accent);
+      background: #18181b;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
     }
-    .skills-navigation-count { margin: 12px 0 0 !important; color: var(--reader-muted) !important; font-size: 12px !important; }
-    .skills-nav-group + .skills-nav-group { border-top: 1px solid var(--reader-line); }
-    .skills-nav-group-head {
-      display: grid;
-      width: 100%;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 10px;
-      align-items: center;
-      padding: 14px 15px;
+    .skills-navigation-search input:focus ~ .search-icon,
+    .search-input-wrapper:focus-within .search-icon {
+      color: var(--reader-accent);
+      transform: scale(1.1);
+    }
+    .search-shortcut-badge {
+      position: absolute;
+      right: 10px;
+      pointer-events: none;
+    }
+    .search-shortcut-badge kbd {
+      padding: 2px 6px;
+      border: 1px solid #3f3f46;
+      border-radius: 4px;
+      background: #18181b;
+      color: var(--reader-muted);
+      font: 700 10px/1 var(--mono);
+    }
+    .search-clear-btn {
+      position: absolute;
+      right: 32px;
       border: 0;
       background: transparent;
-      color: inherit;
+      color: var(--reader-muted);
       cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      transition: color 150ms ease, transform 150ms ease;
+    }
+    .search-clear-btn:hover { color: #ffffff; transform: scale(1.2); }
+    .skills-navigation-count { margin: 10px 0 0 !important; color: var(--reader-muted) !important; font-size: 11.5px !important; }
+    
+    /* Animate-UI Files Component Styling */
+    .animate-ui-files {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 6px;
+    }
+    .animate-ui-folder-item {
+      border-radius: 8px;
+      transition: background-color 150ms ease;
+    }
+    .animate-ui-folder-trigger {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 9px 10px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #e4e4e7;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
       text-align: left;
+      transition: background-color 150ms ease, color 150ms ease;
     }
-    .skills-nav-group-head:hover,
-    .skills-nav-group-head:focus-visible { background: #171719; }
-    .skills-nav-group-head::before {
-      content: "›";
-      grid-column: 1;
-      grid-row: 1;
-      color: #77747c;
-      font-size: 18px;
-      transform-origin: center;
-      transition: transform 140ms ease;
+    .animate-ui-folder-trigger:hover {
+      background: #18181c;
+      color: #ffffff;
     }
-    .skills-nav-group.open .skills-nav-group-head::before { transform: rotate(90deg); color: var(--reader-accent); }
-    .skills-nav-group-index { display: none; }
-    .skills-nav-group-title { grid-column: 2; }
-    .skills-nav-group-count { grid-column: 3; }
-    .skills-nav-group-title { font-size: 15px; font-weight: 800; }
-    .skills-nav-group-count { color: #706d75; font: 700 11px/1 var(--mono); }
-    .skills-nav-group-hint {
-      margin: -5px 15px 11px 40px;
-      color: #77747c;
+    .animate-ui-chevron {
+      display: flex;
+      align-items: center;
+      color: #71717a;
+      transition: transform 250ms cubic-bezier(0.32, 0.72, 0, 1), color 200ms ease;
+    }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-chevron {
+      transform: rotate(90deg);
+      color: var(--reader-accent);
+    }
+    .animate-ui-folder-icon {
+      display: flex;
+      align-items: center;
+      color: #71717a;
+      transition: color 200ms ease, transform 200ms ease;
+    }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-folder-icon {
+      color: var(--reader-accent);
+      transform: scale(1.1);
+    }
+    .animate-ui-folder-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .animate-ui-folder-badge {
+      padding: 1px 6px;
+      border: 1px solid #27272a;
+      border-radius: 999px;
+      background: #18181b;
+      color: #a1a1aa;
+      font: 700 10px/1 var(--mono);
+    }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-folder-badge {
+      border-color: var(--reader-accent);
+      background: #271e0c;
+      color: var(--reader-accent);
+    }
+    .animate-ui-folder-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows 280ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease;
+    }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-folder-panel {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+    .animate-ui-sub-files {
+      overflow: hidden;
+      position: relative;
+      margin-left: 17px;
+      padding: 4px 0 6px 12px;
+      border-left: 1px dashed #27272a;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .animate-ui-folder-hint {
+      margin: 2px 6px 8px 8px;
+      color: #71717a;
       font-size: 11px;
       line-height: 1.4;
     }
-    .skills-nav-group:not(.open) .skills-nav-group-hint,
-    .skills-nav-group:not(.open) .skills-nav-items { display: none; }
-    .skills-nav-items { padding-bottom: 7px; }
-    .skills-nav-skill {
-      display: grid;
-      position: relative;
-      width: 100%;
-      grid-template-columns: 15px minmax(0, 1fr);
-      gap: 11px;
+    .animate-ui-file-item {
+      display: flex;
       align-items: center;
-      min-height: 43px;
-      padding: 8px 15px;
-      border: 0;
-      border-left: 3px solid transparent;
+      gap: 8px;
+      width: calc(100% - 8px);
+      margin: 1px 4px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
       background: transparent;
-      color: #aaa7ae;
+      color: #a1a1aa;
       cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 600;
       text-align: left;
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .skills-nav-skill::before {
-      content: "▷";
-      color: #68656c;
-      font-size: 11px;
-      line-height: 1;
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item {
+      animation: animateUiFileItemSlide 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
-    .skills-nav-skill:hover,
-    .skills-nav-skill:focus-visible { background: #171719; color: white; }
-    .skills-nav-skill.active {
-      border-left-color: var(--reader-accent);
-      background: #1a1a1d;
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item:nth-child(1) { animation-delay: 20ms; }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item:nth-child(2) { animation-delay: 40ms; }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item:nth-child(3) { animation-delay: 60ms; }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item:nth-child(4) { animation-delay: 80ms; }
+    .animate-ui-folder-item[data-state="open"] .animate-ui-file-item:nth-child(5) { animation-delay: 100ms; }
+    @keyframes animateUiFileItemSlide {
+      from { opacity: 0; transform: translateX(-6px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-ui-file-item:hover {
+      background: #18181b;
+      color: #ffffff;
+      transform: translateX(3px);
+    }
+    .animate-ui-file-item.active {
+      border-color: var(--reader-accent);
+      background: #271e0c;
+      color: var(--reader-accent);
+      font-weight: 750;
+      box-shadow: inset 3px 0 0 var(--reader-accent), 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .animate-ui-file-icon {
+      display: flex;
+      align-items: center;
+      color: #52525b;
+      transition: color 150ms ease;
+    }
+    .animate-ui-file-item:hover .animate-ui-file-icon,
+    .animate-ui-file-item.active .animate-ui-file-icon {
       color: var(--reader-accent);
     }
-    .skills-nav-skill.active::before { content: "▶"; color: var(--reader-accent); }
-    .skills-nav-skill-name { overflow-wrap: anywhere; font-size: 12.5px; font-weight: 750; line-height: 1.25; }
-    .skills-navigation-empty { padding: 28px 20px; color: var(--reader-muted); font-size: 14px; text-align: center; }
+    .animate-ui-file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .animate-ui-git-status {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font: 700 9px/1 var(--mono);
+      text-transform: uppercase;
+    }
+    .animate-ui-git-status.manual {
+      background: #271e0c;
+      color: var(--reader-accent);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .animate-ui-git-status.automatic,
+    .animate-ui-git-status.auto {
+      background: #052e16;
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
     .skills-document {
       min-width: 0;
-      min-height: 640px;
+      min-height: 660px;
       background: var(--reader-bg);
     }
     .skills-document-empty { padding: 60px; color: var(--reader-muted); font-size: 18px; }
     .skills-document-hero {
-      padding: 24px clamp(26px, 4vw, 46px);
+      padding: 24px clamp(24px, 4vw, 42px);
       border-bottom: 1px solid var(--reader-line);
-      background: #171719;
+      background: #121215;
+      animation: animateUiFadeIn 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes animateUiFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .skills-breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--reader-muted);
+    }
+    .skills-bc-item {
+      border: 0;
+      background: transparent;
+      color: var(--reader-accent);
+      cursor: pointer;
+      font-weight: 700;
+      padding: 0;
+    }
+    .skills-bc-item:hover { text-decoration: underline; }
+    .skills-bc-sep { color: rgba(255, 255, 255, 0.2); }
+    .skills-bc-current { color: white; font-weight: 700; }
+    .skills-document-header-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    .skills-cmd-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 14px;
+      border: 1px solid rgba(241, 184, 50, 0.25);
+      border-radius: 12px;
+      background: rgba(20, 20, 25, 0.8);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    .skills-cmd-code {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .skills-cmd-prompt { color: var(--reader-accent); }
+    .skills-cmd-text { color: white; }
+    .skills-cmd-copy-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #d0cdd5;
+      cursor: pointer;
+      font-size: 11.5px;
+      font-weight: 700;
+      transition: all 160ms ease;
+    }
+    .skills-cmd-copy-btn:hover {
+      border-color: var(--reader-accent);
+      background: rgba(241, 184, 50, 0.12);
+      color: var(--reader-accent);
+    }
+    .skills-cmd-copy-btn.copied {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
     }
     .skills-document-kicker {
       color: var(--reader-accent);
@@ -1700,64 +1969,109 @@
       letter-spacing: -0.055em;
     }
     .skills-package-hero p { max-width: 720px; margin: 0; color: #b7b4bb; font-size: 14px; line-height: 1.5; }
-    .skills-package-stats { display: flex; gap: 8px; }
-    .skills-package-stat {
-      min-width: 88px;
-      padding: 12px;
-      border: 1px solid #39383d;
-      border-radius: 10px;
-      background: rgba(10, 10, 11, 0.54);
+    .skills-package-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding: 30px clamp(26px, 4vw, 46px) 24px;
+      border-bottom: 1px solid var(--reader-line);
+      background: #121215;
     }
-    .skills-package-stat strong { display: block; color: white; font-size: 22px; letter-spacing: -0.04em; }
-    .skills-package-stat span { color: #858189; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+    .skills-package-hero h3 {
+      max-width: 680px;
+      margin: 6px 0 9px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1;
+      letter-spacing: -0.05em;
+      color: #ffffff;
+    }
+    .skills-package-hero p { max-width: 720px; margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5; }
+    .skills-package-stats { display: flex; gap: 10px; }
+    .skills-package-stat {
+      min-width: 90px;
+      padding: 12px 14px;
+      border: 1px solid #27272a;
+      border-radius: 10px;
+      background: #18181b;
+      transition: all 180ms ease;
+    }
+    .skills-package-stat:hover {
+      border-color: var(--reader-accent);
+      transform: translateY(-2px);
+    }
+    .skills-package-stat strong { display: block; color: #ffffff; font-size: 22px; letter-spacing: -0.04em; }
+    .skills-package-stat span { color: #71717a; font-size: 10px; font-weight: 750; text-transform: uppercase; }
     .skills-capability-section { padding: 26px clamp(26px, 4vw, 46px) 42px; }
     .skills-section-heading {
       display: flex;
       justify-content: space-between;
       gap: 20px;
       align-items: end;
-      margin-bottom: 15px;
+      margin-bottom: 16px;
     }
-    .skills-section-heading h4 { margin: 0; font-size: 20px; letter-spacing: -0.025em; }
-    .skills-section-heading p { max-width: 520px; margin: 0; color: #817e86; font-size: 12px; text-align: right; }
+    .skills-section-heading h4 { margin: 0; font-size: 19px; letter-spacing: -0.02em; color: #ffffff; }
+    .skills-section-heading p { max-width: 520px; margin: 0; color: #a1a1aa; font-size: 12px; text-align: right; }
     .skills-capability-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      gap: 14px;
     }
     .skills-capability-card {
       min-width: 0;
-      padding: 16px;
-      border: 1px solid var(--reader-line);
+      padding: 18px;
+      border: 1px solid #27272a;
       border-radius: 12px;
-      background: #121214;
+      background: #121215;
+      transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .skills-capability-card:hover {
+      border-color: var(--reader-accent);
+      background: #16161c;
+      transform: translateY(-3px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(245, 158, 11, 0.1);
     }
     .skills-capability-card-head {
       display: flex;
       justify-content: space-between;
       gap: 12px;
       align-items: center;
-      margin-bottom: 7px;
+      margin-bottom: 8px;
     }
-    .skills-capability-card h5 { margin: 0; color: white; font-size: 15px; }
-    .skills-capability-card-count { color: var(--reader-accent); font: 800 10px/1 var(--mono); }
-    .skills-capability-card > p { min-height: 34px; margin: 0 0 12px; color: #87838c; font-size: 11px; line-height: 1.45; }
-    .skills-capability-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .skills-capability-card h5 { margin: 0; color: #ffffff; font-size: 15px; font-weight: 750; }
+    .skills-capability-card-count {
+      padding: 2px 7px;
+      border: 1px solid #27272a;
+      border-radius: 999px;
+      background: #18181b;
+      color: var(--reader-accent);
+      font: 800 10.5px/1 var(--mono);
+    }
+    .skills-capability-card > p { min-height: 34px; margin: 0 0 14px; color: #a1a1aa; font-size: 11.5px; line-height: 1.45; }
+    .skills-capability-skills { display: flex; flex-wrap: wrap; gap: 7px; }
     .skills-capability-skill,
     .skills-dependency {
-      min-height: 29px;
-      padding: 0 9px;
-      border: 1px solid #37363b;
-      border-radius: 999px;
-      background: #1b1b1e;
-      color: #cbc8ce;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      background: #18181b;
+      color: #e4e4e7;
       cursor: pointer;
-      font: 700 11px/1 var(--sans);
+      font: 700 11.5px/1 var(--sans);
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
     }
     .skills-capability-skill:hover,
-    .skills-capability-skill:focus-visible,
-    .skills-dependency:hover,
-    .skills-dependency:focus-visible { border-color: var(--reader-accent); color: var(--reader-accent); }
+    .skills-dependency:hover {
+      border-color: var(--reader-accent);
+      background: #271e0c;
+      color: var(--reader-accent);
+      transform: translateY(-2px) scale(1.03);
+    }
+    .skills-capability-skill:active,
+    .skills-dependency:active {
+      transform: scale(0.95);
+    }
     .skills-view-tabs {
       display: flex;
       gap: 7px;
@@ -1912,6 +2226,55 @@
       background: #17141c;
       color: #f4eff6;
     }
+    html[data-theme="dark"] .personality-panel {
+      overflow: visible;
+      border-color: #756d80;
+      background:
+        radial-gradient(circle at 15% 54%, rgba(170, 155, 236, 0.3), transparent 24%),
+        linear-gradient(128deg, #17131d 0 32%, #2a2138 32% 100%);
+      box-shadow: 4px 4px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-panel::before {
+      border-color: #f2edf5;
+      background: #7465b6;
+      color: white;
+      box-shadow: 3px 3px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-core::before { border-color: rgba(192, 178, 255, 0.72); }
+    html[data-theme="dark"] .personality-core::after { border-color: rgba(255, 95, 167, 0.82); }
+    html[data-theme="dark"] .personality-orb {
+      border-color: #f2edf5;
+      background: linear-gradient(145deg, #6253a0, #8f3f70);
+      box-shadow: 8px 8px 0 #ff5fa7;
+    }
+    html[data-theme="dark"] .personality-status { color: #ffe0ed; }
+    html[data-theme="dark"] .personality-measure {
+      border-color: #8b8196;
+      background: #1b1722;
+      color: #eee8f2;
+      box-shadow: 3px 3px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-measure strong { color: #c8bcff; }
+    html[data-theme="dark"] .personality-facet {
+      border-color: #776e82;
+      background: linear-gradient(145deg, rgba(54, 46, 68, 0.98), rgba(32, 27, 41, 0.98));
+      color: #f4eff6;
+      box-shadow: 3px 3px 0 #08060b;
+    }
+    html[data-theme="dark"] .personality-facet:hover {
+      border-color: #aa9bec;
+      background: linear-gradient(145deg, rgba(65, 53, 82, 0.98), rgba(39, 31, 49, 0.98));
+      box-shadow: 4px 6px 0 #08060b;
+    }
+    html[data-theme="dark"] .personality-marker {
+      border: 1px solid #b9adf4;
+      background: #7465b6;
+      color: white;
+    }
+    html[data-theme="dark"] .personality-facet-title { color: #f4eff6; }
+    html[data-theme="dark"] .personality-facet-count { color: #aaa0b2; }
+    html[data-theme="dark"] .personality-signal,
+    html[data-theme="dark"] .personality-forming { color: #c9c0ce; }
     html[data-theme="dark"] .focus-panel,
     html[data-theme="dark"] .matt-intro {
       background: #29223d;
@@ -1998,11 +2361,16 @@
       from { opacity: 0; transform: translateY(-7px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes personality-orbit {
+      to { transform: rotate(360deg); }
+    }
 
     @media (max-width: 1100px) {
       .hero { grid-template-columns: 1fr; }
       .hero-copy { border-right: 0; border-bottom: 2px dashed var(--muted); }
-      .knowledge-panel, .briefing-panel, .summary-panel, .questions-panel, .projects-panel, .pulse-panel { grid-column: span 12; }
+      .knowledge-panel, .briefing-panel, .personality-panel, .summary-panel, .questions-panel, .projects-panel, .pulse-panel { grid-column: span 12; }
+      .personality-map { grid-template-columns: minmax(190px, 0.55fr) minmax(0, 1.45fr); }
+      .personality-facets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .patterns-panel, .review-panel, .health-panel { grid-column: span 6; }
       .health-panel { grid-column: span 12; }
       .matt-intro { grid-template-columns: 1fr; }
@@ -2058,8 +2426,10 @@
       .metric + .metric { border-left: 0; }
       .metric:nth-child(even) { border-left: 1.5px dashed var(--muted); }
       .metric:nth-child(n+3) { border-top: 1.5px dashed var(--muted); }
-      .knowledge-panel, .briefing-panel, .patterns-panel, .review-panel, .health-panel, .runs-panel, .focus-panel { grid-column: span 12; }
+      .knowledge-panel, .briefing-panel, .personality-panel, .patterns-panel, .review-panel, .health-panel, .runs-panel, .focus-panel { grid-column: span 12; }
       .knowledge-panel, .panel { padding: 20px; }
+      .personality-map, .personality-facets { grid-template-columns: 1fr; }
+      .personality-core { min-height: 225px; }
       .review-toolbar { grid-template-columns: 1fr; }
       .review-card-list { grid-template-columns: 1fr; }
       .knowledge-panel, .briefing-panel { min-height: auto; }
@@ -2201,6 +2571,7 @@
       <button class="workspace-tab" type="button" role="tab" aria-selected="false" data-workspace-view="matt">Matt's skills <span class="workspace-tab-count" id="matt-tab-count">0</span></button>
       <span class="nav-divider" aria-hidden="true"></span>
       <a class="brain-section-link" href="#today">Today</a>
+      <a class="brain-section-link" href="#personality">Personality</a>
       <a class="brain-section-link" href="#summaries">Summary logs</a>
       <a class="brain-section-link" href="#knowledge">Knowledge Deck</a>
       <a class="brain-section-link" href="#questions">Questions</a>
@@ -2285,7 +2656,27 @@
           </div>
         </section>
 
-        <section class="panel summary-panel" id="summaries" data-index="03 // SUMMARY LOG" aria-labelledby="summaries-title">
+        <section class="panel personality-panel" id="personality" data-index="03 // IDENTITY MAP" aria-labelledby="personality-title">
+          <div class="panel-head">
+            <div>
+              <div class="panel-label">Personality portrait</div>
+              <h2 class="panel-title" id="personality-title">A compact view of who the brain is learning.</h2>
+            </div>
+            <a class="panel-link" id="personality-link" href="#">Open identity note ↗</a>
+          </div>
+          <div class="personality-map">
+            <div class="personality-core" aria-label="Evolving identity summary">
+              <div class="personality-orb">
+                <span class="personality-initials" id="personality-initials">SB</span>
+                <span class="personality-status" id="personality-status">Evolving</span>
+              </div>
+              <div class="personality-measure"><strong id="personality-signal-count">0</strong><span>grounded signals</span></div>
+            </div>
+            <div class="personality-facets" id="personality-facets"></div>
+          </div>
+        </section>
+
+        <section class="panel summary-panel" id="summaries" data-index="04 // SUMMARY LOG" aria-labelledby="summaries-title">
           <div class="panel-head">
             <div><div class="panel-label">Daily and weekly archive</div><h2 class="panel-title" id="summaries-title">What changed, and what we learned</h2></div>
             <div class="summary-tabs" role="tablist" aria-label="Summary log type">
@@ -2408,8 +2799,12 @@
             <div class="skills-navigation-head">
               <p>Expand a capability, then choose a skill. Categories stay folded until you need them.</p>
               <label class="skills-navigation-search">
-                <span>Search all skills</span>
-                <input id="matt-search" type="search" autocomplete="off" placeholder="Bug, spec, review…">
+                <div class="search-input-wrapper">
+                  <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  <input id="matt-search" type="search" autocomplete="off" placeholder="Search skills (press /)...">
+                  <button id="matt-search-clear" class="search-clear-btn" type="button" aria-label="Clear search" hidden>×</button>
+                  <span class="search-shortcut-badge"><kbd>/</kbd></span>
+                </div>
               </label>
               <p class="skills-navigation-count" id="matt-results-count" aria-live="polite"></p>
             </div>
@@ -3124,46 +3519,91 @@
       const renderMattLibraryNavigation = () => {
         const visible = visibleLibrarySkills();
         setText("matt-results-count", `${visible.length} of ${mattSkills.installed_count || 0} skills shown`);
+        const searchClear = byId("matt-search-clear");
+        if (searchClear) searchClear.hidden = !mattLibraryQuery.trim();
+
         const navigation = byId("matt-catalog-nav");
         navigation.replaceChildren();
         if (!visible.length) {
           navigation.append(make("div", "skills-navigation-empty", "No skills match that search."));
           return;
         }
-        (mattSkills.lanes || []).forEach((lane, laneIndex) => {
+
+        const filesRoot = make("div", "animate-ui-files");
+
+        (mattSkills.lanes || []).forEach((lane) => {
           const laneSkills = visible.filter((skill) => skill.lane === lane.id);
           if (!laneSkills.length) return;
+
           const expanded = Boolean(mattLibraryQuery.trim()) || mattExpandedLanes.has(lane.id);
-          const group = make("section", `skills-nav-group${expanded ? " open" : ""}`);
-          const heading = make("button", "skills-nav-group-head");
-          heading.type = "button";
-          heading.setAttribute("aria-expanded", String(expanded));
-          heading.append(
-            make("span", "skills-nav-group-index", String(laneIndex + 1).padStart(2, "0")),
-            make("span", "skills-nav-group-title", lane.label),
-            make("span", "skills-nav-group-count", String(laneSkills.length).padStart(2, "0")),
-          );
-          heading.addEventListener("click", () => {
-            if (mattExpandedLanes.has(lane.id)) mattExpandedLanes.delete(lane.id);
-            else mattExpandedLanes.add(lane.id);
+
+          const folderItem = make("div", "animate-ui-folder-item");
+          folderItem.dataset.value = lane.id;
+          folderItem.dataset.state = expanded ? "open" : "closed";
+
+          const trigger = make("button", "animate-ui-folder-trigger");
+          trigger.type = "button";
+          trigger.setAttribute("aria-expanded", String(expanded));
+
+          const folderSvg = expanded
+            ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/><path d="M2 10h20"/></svg>`
+            : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg>`;
+
+          const chevronSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
+
+          trigger.innerHTML = `
+            <span class="animate-ui-chevron">${chevronSvg}</span>
+            <span class="animate-ui-folder-icon">${folderSvg}</span>
+            <span class="animate-ui-folder-name">${lane.label}</span>
+            <span class="animate-ui-folder-badge">${String(laneSkills.length).padStart(2, "0")}</span>
+          `;
+
+          trigger.addEventListener("click", () => {
+            if (mattExpandedLanes.has(lane.id)) {
+              mattExpandedLanes.clear();
+            } else {
+              mattExpandedLanes.clear();
+              mattExpandedLanes.add(lane.id);
+            }
             renderMattLibraryNavigation();
           });
-          const items = make("div", "skills-nav-items");
-          items.hidden = !expanded;
+
+          const panel = make("div", "animate-ui-folder-panel");
+          const subFiles = make("div", "animate-ui-sub-files");
+
+          if (lane.hint) {
+            const hint = make("p", "animate-ui-folder-hint", lane.hint);
+            subFiles.append(hint);
+          }
+
           laneSkills.forEach((skill) => {
-            const button = make("button", `skills-nav-skill${skill.name === activeMattSkillName ? " active" : ""}`);
-            button.type = "button";
-            button.dataset.skill = skill.name;
-            button.setAttribute("aria-current", skill.name === activeMattSkillName ? "page" : "false");
-            button.append(make("span", "skills-nav-skill-name", `The /${skill.name} Skill`));
-            button.addEventListener("click", () => openMattSkillDocument(skill.name, { scroll: true }));
-            items.append(button);
+            const isActive = skill.name === activeMattSkillName;
+            const fileItem = make("button", `animate-ui-file-item${isActive ? " active" : ""}`);
+            fileItem.type = "button";
+            fileItem.dataset.skill = skill.name;
+
+            const cmdIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
+
+            fileItem.innerHTML = `
+              <span class="animate-ui-file-icon">${cmdIcon}</span>
+              <span class="animate-ui-file-name">/${skill.name}</span>
+              <span class="animate-ui-git-status ${skill.mode}">${skill.mode}</span>
+            `;
+
+            fileItem.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openMattSkillDocument(skill.name, { scroll: true });
+            });
+
+            subFiles.append(fileItem);
           });
-          const hint = make("p", "skills-nav-group-hint", lane.hint);
-          hint.hidden = !expanded;
-          group.append(heading, hint, items);
-          navigation.append(group);
+
+          panel.append(subFiles);
+          folderItem.append(trigger, panel);
+          filesRoot.append(folderItem);
         });
+
+        navigation.append(filesRoot);
       };
 
       const renderMattPackageOverview = () => {
@@ -3223,18 +3663,61 @@
       const renderMattSkillHero = (skill, skillIndex) => {
         const allSkills = mattSkills.skills || [];
         const hero = make("header", "skills-document-hero");
-        hero.append(
+
+        const breadcrumbs = make("div", "skills-breadcrumbs");
+        breadcrumbs.innerHTML = `
+          <button class="skills-bc-item" type="button" id="matt-bc-home">Capabilities</button>
+          <span class="skills-bc-sep">/</span>
+          <span class="skills-bc-lane">${mattLane(skill.lane).label}</span>
+          <span class="skills-bc-sep">/</span>
+          <span class="skills-bc-current">/${skill.name}</span>
+        `;
+        hero.append(breadcrumbs);
+
+        const titleRow = make("div", "skills-document-header-row");
+        const titleGroup = make("div");
+        titleGroup.append(
           make("div", "skills-document-kicker", mattLane(skill.lane).label),
           make("h3", "skills-document-title", `The /${skill.name} Skill`),
         );
+        titleRow.append(titleGroup);
+
+        const cmdBar = make("div", "skills-cmd-banner");
+        cmdBar.innerHTML = `
+          <div class="skills-cmd-code">
+            <span class="skills-cmd-prompt">$</span>
+            <span class="skills-cmd-text">/${skill.name}</span>
+          </div>
+          <button class="skills-cmd-copy-btn" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="copy-label">Copy slash command</span>
+          </button>
+        `;
+        const copyBtn = cmdBar.querySelector(".skills-cmd-copy-btn");
+        copyBtn?.addEventListener("click", () => {
+          navigator.clipboard.writeText(`/${skill.name}`);
+          const label = copyBtn.querySelector(".copy-label");
+          if (label) {
+            label.textContent = "Copied!";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+              label.textContent = "Copy slash command";
+              copyBtn.classList.remove("copied");
+            }, 1800);
+          }
+        });
+        titleRow.append(cmdBar);
+        hero.append(titleRow);
+
         const metaRow = make("div", "skills-document-meta-row");
         const meta = make("div", "skills-document-meta");
         const fileCount = (skill.package_files || []).length;
         meta.append(
-          make("span", "skills-document-pill", skill.group),
-          make("span", "skills-document-pill", mattModeShort(skill)),
-          make("span", "skills-document-pill", `${fileCount} package file${fileCount === 1 ? "" : "s"}`),
+          make("span", "skills-document-pill lane-pill", skill.group),
+          make("span", "skills-document-pill mode-pill", mattModeShort(skill)),
+          make("span", "skills-document-pill file-pill", `${fileCount} package file${fileCount === 1 ? "" : "s"}`),
         );
+
         const controls = make("div", "skills-document-actions");
         const views = make("div", "skills-view-tabs");
         [["overview", "Quick guide"], ["reference", "Full reference"]].forEach(([view, label]) => {
@@ -3247,19 +3730,32 @@
           });
           views.append(button);
         });
-        const previous = make("button", "skills-document-action", "←");
+
+        const previous = make("button", "skills-document-action", "← Prev");
         previous.type = "button";
         previous.title = "Previous skill";
         previous.disabled = skillIndex <= 0;
-        previous.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex - 1]?.name));
-        const next = make("button", "skills-document-action", "→");
+        previous.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex - 1]?.name, { scroll: true }));
+
+        const next = make("button", "skills-document-action", "Next →");
         next.type = "button";
         next.title = "Next skill";
         next.disabled = skillIndex < 0 || skillIndex >= allSkills.length - 1;
-        next.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex + 1]?.name));
+        next.addEventListener("click", () => openMattSkillDocument(allSkills[skillIndex + 1]?.name, { scroll: true }));
+
         controls.append(views, previous, next);
         metaRow.append(meta, controls);
         hero.append(metaRow);
+
+        setTimeout(() => {
+          byId("matt-bc-home")?.addEventListener("click", () => {
+            activeMattSkillName = "";
+            mattSkillView = "overview";
+            renderMattLibraryNavigation();
+            renderMattSkillDocument();
+          });
+        }, 0);
+
         return hero;
       };
 
@@ -3324,8 +3820,11 @@
           const button = make("button", `skills-package-file${file.path === activeFile.path ? " active" : ""}`);
           button.type = "button";
           button.dataset.path = file.path;
-          button.append(document.createTextNode(file.path));
-          if (file.kind === "instructions") button.append(make("small", "", "MAIN"));
+          
+          const fileIconSvg = `<svg class="skills-file-tree-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+          button.innerHTML = `${fileIconSvg}<span>${file.path}</span>`;
+          if (file.kind === "instructions") button.insertAdjacentHTML("beforeend", `<small class="file-main-badge">MAIN</small>`);
+          
           button.addEventListener("click", () => {
             activeMattFilePath = file.path;
             renderMattSkillDocument();
@@ -3384,7 +3883,10 @@
         mattSkillView = view;
         activeMattFilePath = "SKILL.md";
         const skill = mattByName.get(name);
-        if (skill?.lane) mattExpandedLanes.add(skill.lane);
+        if (skill?.lane) {
+          mattExpandedLanes.clear();
+          mattExpandedLanes.add(skill.lane);
+        }
         renderMattLibraryNavigation();
         renderMattSkillDocument();
         if (scroll && window.matchMedia("(max-width: 900px)").matches) {
@@ -3397,22 +3899,53 @@
         setText("matt-tab-count", String(count));
         setText("matt-library-count", String(count));
         const search = byId("matt-search");
-        search.addEventListener("input", () => {
+        const searchClear = byId("matt-search-clear");
+
+        search?.addEventListener("input", () => {
           mattLibraryQuery = search.value;
           renderMattLibraryNavigation();
         });
-        byId("matt-package-overview").addEventListener("click", () => {
+
+        searchClear?.addEventListener("click", () => {
+          if (search) search.value = "";
+          mattLibraryQuery = "";
+          renderMattLibraryNavigation();
+          search?.focus();
+        });
+
+        if (!window._mattSearchShortcutAttached) {
+          window._mattSearchShortcutAttached = true;
+          document.addEventListener("keydown", (e) => {
+            if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
+              e.preventDefault();
+              const input = byId("matt-search");
+              if (input) {
+                const mattView = byId("matt-skills-view");
+                if (mattView && mattView.hidden) {
+                  const mattBtn = document.querySelector('[data-tab="matt-skills"]');
+                  if (mattBtn) mattBtn.click();
+                }
+                input.focus();
+                input.select();
+              }
+            }
+          });
+        }
+
+        byId("matt-package-overview")?.addEventListener("click", () => {
           activeMattSkillName = "";
           mattSkillView = "overview";
           renderMattLibraryNavigation();
           renderMattSkillDocument();
         });
-        byId("matt-sidebar-toggle").addEventListener("click", () => {
+        byId("matt-sidebar-toggle")?.addEventListener("click", () => {
           mattSidebarCollapsed = !mattSidebarCollapsed;
           byId("matt-workbench").classList.toggle("catalog-collapsed", mattSidebarCollapsed);
           const toggle = byId("matt-sidebar-toggle");
-          toggle.setAttribute("aria-expanded", String(!mattSidebarCollapsed));
-          toggle.textContent = mattSidebarCollapsed ? "Show catalog" : "Hide catalog";
+          if (toggle) {
+            toggle.setAttribute("aria-expanded", String(!mattSidebarCollapsed));
+            toggle.textContent = mattSidebarCollapsed ? "Show catalog" : "Hide catalog";
+          }
         });
         renderMattLibraryNavigation();
         renderMattSkillDocument();
@@ -4053,6 +4586,41 @@
         const card = make("article", "metric");
         card.append(make("div", "metric-value", String(item.value)), make("div", "metric-label", item.label), make("div", "metric-detail", item.detail));
         byId("metrics").append(card);
+      });
+
+      const personality = data.personality || { status: "Evolving", initials: "SB", total_signals: 0, facets: [], url: data.links.home };
+      setText("personality-initials", personality.initials || "SB");
+      setText("personality-status", personality.status || "Evolving");
+      setText("personality-signal-count", String(personality.total_signals || 0));
+      setLink("personality-link", personality.url || data.links.home);
+      (personality.facets || []).forEach((facet) => {
+        const card = make("article", "personality-facet");
+        const head = make("div", "personality-facet-head");
+        head.append(
+          make("span", "personality-marker", facet.marker || "SELF"),
+          make("span", "personality-facet-title", facet.label || "Identity"),
+          make("span", "personality-facet-count", String(facet.signal_count || 0))
+        );
+        card.append(head);
+        const signals = facet.signals || [];
+        if (signals.length) {
+          const list = make("ul", "personality-signals");
+          signals.slice(0, 2).forEach((signal) => list.append(make("li", "personality-signal", signal)));
+          card.append(list);
+        } else {
+          card.append(make("div", "personality-forming", "Still forming from verified evidence."));
+        }
+        if (facet.url) {
+          card.tabIndex = 0;
+          card.setAttribute("role", "link");
+          card.setAttribute("aria-label", `Open ${facet.label || "identity"} note`);
+          const openFacet = () => window.location.href = facet.url;
+          card.addEventListener("click", openFacet);
+          card.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openFacet(); }
+          });
+        }
+        byId("personality-facets").append(card);
       });
 
       const daily = data.briefing.daily;

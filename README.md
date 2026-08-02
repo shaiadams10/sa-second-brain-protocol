@@ -37,11 +37,11 @@ It is deliberately **not** a monorepo, project controller, or exporter installed
 | 🗓️ Weekly synthesis | Connect wins, trajectories, repeated preferences, lessons, skills, and unresolved questions across projects. |
 | 🧾 Evidence-backed knowledge | Every generated claim keeps stable provenance, confidence, dates, and promotion status. |
 | 👀 Human review | Ambiguous, sensitive, contradictory, and public-facing claims remain reviewable instead of silently becoming truth. |
-| 🖥️ Local daily dashboard | Open a private paper-and-pixel briefing with project momentum, learning, review, runs, health, and a swipeable Knowledge Deck. |
+| 🖥️ Local daily dashboard | Open a private paper-and-pixel briefing with project momentum, learning, review, runs, health, a swipeable Knowledge Deck, and a compact evidence-backed personality portrait. |
 | 🃏 Knowledge Deck | Confirm promoted knowledge, skip it without changing anything, or safely retract generated claims with tombstones and undo. |
 | ✍️ Useful personal context | Search the vault, build bounded context, draft in your voice, and create career material from verified facts. |
 | 🔒 Strong privacy boundaries | Raw chats, credentials, local paths, runtime state, and private evidence never enter the public protocol repository. |
-| 🔌 Future-ready service layer | A disabled read-only MCP boundary is reserved for opt-in project queries later. |
+| 🔌 Future-ready service layer | A least-privilege MCP design is reserved for future opt-in project context and Curate candidate submission; its transport is not enabled yet. |
 
 ## 🏗️ How it works
 
@@ -54,7 +54,7 @@ flowchart LR
     E --> F["Deterministic publisher"]
     F --> G["Canonical Obsidian Markdown"]
     G --> H["Local search + relationships"]
-    G --> I["Review dashboard"]
+    G --> I["Private local dashboard"]
     J["Local code graphs"] --> C
     K["Machine-only SQLite ledger"] --> B
     E --> K
@@ -70,7 +70,28 @@ The model never writes the vault directly. It receives only a sanitized evidence
 | Machine-local runtime | Operational state outside Git | Credentials, SQLite checkpoints, raw evidence, staging, logs, indexes, code graphs |
 | Public protocol | Reusable implementation | Generic code, schemas, prompts, templates, tests, docs, and runbooks |
 
-See [Architecture](docs/Architecture.md) for the trust boundaries, [Natural-language interface](docs/NaturalLanguageInterface.md) for agent routing, [Project and session lifecycle](docs/ProjectSessionLifecycle.md) for catalog, question, deletion, ownership, and attribution rules, [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior, and the [Roadmap](docs/Roadmap.md) for the dashboard and read-only MCP phases.
+### Two repositories, one strict boundary
+
+The live deployment uses two repositories with different jobs:
+
+1. **`Personal-Second-Brain` is private.** It backs up the actual vault: identity, memories, experience, projects, skills, goals, journals, review decisions, and the canonical protocol source.
+2. **`sa-second-brain-protocol` is public.** It is the reusable package you are reading now. It contains generic code, templates, documentation, and tests—never the owner's populated knowledge.
+
+Updates move in one direction only. A deterministic publisher reads the private vault's `Protocol/` tree, copies only an explicit allowlist, replaces configured private identifiers, scans the exact exported tree for secrets and local paths, runs its tests, and opens a **draft** public pull request. It does not copy the rest of the vault, publish the populated dashboard, sync personal notes, or merge the public pull request automatically. The public repository is therefore a distribution of the system, not a backup of the person.
+
+### What the dashboard shows
+
+The dashboard is a private local interface served on loopback. It brings together:
+
+- **Today:** what the latest validated evidence taught the Brain, kept separate from older recovered history.
+- **Personality portrait:** six compact facets—core character, values, work style, voice, preferences, and strengths—built directly from canonical Identity notes. It shows only a couple of grounded signals per facet and leaves incomplete areas visibly “forming”; it does not invent personality scores.
+- **Knowledge Deck:** personal identity, professional evidence, operating preferences, and project knowledge remain visibly separated. New cards can be confirmed, skipped, or removed with reversible provenance.
+- **Projects and summaries:** current project movement plus expandable Daily and Weekly archives, without repeatedly presenting old unchanged discoveries as new.
+- **Review and health:** open questions, publication decisions, recent automation runs, schedule state, and privacy/system checks.
+
+The HTML template is public, but the populated dashboard is generated from the private vault into machine-local runtime storage and is never part of the public export.
+
+See [Architecture](docs/Architecture.md) for the trust boundaries, [Natural-language interface](docs/NaturalLanguageInterface.md) for agent routing, [Project and session lifecycle](docs/ProjectSessionLifecycle.md) for catalog, question, deletion, ownership, and attribution rules, [Incremental activity](docs/IncrementalActivity.md) for cursor, delta, DB fallback, and recurring-pattern behavior, the [Daily/Weekly replacement runbook](runbooks/DailyWeeklyReplacement.md) for governed operation and recovery, and the [Roadmap](docs/Roadmap.md) for the dashboard and least-privilege MCP phases.
 
 ## 🔁 How it stays current
 
@@ -164,6 +185,9 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb bootstrap` | Run or resume the one-time deep audit |
 | `sb bootstrap --approve` | Close bootstrap after explicit final review |
 | `sb daily` / `sb weekly` | Process incremental evidence |
+| `sb harness evaluate` | Replay the adversarial extraction-policy corpus without model calls or writes |
+| `sb harness evaluate --corpus quality` | Replay the synthetic extraction-quality gold set and token metrics |
+| `sb harness recall` | Replay strict lexical/vector/graph ablations with recall, noise, latency, and packet-cost metrics |
 | `sb refresh-project <project>` | Refresh one known dossier and derived code graph |
 | `sb sync-project-index` | Re-scan and deterministically rebuild the project catalog without a model call or Git publication |
 | `sb review digest` | Generate the short Obsidian review dashboard |
@@ -185,7 +209,7 @@ Public-facing career claims always require review. Stable personality or work-st
 | `sb dashboard install` | Generate the local icon and install Desktop plus Start-menu shortcuts |
 | `sb protocol publish` | Test, sanitize, and update the public draft PR |
 
-The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers. Daily archives default closed, show only project-linked session cards, and keep historical discoveries separate from same-day personal learning.
+The dashboard launcher is on-demand and does not install a Windows-logon task. It reuses a healthy running server immediately; otherwise it starts from the existing hardened runtime without repeating account setup or ACL work. Knowledge Deck retractions return after the canonical decision is saved, while a durable background queue incrementally refreshes only the affected search notes. The deck defaults to personal identity and separates professional evidence, operating preferences, and project knowledge into their own layers. The personality portrait reads all six canonical Identity notes but renders at most two concise signals per facet. Daily archives default closed, show only project-linked session cards, and keep historical discoveries separate from same-day personal learning.
 
 ## 🛡️ Safety by design
 
@@ -193,6 +217,7 @@ The dashboard launcher is on-demand and does not install a Windows-logon task. I
 - Collected text is untrusted data, never an instruction source.
 - The scanner never executes project code, installs dependencies, invokes hooks, or writes into projects.
 - Raw chats, hidden reasoning, tool dumps, credentials, and absolute machine mappings stay out of tracked Markdown.
+- This is a privacy-filtered cloud design, not a zero-cloud design: bounded sanitized work and personal context may be sent to the configured private reasoning model, but secret files, credentials, contact details, raw transcripts, paths, and other hard-blocked sensitive categories fail closed before transport.
 - Generated content is confined to `sb:generated` markers; manual prose is preserved.
 - Model, graph, privacy, Git, or notification failure stops the run and preserves unprocessed evidence.
 - Public export uses a strict allowlist, deterministic redaction, secret scanning, and a draft PR that requires manual review.
@@ -217,9 +242,11 @@ All real behavior remains in the common `sb` package so wrappers cannot drift in
 
 For reliable future attribution, register the actual leaf folder as a Project in the standalone Antigravity application, start the conversation from that Project, use Local Mode for the existing checkout, and open the IDE from the Project when needed. Opening an old folder may restore conversations whose workspace metadata survived, but cannot repair sessions that Antigravity recorded without a project. See [Project and session lifecycle](docs/ProjectSessionLifecycle.md#antigravity-ide-limitation) for the complete behavior and safe recovery boundary.
 
-## 🔌 Read-only MCP future
+## 🔌 MCP status and intended boundary
 
-The transport is disabled in v1, but the service boundary reserves these safe operations:
+**MCP is not ready to connect yet.** The governed recall gateway and policy tests exist, but transport is deliberately disabled and there is no client configuration to install in another project today. This is a security boundary, not a hidden feature flag.
+
+The future authenticated, per-project service is intended to reserve these bounded read operations:
 
 - `search`
 - `read_note`
@@ -229,7 +256,9 @@ The transport is disabled in v1, but the service boundary reserves these safe op
 - `get_project_neighbors`
 - `trace_project_path`
 
-Future consumers may receive canonical notes and sanitized graph results only—never raw evidence, local paths, ingestion state, or write/delete access. The implementation and security gates are tracked in the [Roadmap](docs/Roadmap.md).
+An explicitly opted-in project may also submit a small, attributed candidate to the private Brain's Curate queue. That is not direct write access: the caller cannot edit Markdown, browse the vault, read another project's context, or approve its own claim. The private host checks provenance, sensitivity, conflicts, deduplication, and promotion policy; only safe objective claims may be confirmed by deterministic host rules, while ambiguous or inferred claims remain reviewable with Confirm/Remove controls.
+
+Future consumers may receive only bounded canonical context and sanitized graph results—never raw evidence, arbitrary local paths, credentials, ingestion state, unrestricted file access, or write/delete access. The service connects to the private Brain, never to this public distribution. Authentication, project grants, auditing, rate limits, revocation, and hostile-input tests must all pass before transport is enabled. Progress is tracked in the [Roadmap](docs/Roadmap.md).
 
 ## ✅ Production-readiness checklist
 

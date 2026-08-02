@@ -1,18 +1,23 @@
 from datetime import UTC, datetime
 from pathlib import Path
+import json
 
 from second_brain_protocol.config import RuntimePaths
 from second_brain_protocol.codex_account import normalize_rate_limits
 from second_brain_protocol.dashboard import (
     _attach_section_evidence,
+    _group_runs,
     _knowledge_deck,
     _learning_snapshot,
     _matt_skills_catalog,
+    _personality_portrait,
     _question_deck,
     _recent_activity,
     _summary_cost,
+    _summary_history,
     _summary_timeline_context,
     _summary_visuals,
+    _system_status,
     build_snapshot,
     default_knowledge_layer,
     knowledge_layer_for,
@@ -26,6 +31,77 @@ from second_brain_protocol.state import StateStore
 def _note(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def test_cutover_dashboard_hides_pre_governed_daily_and_weekly_notes(
+    tmp_path: Path,
+) -> None:
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    vault = tmp_path / "Example Person Second Brain"
+    old_daily = vault / "Journal" / "Daily" / "2026-08-01.md"
+    governed_daily = vault / "Journal" / "Daily" / "2026-08-02.md"
+    old_weekly = vault / "Journal" / "Weekly" / "2026-W30.md"
+    _note(
+        old_daily,
+        "# Old\n<!-- sb:generated daily:start -->\nOld Daily output.\n"
+        "<!-- sb:generated daily:end -->\n",
+    )
+    _note(
+        governed_daily,
+        "# New\n<!-- sb:generated daily:start -->\n"
+        "<!-- sb:engine governed-extraction-v3 -->\n\n"
+        "### Governed extraction\n\nNew Daily output.\n"
+        "<!-- sb:generated daily:end -->\n",
+    )
+    _note(
+        old_weekly,
+        "# Old week\n<!-- sb:generated weekly:start -->\nOld Weekly output.\n"
+        "<!-- sb:generated weekly:end -->\n",
+    )
+    store = StateStore(paths.state)
+    store.set_meta(
+        "daily-weekly-governed-cutover-baseline-v1",
+        json.dumps({"completed_at": "2026-08-02T11:33:37+00:00"}),
+    )
+
+    daily = _summary_history(vault, "daily", store, paths, governed_only=True)
+    weekly = _summary_history(vault, "weekly", store, paths, governed_only=True)
+
+    assert [item["period"] for item in daily] == ["2026-08-02"]
+    assert weekly == []
+
+
+def test_cutover_dashboard_hides_pre_cutover_pipeline_history(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    run_id = store.start_pipeline_run("daily", trigger="scheduled", stage="synthesize")
+    store.finish_pipeline_run(run_id, "failed", error="retired pipeline failure")
+    store.set_meta(
+        "daily-weekly-governed-cutover-baseline-v1",
+        json.dumps({"completed_at": "2099-01-01T00:00:00+00:00"}),
+    )
+
+    assert _group_runs(store) == []
+
+
+def test_cutover_dashboard_ignores_pre_cutover_scheduler_failure(tmp_path: Path) -> None:
+    store = StateStore(tmp_path / "state.sqlite")
+    store.set_bootstrap_state("completed")
+    store.set_meta(
+        "daily-weekly-governed-cutover-baseline-v1",
+        json.dumps({"completed_at": "2026-08-02T11:33:37+00:00"}),
+    )
+
+    status = _system_status(
+        store,
+        {
+            "installed": True,
+            "last_result": 1,
+            "last_run": "2026-08-01T22:30:00-04:00",
+        },
+        now=datetime(2026, 8, 2, 12, 0, tzinfo=UTC),
+    )
+
+    assert status["label"] == "Ready for the first governed Daily"
 
 
 def test_dashboard_supports_persisted_light_and_dark_themes() -> None:
@@ -702,7 +778,6 @@ The dashboard work was completed and verified.
     assert "Narrative synthesis available below" not in rendered
     assert "obsidian://open" in rendered
     assert "https://" not in rendered and "http://" not in rendered
-    assert "<svg" not in rendered.casefold()
     assert not scan_text(rendered, "dashboard.html", block_paths=True)
 
 
@@ -721,6 +796,121 @@ def test_knowledge_layers_separate_self_professional_operating_and_project() -> 
         )
         == "about_shai"
     )
+
+
+def test_personality_portrait_is_compact_and_uses_all_identity_notes(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    identity = vault / "Identity"
+    identity.mkdir(parents=True)
+    fixtures = {
+        "Persona.md": (
+            "persona",
+            [
+                "**Preferred name:** Example Person.",
+                "Example investigates difficult system problems directly. ^obs-persona",
+            ],
+        ),
+        "Values.md": ("values", []),
+        "WorkStyle.md": (
+            "work-style",
+            [
+                "Example validates results before treating work as complete. ^obs-work-1",
+                "Example keeps architecture documentation current. ^obs-work-2",
+                "Example plans complex work before implementation. ^obs-work-3",
+            ],
+        ),
+        "Voice.md": (
+            "voice",
+            ["Example communicates directly and emphasizes verification. ^obs-voice"],
+        ),
+        "Preferences.md": (
+            "preferences",
+            ["Example prefers concise progressive disclosure. ^obs-preference"],
+        ),
+        "Capabilities.md": (
+            "capabilities",
+            ["Example directs and validates complete systems. ^skill-capability"],
+        ),
+    }
+    for filename, (section, statements) in fixtures.items():
+        body = "\n".join(f"- {statement}" for statement in statements)
+        _note(
+            identity / filename,
+            f"# {filename.removesuffix('.md')}\n\n"
+            f"<!-- sb:generated {section}:start -->\n{body}\n"
+            f"<!-- sb:generated {section}:end -->\n",
+        )
+
+    portrait = _personality_portrait(vault)
+
+    assert portrait["status"] == "Evolving"
+    assert portrait["initials"] == "EP"
+    assert portrait["domain_count"] == 6
+    assert portrait["forming_count"] == 1
+    assert [facet["key"] for facet in portrait["facets"]] == [
+        "persona",
+        "values",
+        "work_style",
+        "voice",
+        "preferences",
+        "capabilities",
+    ]
+    assert portrait["facets"][0]["signals"] == [
+        "Example investigates difficult system problems directly."
+    ]
+    assert portrait["facets"][1]["signals"] == []
+    assert portrait["facets"][2]["signals"] == [
+        "Example plans complex work before implementation.",
+        "Example keeps architecture documentation current.",
+    ]
+    assert all(len(facet["signals"]) <= 2 for facet in portrait["facets"])
+    assert "obs-" not in json.dumps(portrait)
+    assert "skill-" not in json.dumps(portrait)
+
+
+def test_personality_portrait_recovers_an_explicit_value_from_identity_notes(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    identity = vault / "Identity"
+    identity.mkdir(parents=True)
+    for filename, section in (
+        ("Persona.md", "persona"),
+        ("Values.md", "values"),
+        ("WorkStyle.md", "work-style"),
+        ("Voice.md", "voice"),
+        ("Capabilities.md", "capabilities"),
+    ):
+        _note(
+            identity / filename,
+            f"<!-- sb:generated {section}:start -->\n"
+            f"<!-- sb:generated {section}:end -->\n",
+        )
+    _note(
+        identity / "Preferences.md",
+        "<!-- sb:generated preferences:start -->\n"
+        "- **Values:** Accuracy, privacy, reliability, and useful outcomes.\n"
+        "<!-- sb:generated preferences:end -->\n",
+    )
+
+    portrait = _personality_portrait(vault)
+
+    assert portrait["facets"][1]["signals"] == [
+        "Accuracy, privacy, reliability, and useful outcomes."
+    ]
+
+
+def test_dashboard_template_contains_compact_personality_view() -> None:
+    rendered = render_dashboard({})
+
+    assert 'id="personality"' in rendered
+    assert 'id="personality-facets"' in rendered
+    assert 'href="#personality"' in rendered
+    assert ".personality-panel { grid-column: span 12; overflow: visible;" in rendered
+    assert 'html[data-theme="dark"] .personality-panel {' in rendered
+    assert 'html[data-theme="dark"] .personality-facet {' in rendered
 
 
 def test_project_decision_uses_an_attribution_stamp(

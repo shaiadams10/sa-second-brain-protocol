@@ -30,7 +30,7 @@ This roadmap covers the reusable protocol. A real vault may maintain a separate 
 - Refine dashboard sections using observed usefulness rather than adding speculative widgets.
 - Add optional filtered export views for career, portfolio, and project-handoff use.
 
-## v2 — Read-only MCP gateway
+## v2 — Least-privilege MCP gateway
 
 The MCP transport remains disabled until all of the following are implemented and tested:
 
@@ -42,8 +42,9 @@ The MCP transport remains disabled until all of the following are implemented an
 - Public-career profiles that return only reviewed public-ready claims.
 - Tests for path traversal, symlinks, hostile input, sensitive-note denial, response limits, and cross-project isolation.
 - Health checks, audit receipts, and documented revocation.
+- A distinct authenticated Curate-candidate endpoint with bounded payloads, exact project attribution, provenance, conflict checks, rate limits, idempotent deduplication, and owner Confirm/Remove controls.
 
-Later projects will query the brain through bounded tools such as search, recent activity, context building, and sanitized project-graph queries. They will never mount the vault or receive unrestricted file access.
+Later projects will query the private Brain through bounded tools such as search, recent activity, context building, and sanitized project-graph queries. An opted-in project may also submit a candidate to Curate, but it cannot write canonical notes or self-approve a claim. The host alone applies deterministic promotion policy, and all other claims remain reviewable. Projects will never mount the vault, receive unrestricted file access, query another project's grant, or use the public protocol repository as a knowledge service.
 
 ## Later possibilities
 
@@ -52,4 +53,3 @@ Later projects will query the brain through bounded tools such as search, recent
 - Optional knowledge-decision history and bulk restoration UI if real usage proves it useful.
 - A general Skills dashboard tab that safely inventories every installed Protocol skill, distinguishes manual and model invocation, explains triggers and dependencies, and derives its guide from validated skill metadata rather than a vendor-specific allowlist.
 - A reusable skill-guide generator that can inspect a validated skill package from GitHub or another approved source, model its invocation rules, workflows, relationships, examples, and edge cases at generation time, then emit a self-contained interactive HTML guide with starting sparks, route alternatives, a stable skill landscape, and progressive detail. Generated guides must remain deterministic and make no runtime model calls.
-- A narrowly writable MCP for future cross-project candidate submission only if an explicit design preserves the current review and publication boundaries. Other-project agents would submit a size-bounded, classified candidate with provenance to Curate; the MCP would never permit direct canonical-note writes and would require authentication, per-project opt-in, rate limits, auditing, conflict checks, and owner Confirm/Remove controls.

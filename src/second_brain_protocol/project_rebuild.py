@@ -8,7 +8,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .collector import collect_projects, reconcile_existing_session_attribution
+from .collector import (
+    collect_projects,
+    managed_vault_project,
+    reconcile_existing_session_attribution,
+)
 from .config import RuntimePaths
 from .dashboard import build_dashboard
 from .project_catalog import project_catalog_health, publish_project_catalog
@@ -411,6 +415,12 @@ def rebuild_project_subsystem(
             classification_overrides=updated_config.get(
                 "project_classification_overrides", {}
             ),
+            managed_projects=[
+                managed_vault_project(
+                    vault,
+                    name=vault.name,
+                )
+            ],
             baseline=True,
         )
         attribution = reconcile_existing_session_attribution(store)

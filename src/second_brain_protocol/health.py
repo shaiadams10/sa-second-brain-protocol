@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,57 @@ from .model_runner import find_codex_executable
 from .project_catalog import project_catalog_health
 from .scheduler import task_details
 from .state import StateStore
+
+
+_GOVERNED_CUTOVER_KEY = "daily-weekly-governed-cutover-baseline-v1"
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+
+def _governed_cutover_at(store: StateStore) -> datetime | None:
+    raw = store.get_meta(_GOVERNED_CUTOVER_KEY)
+    try:
+        return _parse_datetime(json.loads(raw)["completed_at"]) if raw else None
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def _current_schedule(
+    store: StateStore, schedule: dict[str, Any]
+) -> dict[str, Any]:
+    """Hide a scheduler receipt that belongs to the retired execution era."""
+
+    cutover = _governed_cutover_at(store)
+    last_run = _parse_datetime(schedule.get("last_run"))
+    if cutover is None or last_run is None or last_run >= cutover:
+        return schedule
+    return {**schedule, "last_run": None, "last_result": None, "missed_runs": 0}
+
+
+def _current_run_history(
+    store: StateStore, *, limit: int = 10
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Exclude retired Daily/Weekly history after the governed cutover."""
+
+    cutover = _governed_cutover_at(store)
+
+    def current(row: dict[str, Any]) -> bool:
+        if cutover is None or row.get("kind") not in {"daily", "weekly"}:
+            return True
+        started = _parse_datetime(row.get("started_at"))
+        return started is not None and started >= cutover
+
+    runs = [row for row in store.runs(limit=30) if current(row)][:limit]
+    pipelines = [row for row in store.pipeline_runs(limit=30) if current(row)][:limit]
+    return runs, pipelines
 
 
 def _version(command: list[str]) -> str:
@@ -33,6 +85,7 @@ def report(paths: RuntimePaths, *, include_memory: bool = True) -> dict[str, Any
     except Exception as error:
         codex_version = f"unavailable: {error}"
     catalog = project_catalog_health(vault_root(), store.present_projects())
+    recent_runs, recent_pipeline_runs = _current_run_history(store)
     missing_projects = store.missing_projects()
     catalog["missing_projects"] = len(missing_projects)
     catalog["missing_project_names"] = [item["project"] for item in missing_projects]
@@ -52,7 +105,7 @@ def report(paths: RuntimePaths, *, include_memory: bool = True) -> dict[str, Any
         ),
         "git": _version(["git", "--version"]),
         "github_cli": _version(["gh", "--version"]),
-        "schedule": task_details(config["task_name"]),
+        "schedule": _current_schedule(store, task_details(config["task_name"])),
         "pending_evidence": store.evidence_count(status="new"),
         "pending_review": len(store.observations("pending")),
         "project_catalog": catalog,
@@ -74,8 +127,8 @@ def report(paths: RuntimePaths, *, include_memory: bool = True) -> dict[str, Any
                 "mixed",
             )
         },
-        "recent_runs": store.runs(limit=10),
-        "recent_pipeline_runs": store.pipeline_runs(limit=10),
+        "recent_runs": recent_runs,
+        "recent_pipeline_runs": recent_pipeline_runs,
     }
     if include_memory:
         try:

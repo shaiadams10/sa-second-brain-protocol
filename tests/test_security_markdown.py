@@ -36,6 +36,13 @@ def test_model_packet_preflight_reports_safe_field_location() -> None:
         )
 
 
+def test_model_packet_preflight_scans_tuple_members() -> None:
+    with pytest.raises(ValueError, match="privacy preflight"):
+        assert_model_packet_safe(
+            {"hits": ({"note_path": "C:\\Users\\person\\private.md"},)}
+        )
+
+
 def test_generated_section_preserves_manual_prose() -> None:
     original = "# Note\nmanual before\n<!-- sb:generated canonical:start -->\nold\n<!-- sb:generated canonical:end -->\nmanual after\n"
     updated = replace_generated_section(original, "canonical", "new")

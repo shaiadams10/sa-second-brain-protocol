@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["candidates"],
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"$ref": "#/$defs/candidate"}
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {"$ref": "#/$defs/candidate/$defs/memory_mutation"},
+        {"$ref": "#/$defs/candidate/$defs/procedure_candidate"}
+      ],
+      "$defs": {
+        "memory_mutation": {
+          "type": "object",
+          "allOf": [
+            {
+              "if": {"properties": {"operation": {"const": "create"}}},
+              "then": {"properties": {"target_memory_id": {"type": "null"}}},
+              "else": {
+                "required": ["target_memory_id"],
+                "properties": {"target_memory_id": {"type": "string", "minLength": 1}}
+              }
+            }
+          ],
+          "required": ["type", "operation", "kind", "subject", "claim", "scope", "project_id", "evidence_refs", "confidence", "explicit"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {"const": "memory_mutation"},
+            "operation": {"enum": ["create", "reinforce", "update", "supersede", "contradict"]},
+            "kind": {"enum": ["explicit_fact", "project_fact", "decision", "lesson", "preference", "work_style", "voice_style", "personality", "experience", "education", "military", "goal"]},
+            "subject": {"type": "string", "minLength": 1, "maxLength": 300},
+            "claim": {"type": "string", "minLength": 1, "maxLength": 4000},
+            "scope": {"enum": ["global", "project", "context"]},
+            "project_id": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 120}]},
+            "target_memory_id": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 120}]},
+            "evidence_refs": {"type": "array", "minItems": 1, "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "pattern": "^ev-[a-z0-9-]{3,96}$"}},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "explicit": {"type": "boolean"}
+          }
+        },
+        "procedure_candidate": {
+          "type": "object",
+          "allOf": [
+            {
+              "if": {"properties": {"scope": {"const": "project"}}},
+              "then": {"properties": {"project_id": {"type": "string", "minLength": 1}}},
+              "else": {"properties": {"project_id": {"type": "null"}}}
+            }
+          ],
+          "required": ["type", "name", "purpose", "scope", "project_id", "prerequisites", "steps", "failure_branches", "tests", "evidence_refs", "owner_directed", "validated_outcome"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {"const": "procedure_candidate"},
+            "name": {"type": "string", "minLength": 1, "maxLength": 160},
+            "purpose": {"type": "string", "minLength": 1, "maxLength": 1200},
+            "scope": {"enum": ["global", "project", "context"]},
+            "project_id": {"oneOf": [{"type": "null"}, {"type": "string", "minLength": 1, "maxLength": 120}]},
+            "prerequisites": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 500}},
+            "steps": {"type": "array", "minItems": 2, "maxItems": 30, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+            "failure_branches": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+            "tests": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+            "evidence_refs": {"type": "array", "minItems": 1, "maxItems": 30, "uniqueItems": true, "items": {"type": "string", "pattern": "^ev-[a-z0-9-]{3,96}$"}},
+            "owner_directed": {"const": true},
+            "validated_outcome": {"const": true}
+          }
+        }
+      }
+    }
+  }
+}

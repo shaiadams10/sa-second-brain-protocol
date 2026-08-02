@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 from .config import RuntimePaths, protocol_root
 from .security import (
     assert_model_packet_safe,
-    sanitize_model_payload,
+    sanitize_model_evidence_item,
     sanitize_packet,
     sanitize_text,
 )
@@ -385,17 +385,7 @@ def find_codex_executable(paths: RuntimePaths) -> Path:
 
 
 def _bounded_evidence_item(item: dict[str, Any], *, max_chars: int) -> dict[str, Any]:
-    safe = {
-        "id": item["id"],
-        "source_type": item["source_type"],
-        "project_id": item.get("project_id"),
-        "kind": item["kind"],
-        "occurred_at": item.get("occurred_at"),
-        "payload": sanitize_model_payload(
-            str(item.get("kind") or ""),
-            item["payload"],
-        ),
-    }
+    safe = sanitize_model_evidence_item(item)
     encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_chars:
         return safe
@@ -487,6 +477,7 @@ def run_model(
     paths: RuntimePaths,
     role: ModelRole,
     prompt_name: str,
+    system_prompt_name: str = "system.md",
     evidence: list[dict[str, Any]],
     run_id: str,
     max_packet_chars: int,
@@ -501,7 +492,7 @@ def run_model(
         raise ModelRunError("No evidence was supplied.")
     schema_source = protocol_root() / "schemas" / schema_name
     prompt = (
-        (protocol_root() / "prompts" / "system.md").read_text(encoding="utf-8")
+        (protocol_root() / "prompts" / system_prompt_name).read_text(encoding="utf-8")
         + "\n\n"
         + (protocol_root() / "prompts" / prompt_name).read_text(encoding="utf-8")
         + "\n\nReturn only valid JSON matching the output schema enforced by the host."

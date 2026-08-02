@@ -4,6 +4,7 @@ import pytest
 
 from second_brain_protocol.curate import (
     add_curate_candidate,
+    correct_project_knowledge_attribution,
     require_main_vault_context,
 )
 from second_brain_protocol.dashboard import _knowledge_deck
@@ -132,7 +133,7 @@ def test_curate_rejects_conflicts_before_creating_evidence(tmp_path: Path) -> No
     vault = tmp_path / "Example Person Second Brain"
     _note(vault / "Identity" / "Preferences.md", section="preferences")
     store = StateStore(tmp_path / "state.sqlite")
-    first = add_curate_candidate(
+    add_curate_candidate(
         vault,
         store,
         layer="operating_preferences",
@@ -182,9 +183,121 @@ def test_project_knowledge_requires_exact_attribution(tmp_path: Path) -> None:
         subject="Demo renderer",
         claim="The Demo uses one renderer.",
         project="Demo",
+        allow_cross_project=True,
     )
     evidence = store.evidence_by_ids(store.observation(result["id"])["evidence_refs"])
     assert evidence[0]["project_id"] == "project-demo"
+
+
+def test_project_capture_from_vault_requires_explicit_cross_project_authorization(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    _note(vault / "Memory" / "Decisions.md")
+    store = StateStore(tmp_path / "state.sqlite")
+    for project in (
+        {
+            "id": "project-vault",
+            "name": "Example Person Second Brain",
+            "classification": "first-party",
+            "managed_vault": True,
+        },
+        {
+            "id": "project-public-protocol",
+            "name": "External Protocol Project",
+            "classification": "first-party",
+        },
+    ):
+        store.upsert_project(project)
+        store.set_project_presence(project["id"], present=True)
+
+    with pytest.raises(RuntimeError, match="explicit cross-project authorization"):
+        add_curate_candidate(
+            vault,
+            store,
+            layer="project_knowledge",
+            kind="decision",
+            subject="Daily engine",
+            claim="The public protocol uses a separate Daily engine.",
+            project="External Protocol Project",
+        )
+
+    result = add_curate_candidate(
+        vault,
+        store,
+        layer="project_knowledge",
+        kind="decision",
+        subject="Daily engine",
+        claim="The public protocol uses a separate Daily engine.",
+        project="External Protocol Project",
+        allow_cross_project=True,
+    )
+
+    assert result["project"] == "External Protocol Project"
+
+
+def test_owner_correction_reattributes_promoted_project_knowledge_and_canonical_line(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    note = vault / "Memory" / "Decisions.md"
+    _note(note)
+    store = StateStore(tmp_path / "state.sqlite")
+    for project in (
+        {
+            "id": "project-vault",
+            "name": "Example Person Second Brain",
+            "classification": "first-party",
+            "managed_vault": True,
+        },
+        {
+            "id": "project-public-protocol",
+            "name": "External Protocol Project",
+            "classification": "first-party",
+        },
+    ):
+        store.upsert_project(project)
+        store.set_project_presence(project["id"], present=True)
+    observation_id = store.add_observation(
+        {
+            "kind": "decision",
+            "subject": "Daily engine",
+            "claim": "External Protocol Project uses governed extraction.",
+            "evidence_refs": [],
+            "confidence": 1.0,
+            "status": "promoted",
+            "project_id": "project-public-protocol",
+            "project_ids": ["project-public-protocol"],
+        }
+    )
+    text = note.read_text(encoding="utf-8").replace(
+        "_No generated content yet._",
+        f"- External Protocol Project uses governed extraction. ^{observation_id}",
+    )
+    note.write_text(text, encoding="utf-8")
+
+    result = correct_project_knowledge_attribution(
+        vault,
+        store,
+        observation_id=observation_id,
+        project="Example Person Second Brain",
+        replace_project_name="External Protocol Project",
+        reason="Owner confirmed these are separate projects.",
+    )
+
+    corrected = store.observation(observation_id)
+    assert result["status"] == "corrected"
+    assert corrected["status"] == "promoted"
+    assert corrected["claim"] == (
+        "Example Person Second Brain uses governed extraction."
+    )
+    assert corrected["payload"]["project_id"] == "project-vault"
+    assert corrected["payload"]["project_attribution_source"] == (
+        "explicit_owner_correction"
+    )
+    rendered = note.read_text(encoding="utf-8")
+    assert "Example Person Second Brain uses governed extraction." in rendered
+    assert "External Protocol Project uses governed extraction." not in rendered
 
 
 def test_curate_route_is_blocked_outside_main_vault(tmp_path: Path) -> None:

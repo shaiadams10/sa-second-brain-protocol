@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .basic_memory_integration import reindex
@@ -19,10 +21,19 @@ from .curate import (
     CURATE_KINDS,
     KNOWLEDGE_LAYER_ORDER,
     add_curate_candidate,
+    correct_project_knowledge_attribution,
     require_main_vault_context,
 )
 from .dashboard import build_dashboard, install_dashboard_shortcut, open_dashboard
 from .dashboard_server import serve_dashboard
+from .evaluation_corpus import load_evaluation_corpus
+from .evaluation_harness import EvaluationHarness
+from .extraction_harness import ExtractionHarness
+from .extraction_model import (
+    EXTRACTION_ITEM_ENVELOPE_CHARS,
+    BudgetedExtractionModel,
+    ProtocolExtractionModel,
+)
 from .gitops import sync_protocol_draft
 from .health import report as health_report, write_report
 from .installer import install_standalone_codex, login_dedicated_account
@@ -41,6 +52,8 @@ from .orchestrator import (
     scheduled,
     sync_project_index,
 )
+from .recall_benchmark import RecallBenchmark
+from .recall_corpus import load_recall_corpus
 from .profile import QUESTIONS, answer_interview, create_interview, interview_status
 from .project_forgetting import forget_projects
 from .publisher import (
@@ -104,6 +117,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     sub.add_parser("weekly")
     sub.add_parser("scheduled")
+    cutover = sub.add_parser("cutover")
+    cutover_daily_weekly = cutover.add_subparsers(
+        dest="target", required=True
+    ).add_parser("daily-weekly")
+    cutover_daily_weekly.add_argument(
+        "--owner-authorized",
+        action="store_true",
+        help="Confirm the vault owner explicitly authorized the governed cutover.",
+    )
     refresh = sub.add_parser("refresh-project")
     refresh.add_argument("project")
     sub.add_parser("sync-project-index")
@@ -131,6 +153,11 @@ def _parser() -> argparse.ArgumentParser:
     reclassify.add_argument("id")
     reclassify.add_argument("--kind", required=True)
     reclassify.add_argument("--reason", required=True)
+    reattribute = review_sub.add_parser("correct-project-attribution")
+    reattribute.add_argument("id", nargs="+")
+    reattribute.add_argument("--project", required=True)
+    reattribute.add_argument("--replace-project-name")
+    reattribute.add_argument("--reason", required=True)
     dismiss = review_sub.add_parser("dismiss")
     dismiss.add_argument("id")
     review_sub.add_parser("undo-dismiss")
@@ -193,6 +220,7 @@ def _parser() -> argparse.ArgumentParser:
     curate_add.add_argument("--subject", required=True)
     curate_add.add_argument("--claim", required=True)
     curate_add.add_argument("--project")
+    curate_add.add_argument("--cross-project", action="store_true")
     curate_add.add_argument("--confidence", type=float, default=0.85)
     curate_add.add_argument("--explicit", action="store_true")
     curate_add.add_argument("--confirmed", action="store_true")
@@ -227,6 +255,18 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_serve = dashboard_sub.add_parser("serve")
     dashboard_serve.add_argument("--no-browser", action="store_true")
     dashboard.set_defaults(action="open")
+    harness = sub.add_parser("harness")
+    harness_sub = harness.add_subparsers(dest="action", required=True)
+    harness_evaluate = harness_sub.add_parser("evaluate")
+    harness_evaluate.add_argument(
+        "--corpus",
+        choices=("policy", "quality"),
+        default="policy",
+    )
+    harness_evaluate.add_argument("--live", action="store_true")
+    harness_evaluate.add_argument("--max-model-calls", type=int)
+    harness_evaluate.add_argument("--confirm-cost", action="store_true")
+    harness_sub.add_parser("recall")
     return parser
 
 
@@ -334,6 +374,43 @@ def main(argv: list[str] | None = None) -> int:
             _json(incremental("weekly"))
         elif args.command == "scheduled":
             _json(scheduled())
+        elif args.command == "cutover":
+            if not args.owner_authorized:
+                raise RuntimeError(
+                    "Daily/Weekly cutover requires explicit owner authorization."
+                )
+            paths, _config, _defaults, store = _common()
+            if store.bootstrap_state()["state"] != "completed":
+                raise RuntimeError("Complete bootstrap before Daily/Weekly cutover.")
+            backup = (
+                paths.runs
+                / "backups"
+                / (
+                    "state-pre-governed-cutover-"
+                    + datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+                    + ".sqlite"
+                )
+            )
+            store.backup(backup)
+            result = store.establish_governed_cutover_baseline(
+                reason=(
+                    "Owner-authorized governed Daily/Weekly cutover: archive the "
+                    "pre-cutover active queue and resurface only on material new evidence."
+                )
+            )
+            review = write_review_artifacts(vault_root(), store)
+            dashboard_path = build_dashboard(paths, vault_root())
+            reindex(paths, vault_root())
+            _json(
+                {
+                    **result,
+                    "engine": "governed-extraction-v3",
+                    "state_backup": str(backup),
+                    "review_path": review.get("review_path"),
+                    "dashboard_path": str(dashboard_path),
+                    "canonical_knowledge_deleted": False,
+                }
+            )
         elif args.command == "refresh-project":
             _json(refresh_project(args.project))
         elif args.command == "sync-project-index":
@@ -409,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
                 confidence=args.confidence,
                 explicit=args.explicit,
                 confirmed=args.confirmed,
+                allow_cross_project=args.cross_project,
             )
             build_dashboard(paths, vault_root())
             try:
@@ -458,6 +536,38 @@ def main(argv: list[str] | None = None) -> int:
                         "kind": args.kind,
                     }
                 )
+            elif args.action == "correct-project-attribution":
+                results = []
+                for observation_id in args.id:
+                    observation = store.observation(observation_id)
+                    replacement = (
+                        args.replace_project_name
+                        if observation is not None
+                        and args.replace_project_name
+                        and args.replace_project_name in str(observation["claim"])
+                        else None
+                    )
+                    results.append(
+                        correct_project_knowledge_attribution(
+                            vault_root(),
+                            store,
+                            observation_id=observation_id,
+                            project=args.project,
+                            replace_project_name=replacement,
+                            reason=args.reason,
+                        )
+                    )
+                if store.bootstrap_state()["state"] == "awaiting_review":
+                    write_bootstrap_review_artifacts(vault_root(), store)
+                else:
+                    write_review_artifacts(vault_root(), store)
+                build_dashboard(paths, vault_root())
+                try:
+                    reindex(paths, vault_root())
+                    search_refresh = "completed"
+                except Exception as error:
+                    search_refresh = f"deferred: {type(error).__name__}"
+                _json({"status": "corrected", "items": results, "search_refresh": search_refresh})
             elif args.action == "resolve":
                 _json(
                     answer_question(
@@ -555,6 +665,92 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 paths, _config, defaults, _store = _common()
                 _json(canary(paths, defaults["models"]))
+        elif args.command == "harness":
+            if args.action == "recall":
+                corpus = load_recall_corpus(
+                    Path(__file__).resolve().parents[2]
+                    / "evaluation"
+                    / "corpora"
+                    / "recall-ablation.json"
+                )
+                _json(
+                    asdict(
+                        RecallBenchmark(retriever=corpus.harness()).evaluate(
+                            corpus.suite
+                        )
+                    )
+                )
+                return 0
+            corpus_names = {
+                "policy": "extraction-policy-adversarial.json",
+                "quality": "extraction-quality.json",
+            }
+            corpus = load_evaluation_corpus(
+                Path(__file__).resolve().parents[2]
+                / "evaluation"
+                / "corpora"
+                / corpus_names[args.corpus]
+            )
+            if not args.live:
+                report = EvaluationHarness(
+                    extractor=ExtractionHarness(model=corpus.replay_model())
+                ).evaluate(corpus.suite)
+                _json(asdict(report))
+                if not report.passed:
+                    return 1
+            else:
+                if not args.confirm_cost or not args.max_model_calls:
+                    raise RuntimeError(
+                        "Live evaluation requires --confirm-cost and a positive "
+                        "--max-model-calls ceiling."
+                    )
+                if args.max_model_calls <= 0:
+                    raise RuntimeError("--max-model-calls must be positive.")
+                if not corpus.live_case_count:
+                    raise RuntimeError("This corpus has no live-enabled cases.")
+                paths, _config, defaults, store = _common()
+                role = ModelRole(**defaults["models"]["daily"])
+                run_id = store.start_run(
+                    "extraction-evaluation",
+                    role.name,
+                    role.reasoning,
+                )
+                try:
+                    model = BudgetedExtractionModel(
+                        delegate=ProtocolExtractionModel(
+                            paths=paths,
+                            role=role,
+                            run_id=run_id,
+                            max_packet_chars=defaults["limits"]["max_packet_chars"],
+                            max_evidence_chars=defaults["limits"][
+                                "max_evidence_text_chars"
+                            ]
+                            + EXTRACTION_ITEM_ENVELOPE_CHARS,
+                            use_cache=False,
+                        ),
+                        max_model_calls=args.max_model_calls,
+                    )
+                    report = EvaluationHarness(
+                        extractor=ExtractionHarness(model=model)
+                    ).evaluate(corpus.live_suite)
+                    store.finish_run(
+                        run_id,
+                        "completed" if report.passed else "failed",
+                        evidence_count=report.source_evidence_count,
+                        error=None if report.passed else "evaluation-mismatch",
+                        usage={
+                            "input_tokens": report.input_tokens,
+                            "output_tokens": report.output_tokens,
+                            "total_tokens": report.total_tokens,
+                            "model_calls": report.model_calls,
+                        },
+                    )
+                    _json(asdict(report))
+                    if not report.passed:
+                        return 1
+                except Exception as error:
+                    store.finish_run(run_id, "failed", error=type(error).__name__)
+                    raise
         elif args.command == "protocol":
             paths, config, _defaults, store = _common()
             if store.bootstrap_state()["state"] != "completed":

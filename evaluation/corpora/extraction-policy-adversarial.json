@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "name": "extraction-policy-adversarial-v1",
+  "cases": [
+    {
+      "name": "valid profile memory survives forbidden project sibling",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "max_input_tokens": 1000,
+      "evidence": [
+        {
+          "id": "ev-policy-siblings",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "occurred_at": "2026-08-01T10:00:00Z",
+          "payload": {
+            "source": "synthetic",
+            "analysis_lane": "profile_only",
+            "project_ids": [],
+            "user_messages": [],
+            "assistant_results": []
+          }
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "work_style",
+              "subject": "Review before durable changes",
+              "claim": "the user asks to review uncertain durable changes before publication.",
+              "scope": "global",
+              "project_id": null,
+              "evidence_refs": ["ev-policy-siblings"],
+              "confidence": 0.94,
+              "explicit": true
+            },
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "decision",
+              "subject": "Forbidden unattributed decision",
+              "claim": "This project decision is not attributable.",
+              "scope": "context",
+              "project_id": null,
+              "evidence_refs": ["ev-policy-siblings"],
+              "confidence": 0.88,
+              "explicit": false
+            }
+          ],
+          "usage": {"input_tokens": 200, "output_tokens": 80, "total_tokens": 280}
+        }
+      ],
+      "expected": {
+        "status": "partial",
+        "candidates": [
+          {
+            "type": "memory_mutation",
+            "operation": "create",
+            "kind": "work_style",
+            "subject": "Review before durable changes",
+            "claim": "the user asks to review uncertain durable changes before publication.",
+            "scope": "global",
+            "project_id": null,
+            "target_memory_id": null,
+            "evidence_refs": ["ev-policy-siblings"],
+            "confidence": 0.94,
+            "explicit": true
+          }
+        ],
+        "rejection_codes": ["profile-only-project-knowledge"]
+      }
+    },
+    {
+      "name": "unknown citation is isolated",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-citation",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "preference",
+              "subject": "Invented citation",
+              "claim": "This candidate cites evidence outside the packet.",
+              "scope": "global",
+              "project_id": null,
+              "evidence_refs": ["ev-not-in-packet"],
+              "confidence": 0.91,
+              "explicit": true
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "status": "rejected",
+        "candidates": [],
+        "rejection_codes": ["unknown-evidence-reference"]
+      }
+    },
+    {
+      "name": "daily cannot resolve a weekly question",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-capability",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "question_resolution",
+              "question_id": "question-1",
+              "evidence_refs": ["ev-policy-capability"]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "status": "rejected",
+        "candidates": [],
+        "rejection_codes": ["run-kind-capability-violation"]
+      }
+    },
+    {
+      "name": "malformed primitive output is isolated",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-shape",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [{"candidates": [17]}],
+      "expected": {
+        "status": "rejected",
+        "candidates": [],
+        "rejection_codes": ["invalid-candidate-shape"]
+      }
+    },
+    {
+      "name": "schema-invalid mutation is isolated",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-schema",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "invent",
+              "kind": "preference",
+              "subject": "Invalid operation",
+              "claim": "The host must reject an operation outside the schema.",
+              "scope": "global",
+              "project_id": null,
+              "evidence_refs": ["ev-policy-schema"],
+              "confidence": 0.8,
+              "explicit": false
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "status": "rejected",
+        "candidates": [],
+        "rejection_codes": ["invalid-candidate-schema"]
+      }
+    },
+    {
+      "name": "malformed model envelope becomes a packet failure",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-envelope",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [{"return_value": null}],
+      "expected": {
+        "status": "failed",
+        "candidates": [],
+        "rejection_codes": [],
+        "failure_codes": ["invalid-model-response"]
+      }
+    },
+    {
+      "name": "individual model exception becomes a replayable failure",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "evidence": [
+        {
+          "id": "ev-policy-model-failure",
+          "source_type": "session-episode",
+          "kind": "session_episode",
+          "project_id": null,
+          "payload": {"analysis_lane": "profile_only", "project_ids": []}
+        }
+      ],
+      "scripted_responses": [{"raises": "RuntimeError"}],
+      "expected": {
+        "status": "failed",
+        "candidates": [],
+        "rejection_codes": [],
+        "failure_codes": ["model-error"]
+      }
+    },
+    {
+      "name": "successful episode survives failed sibling episode",
+      "run_kind": "daily",
+      "live_enabled": false,
+      "limits": {"max_episode_messages": 1, "max_episode_chars": 100},
+      "evidence": [
+        {
+          "id": "ev-policy-partial-session",
+          "source_type": "session-digest",
+          "kind": "session_digest",
+          "project_id": null,
+          "occurred_at": "2026-08-01T14:00:00Z",
+          "payload": {
+            "source": "synthetic",
+            "analysis_lane": "profile_only",
+            "project_ids": [],
+            "user_messages": [
+              {
+                "occurred_at": "2026-08-01T14:00:00Z",
+                "text": "MODEL_FAIL packet."
+              },
+              {
+                "occurred_at": "2026-08-01T14:01:00Z",
+                "text": "I always want concise run receipts."
+              }
+            ],
+            "assistant_results": []
+          }
+        }
+      ],
+      "scripted_responses": [
+        {"raises": "RuntimeError"},
+        {
+          "candidates": [
+            {
+              "type": "memory_mutation",
+              "operation": "create",
+              "kind": "preference",
+              "subject": "Concise run receipts",
+              "claim": "the user wants run receipts to be concise.",
+              "scope": "global",
+              "project_id": null,
+              "evidence_refs": ["ev-episode-c9cd2e710140ba4bdb945156"],
+              "confidence": 0.96,
+              "explicit": true
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "status": "partial",
+        "candidates": [
+          {
+            "type": "memory_mutation",
+            "operation": "create",
+            "kind": "preference",
+            "subject": "Concise run receipts",
+            "claim": "the user wants run receipts to be concise.",
+            "scope": "global",
+            "project_id": null,
+            "target_memory_id": null,
+            "evidence_refs": ["ev-episode-c9cd2e710140ba4bdb945156"],
+            "confidence": 0.96,
+            "explicit": true
+          }
+        ],
+        "rejection_codes": [],
+        "failure_codes": ["model-error"]
+      }
+    }
+  ]
+}

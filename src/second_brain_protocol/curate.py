@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,7 @@ KNOWLEDGE_LAYER_NOTES = {
 CURATE_KINDS = tuple(
     sorted({kind for kinds in KNOWLEDGE_LAYER_KINDS.values() for kind in kinds})
 )
+CANONICAL_ROOTS = ("Identity", "Experience", "Projects", "Skills", "Memory", "Goals")
 
 
 def require_main_vault_context(
@@ -98,6 +100,7 @@ def add_curate_candidate(
     confidence: float = 0.85,
     explicit: bool = False,
     confirmed: bool = False,
+    allow_cross_project: bool = False,
 ) -> dict[str, Any]:
     """Publish one distilled, implied owner insight as an unconfirmed Curate card."""
 
@@ -121,6 +124,11 @@ def add_curate_candidate(
         if not project:
             raise ValueError("Project knowledge requires one exact project attribution")
         project_row = _resolve_project(store, project)
+        if not project_row.get("managed_vault") and not allow_cross_project:
+            raise RuntimeError(
+                "Project capture from the main vault requires explicit cross-project "
+                "authorization when the target is not the managed vault project."
+            )
     elif project:
         raise ValueError("Only project knowledge accepts a project attribution")
 
@@ -201,4 +209,173 @@ def add_curate_candidate(
         "project": (
             str(project_row.get("name") or project_row["id"]) if project_row else None
         ),
+    }
+
+
+def _rewrite_canonical_observation_claim(
+    vault: Path,
+    *,
+    observation_id: str,
+    claim: str,
+    required: bool,
+) -> tuple[dict[Path, str], int]:
+    token = f"^{observation_id}"
+    originals: dict[Path, str] = {}
+    updates: dict[Path, str] = {}
+    occurrences = 0
+    for root_name in CANONICAL_ROOTS:
+        root = vault / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            current = path.read_text(encoding="utf-8", errors="strict")
+            if token not in current:
+                continue
+            section: str | None = None
+            rendered: list[str] = []
+            changed = False
+            for line in current.splitlines(keepends=True):
+                stripped = line.strip()
+                start = re.fullmatch(r"<!-- sb:generated ([a-z0-9-]+):start -->", stripped)
+                end = re.fullmatch(r"<!-- sb:generated ([a-z0-9-]+):end -->", stripped)
+                if start:
+                    if section is not None:
+                        raise RuntimeError("Nested generated sections are not allowed")
+                    section = start.group(1)
+                elif end:
+                    if section != end.group(1):
+                        raise RuntimeError("Malformed generated section markers")
+                    section = None
+                if token in line:
+                    if section is None:
+                        raise RuntimeError(
+                            "Observation correction may edit only generated knowledge"
+                        )
+                    eol = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+                    content = line[: -len(eol)] if eol else line
+                    match = re.fullmatch(
+                        rf"(\s*-\s+).+?(\s+\^{re.escape(observation_id)}(?:\s+.*)?)",
+                        content,
+                    )
+                    if match is None:
+                        raise RuntimeError("Canonical observation line is malformed")
+                    line = f"{match.group(1)}{claim}{match.group(2)}{eol}"
+                    changed = True
+                    occurrences += 1
+                rendered.append(line)
+            if section is not None:
+                raise RuntimeError("Unclosed generated section marker")
+            if changed:
+                originals[path] = current
+                updates[path] = "".join(rendered)
+    if required and not occurrences:
+        raise RuntimeError("Promoted knowledge has no canonical generated occurrence")
+    try:
+        for path, text in updates.items():
+            temporary = path.with_suffix(path.suffix + ".sbtmp")
+            temporary.write_text(text, encoding="utf-8")
+            temporary.replace(path)
+    except Exception:
+        for path, text in originals.items():
+            path.write_text(text, encoding="utf-8")
+        raise
+    return originals, occurrences
+
+
+def correct_project_knowledge_attribution(
+    vault: Path,
+    store: StateStore,
+    *,
+    observation_id: str,
+    project: str,
+    reason: str,
+    replace_project_name: str | None = None,
+) -> dict[str, Any]:
+    """Apply one explicit owner correction to project-scoped knowledge."""
+
+    if not reason.strip():
+        raise ValueError("Project-attribution correction requires an audit reason")
+    item = store.observation(observation_id)
+    if item is None:
+        raise KeyError(observation_id)
+    if item["kind"] not in KNOWLEDGE_LAYER_KINDS["project_knowledge"]:
+        raise ValueError("Only project knowledge can be reattributed")
+    target = _resolve_project(store, project)
+    target_id = str(target["id"])
+    target_name = str(target.get("name") or target_id)
+    previous_claim = str(item["claim"])
+    corrected_claim = previous_claim
+    if replace_project_name:
+        if replace_project_name not in previous_claim:
+            raise ValueError("The project name to replace is absent from the claim")
+        corrected_claim = previous_claim.replace(replace_project_name, target_name)
+    corrected_claim = _clean_atomic_text(
+        corrected_claim,
+        field="Corrected claim",
+        max_chars=900,
+    )
+    payload = dict(item.get("payload") or {})
+    previous_projects = [
+        str(value) for value in payload.get("project_ids", []) if value
+    ]
+    if not previous_projects and payload.get("project_id"):
+        previous_projects = [str(payload["project_id"])]
+    corrected_at = utc_now()
+    corrections = list(payload.get("project_attribution_corrections") or [])
+    corrections.append(
+        {
+            "from_project_ids": previous_projects,
+            "to_project_id": target_id,
+            "previous_claim": previous_claim,
+            "reason": reason.strip()[:1000],
+            "corrected_at": corrected_at,
+        }
+    )
+    payload.update(
+        {
+            "claim": corrected_claim,
+            "project_id": target_id,
+            "project_ids": [target_id],
+            "project_ids_override": [target_id],
+            "project_attribution_source": "explicit_owner_correction",
+            "project_attribution_corrections": corrections,
+        }
+    )
+    originals: dict[Path, str] = {}
+    try:
+        originals, occurrences = _rewrite_canonical_observation_claim(
+            vault,
+            observation_id=observation_id,
+            claim=corrected_claim,
+            required=item["status"] == "promoted",
+        )
+        with store.transaction() as connection:
+            connection.execute(
+                """UPDATE observations SET claim=?,project_count=1,payload_json=?,
+                updated_at=? WHERE id=?""",
+                (
+                    corrected_claim,
+                    json.dumps(
+                        payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    corrected_at,
+                    observation_id,
+                ),
+            )
+            store.enqueue_search_refresh(
+                connection,
+                {path.relative_to(vault).as_posix() for path in originals},
+            )
+    except Exception:
+        for path, text in originals.items():
+            path.write_text(text, encoding="utf-8")
+        raise
+    return {
+        "id": observation_id,
+        "status": "corrected",
+        "project": target_name,
+        "claim": corrected_claim,
+        "canonical_occurrences": occurrences,
     }

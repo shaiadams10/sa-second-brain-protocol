@@ -23,6 +23,7 @@ from .markdown import slugify
 from .model_runner import TOKEN_USAGE_FIELDS, usage_from_receipt
 from .notifications import obsidian_uri
 from .project_catalog import project_catalog_health
+from .governed_publication import GOVERNED_JOURNAL_MARKER
 from .review import build_review_groups, review_summary
 from .scheduler import task_details
 from .security import sanitize_text
@@ -76,6 +77,56 @@ KIND_LABELS = {
     "work_style": "Work style",
 }
 PERSONAL_PATTERN_KINDS = {"personality", "preference", "voice_style", "work_style"}
+IDENTITY_PORTRAIT_FACETS = (
+    {
+        "key": "persona",
+        "label": "Core character",
+        "file": "Persona.md",
+        "section": "persona",
+        "marker": "SELF",
+        "omit_prefixes": ("preferred name:", "current work:"),
+    },
+    {
+        "key": "values",
+        "label": "Values",
+        "file": "Values.md",
+        "section": "values",
+        "marker": "WHY",
+        "omit_prefixes": (),
+    },
+    {
+        "key": "work_style",
+        "label": "Work style",
+        "file": "WorkStyle.md",
+        "section": "work-style",
+        "marker": "HOW",
+        "omit_prefixes": (),
+    },
+    {
+        "key": "voice",
+        "label": "Voice",
+        "file": "Voice.md",
+        "section": "voice",
+        "marker": "SAY",
+        "omit_prefixes": (),
+    },
+    {
+        "key": "preferences",
+        "label": "Preferences",
+        "file": "Preferences.md",
+        "section": "preferences",
+        "marker": "LIKE",
+        "omit_prefixes": (),
+    },
+    {
+        "key": "capabilities",
+        "label": "Strengths",
+        "file": "Capabilities.md",
+        "section": "capabilities",
+        "marker": "CAN",
+        "omit_prefixes": ("representative accomplishments:",),
+    },
+)
 PROJECT_CONTEXT_MARKERS = (
     "this demo",
     "the animated demo",
@@ -1629,8 +1680,12 @@ def _summary_entry(
     store: StateStore,
     paths: RuntimePaths,
     usage: dict[str, Any] | None = None,
+    governed_only: bool = False,
 ) -> dict[str, Any] | None:
     raw = _generated_section(path, kind)
+    if governed_only and GOVERNED_JOURNAL_MARKER not in raw:
+        return None
+    raw = raw.replace(GOVERNED_JOURNAL_MARKER, "").strip()
     if not raw or "no automated run yet" in raw.casefold():
         return None
     sections = _summary_sections(raw)
@@ -1702,6 +1757,7 @@ def _summary_history(
     paths: RuntimePaths,
     *,
     limit: int = 24,
+    governed_only: bool = False,
 ) -> list[dict[str, Any]]:
     folder = vault / "Journal" / ("Daily" if kind == "daily" else "Weekly")
     pattern = "20??-??-??.md" if kind == "daily" else "*.md"
@@ -1719,6 +1775,7 @@ def _summary_history(
             store=store,
             paths=paths,
             usage=_summary_usage(store, kind, path.stem),
+            governed_only=governed_only,
         )
         if entry:
             result.append(entry)
@@ -2022,6 +2079,81 @@ def default_knowledge_layer(layers: list[dict[str, Any]]) -> str:
         (str(layer["key"]) for layer in layers if int(layer.get("new") or 0) > 0),
         "about_shai",
     )
+
+
+def _identity_portrait_signals(
+    path: Path,
+    section: str,
+    *,
+    omit_prefixes: tuple[str, ...] = (),
+    include_prefixes: tuple[str, ...] = (),
+) -> list[str]:
+    statements: list[str] = []
+    for line in _generated_section(path, section).splitlines():
+        match = re.match(r"^\s*[-+]\s+(.+?)\s*$", line)
+        if match is None:
+            continue
+        raw = re.sub(
+            r"\s+\^(?:obs|ev|skill)-[A-Za-z0-9-]+(?:\s+.*)?$",
+            "",
+            match.group(1),
+        ).strip()
+        comparable = re.sub(r"\*", "", raw).casefold()
+        if include_prefixes and not any(
+            comparable.startswith(prefix) for prefix in include_prefixes
+        ):
+            continue
+        if any(comparable.startswith(prefix) for prefix in omit_prefixes):
+            continue
+        raw = re.sub(r"^\*\*[^*]+:\*\*\s*", "", raw)
+        cleaned = _clean_markdown(raw, max_chars=104)
+        if not cleaned or "will appear here" in cleaned.casefold():
+            continue
+        statements.append(cleaned)
+    return statements
+
+
+def _personality_portrait(vault: Path) -> dict[str, Any]:
+    """Build a compact local identity map without inventing trait scores."""
+
+    identity = vault / "Identity"
+    facets: list[dict[str, Any]] = []
+    total_signals = 0
+    for definition in IDENTITY_PORTRAIT_FACETS:
+        path = identity / str(definition["file"])
+        signals = _identity_portrait_signals(
+            path,
+            str(definition["section"]),
+            omit_prefixes=tuple(definition["omit_prefixes"]),
+        )
+        if definition["key"] == "values" and not signals:
+            signals = _identity_portrait_signals(
+                identity / "Preferences.md",
+                "preferences",
+                include_prefixes=("values:",),
+            )
+        total_signals += len(signals)
+        facets.append(
+            {
+                "key": definition["key"],
+                "label": definition["label"],
+                "marker": definition["marker"],
+                "signal_count": len(signals),
+                "signals": list(reversed(signals[-2:])),
+                "url": obsidian_uri(vault, path),
+            }
+        )
+    display_name = vault.name.removesuffix(" Second Brain").strip() or "Second Brain"
+    initials = "".join(part[0] for part in display_name.split()[:2]).upper() or "SB"
+    return {
+        "status": "Evolving",
+        "initials": initials,
+        "domain_count": len(facets),
+        "forming_count": sum(not facet["signals"] for facet in facets),
+        "total_signals": total_signals,
+        "facets": facets,
+        "url": obsidian_uri(vault, identity / "Persona.md"),
+    }
 
 
 def _knowledge_deck(store: StateStore, vault: Path) -> dict[str, Any]:
@@ -2532,10 +2664,48 @@ def _forming_patterns(store: StateStore, vault: Path) -> list[dict[str, Any]]:
     return patterns[:4]
 
 
+def _governed_cutover_at(store: StateStore) -> datetime | None:
+    raw = store.get_meta("daily-weekly-governed-cutover-baseline-v1")
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return _parse_datetime(payload.get("completed_at"))
+
+
+def _governed_pipeline_rows(
+    store: StateStore, *, limit: int = 30
+) -> list[dict[str, Any]]:
+    rows = store.pipeline_runs(limit=limit)
+    cutover_at = _governed_cutover_at(store)
+    if cutover_at is None:
+        return rows
+    return [
+        row
+        for row in rows
+        if (started := _parse_datetime(row.get("started_at"))) is not None
+        and started >= cutover_at
+    ]
+
+
 def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
-    pipeline_rows = store.pipeline_runs(limit=30)
+    cutover_at = _governed_cutover_at(store)
+    pipeline_rows = _governed_pipeline_rows(store, limit=30)
     grouped: list[dict[str, Any]] = []
-    if pipeline_rows:
+    if cutover_at is not None:
+        source_rows = [
+            {
+                **row,
+                "pipeline": True,
+                "model": None,
+                "reasoning": None,
+                "evidence_count": 0,
+            }
+            for row in pipeline_rows
+        ]
+    elif pipeline_rows:
         oldest_pipeline = min(str(row["started_at"]) for row in pipeline_rows)
         source_rows = [
             {
@@ -2700,11 +2870,19 @@ def _system_status(
     store: StateStore, schedule: dict[str, Any], *, now: datetime
 ) -> dict[str, str]:
     bootstrap = store.bootstrap_state().get("state")
-    pipeline_runs = store.pipeline_runs(limit=30)
+    cutover_at = _governed_cutover_at(store)
+    pipeline_runs = _governed_pipeline_rows(store, limit=30)
     latest_pipeline = pipeline_runs[0] if pipeline_runs else None
     runs = [
         run for run in store.runs(limit=30) if run.get("kind") in {"daily", "weekly"}
     ]
+    if cutover_at is not None:
+        runs = [
+            run
+            for run in runs
+            if (started := _parse_datetime(run.get("started_at"))) is not None
+            and started >= cutover_at
+        ]
     latest = runs[0] if runs else None
     if bootstrap != "completed":
         return {
@@ -2732,7 +2910,12 @@ def _system_status(
         if latest_pipeline and latest_pipeline.get("status") == "completed"
         else (latest or {}).get("completed_at")
     )
-    if schedule_result != 0 and (
+    scheduled_result_is_current = (
+        cutover_at is None
+        or scheduled_at is None
+        or scheduled_at >= cutover_at
+    )
+    if schedule_result != 0 and scheduled_result_is_current and (
         scheduled_at is None or successful_at is None or successful_at < scheduled_at
     ):
         return {
@@ -2749,8 +2932,8 @@ def _system_status(
     if latest is None:
         return {
             "tone": "ready",
-            "label": "Ready for the first daily run",
-            "detail": "The system is installed and waiting for its first real daily briefing.",
+            "label": "Ready for the first governed Daily",
+            "detail": "The authoritative engine is waiting for its first scheduled briefing.",
         }
     completed = _parse_datetime(latest.get("completed_at") or latest.get("started_at"))
     if completed and now.astimezone(UTC) - completed > timedelta(hours=48):
@@ -3099,10 +3282,37 @@ def build_snapshot(
             else read_codex_rate_limits(paths)
         )
 
-    daily_path = _latest_note(vault / "Journal" / "Daily", "20??-??-??.md")
-    weekly_path = _latest_note(vault / "Journal" / "Weekly", "*.md")
-    daily_history = _summary_history(vault, "daily", store, paths)
-    weekly_history = _summary_history(vault, "weekly", store, paths)
+    cutover_at = _governed_cutover_at(store)
+    schedule_last_run = _parse_datetime(schedule.get("last_run"))
+    if (
+        cutover_at is not None
+        and schedule_last_run is not None
+        and schedule_last_run < cutover_at
+    ):
+        schedule = {
+            **schedule,
+            "last_run": None,
+            "last_result": None,
+            "missed_runs": 0,
+        }
+
+    governed_cutover = bool(
+        store.get_meta("daily-weekly-governed-cutover-baseline-v1")
+    )
+    daily_history = _summary_history(
+        vault,
+        "daily",
+        store,
+        paths,
+        governed_only=governed_cutover,
+    )
+    weekly_history = _summary_history(
+        vault,
+        "weekly",
+        store,
+        paths,
+        governed_only=governed_cutover,
+    )
     for entry in (*daily_history, *weekly_history):
         entry["usage"]["codex_impact"] = _summary_codex_impact(
             entry["usage"], codex_usage_snapshot
@@ -3133,15 +3343,26 @@ def build_snapshot(
         "projects": obsidian_uri(vault, vault / "Projects" / "Index.md"),
         "skills": obsidian_uri(vault, vault / "Skills" / "Index.md"),
         "memory": obsidian_uri(vault, vault / "Memory" / "LongTermMemory.md"),
+        "identity": obsidian_uri(vault, vault / "Identity" / "Persona.md"),
         "goals": obsidian_uri(vault, vault / "Goals" / "ActiveGoals.md"),
         "review": obsidian_uri(
             vault, latest_review or vault / "Inbox" / "Review" / "Index.md"
         ),
         "daily": obsidian_uri(
-            vault, daily_path or vault / "Journal" / "Daily" / "Index.md"
+            vault,
+            (
+                vault / "Journal" / "Daily" / f"{daily['period']}.md"
+                if daily.get("period")
+                else vault / "Journal" / "Daily" / "Index.md"
+            ),
         ),
         "weekly": obsidian_uri(
-            vault, weekly_path or vault / "Journal" / "Weekly" / "Index.md"
+            vault,
+            (
+                vault / "Journal" / "Weekly" / f"{weekly['period']}.md"
+                if weekly.get("period")
+                else vault / "Journal" / "Weekly" / "Index.md"
+            ),
         ),
         "roadmap": obsidian_uri(vault, vault / "System" / "Roadmap.md"),
     }
@@ -3164,7 +3385,7 @@ def build_snapshot(
         scheduler_detail = (
             f"{schedule_state.title()}; next {next_label.replace(' 0', ' ')}"
         )
-    latest_pipeline = next(iter(store.pipeline_runs(limit=1)), None)
+    latest_pipeline = next(iter(_governed_pipeline_rows(store, limit=1)), None)
     if latest_pipeline and latest_pipeline.get("status") == "failed":
         daily_outcome = {
             "state": "attention",
@@ -3182,6 +3403,19 @@ def build_snapshot(
         }
     checks = [
         {"label": "Vault", "state": "good", "detail": "Canonical notes available"},
+        {
+            "label": "Memory engine",
+            "state": (
+                "good"
+                if store.get_meta("daily-weekly-governed-cutover-baseline-v1")
+                else "neutral"
+            ),
+            "detail": (
+                "Governed extraction v3 is authoritative"
+                if store.get_meta("daily-weekly-governed-cutover-baseline-v1")
+                else "Governed Daily/Weekly cutover metadata is missing"
+            ),
+        },
         {
             "label": "Scheduler",
             "state": "good" if scheduler_good else "attention",
@@ -3235,6 +3469,7 @@ def build_snapshot(
             "pending_evidence": store.evidence_count(status="new"),
         },
         "learning": _learning_snapshot(store, daily),
+        "personality": _personality_portrait(vault),
         "summaries": {
             "daily": daily_history,
             "weekly": weekly_history,

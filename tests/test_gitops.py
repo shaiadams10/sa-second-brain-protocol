@@ -131,6 +131,53 @@ def test_protocol_commit_message_supports_a_descriptive_override(monkeypatch) ->
     assert gitops._protocol_commit_message() == "Fix public README author-name redaction"
 
 
+def test_public_export_cannot_include_private_vault_trees(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    protocol = vault / "Protocol"
+    (protocol / "docs").mkdir(parents=True)
+    (protocol / "evaluation" / "corpora").mkdir(parents=True)
+    (protocol / "README.md").write_text("# Reusable protocol\n", encoding="utf-8")
+    (protocol / "docs" / "Architecture.md").write_text(
+        "# Generic architecture\n", encoding="utf-8"
+    )
+    (protocol / "evaluation" / "corpora" / "quality.json").write_text(
+        '{"schema_version": 1}\n', encoding="utf-8"
+    )
+    private_files = {
+        "Identity/Persona.md": "private identity marker",
+        "Memory/LongTermMemory.md": "private memory marker",
+        "Projects/private-project.md": "private project marker",
+        "Journal/Daily/2026-08-02.md": "private journal marker",
+        "Inbox/Review/pending.md": "private review marker",
+        "System/runtime.json": "private runtime marker",
+        "dashboard/index.html": "private populated dashboard marker",
+    }
+    for relative, content in private_files.items():
+        path = vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    destination = tmp_path / "public-export"
+    gitops.export_public_protocol(protocol, destination)
+
+    exported_paths = {
+        path.relative_to(destination).as_posix()
+        for path in destination.rglob("*")
+        if path.is_file()
+    }
+    exported_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in destination.rglob("*")
+        if path.is_file()
+    )
+    assert exported_paths == {
+        "README.md",
+        "docs/Architecture.md",
+        "evaluation/corpora/quality.json",
+    }
+    assert not any(marker in exported_text for marker in private_files.values())
+
+
 def test_protocol_sync_publishes_only_changed_sanitized_exports(
     tmp_path: Path, monkeypatch,
 ) -> None:
