@@ -908,6 +908,9 @@ def test_dashboard_template_contains_compact_personality_view() -> None:
     assert 'id="personality"' in rendered
     assert 'id="personality-facets"' in rendered
     assert 'href="#personality"' in rendered
+    assert ".personality-panel { grid-column: span 12; overflow: visible;" in rendered
+    assert 'html[data-theme="dark"] .personality-panel {' in rendered
+    assert 'html[data-theme="dark"] .personality-facet {' in rendered
 
 
 def test_project_decision_uses_an_attribution_stamp(

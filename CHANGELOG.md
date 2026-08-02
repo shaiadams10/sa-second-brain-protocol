@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added a compact dashboard personality portrait derived from all six canonical Identity facets, with bounded grounded signals and visibly forming gaps instead of invented scores.
+- Added a compact dashboard personality portrait derived from all six canonical Identity facets, with bounded grounded signals, visibly forming gaps instead of invented scores, a dedicated high-contrast dark treatment, and an unclipped section badge.
 - Made the private-vault/public-protocol repository boundary explicit, added a regression test proving private vault trees cannot enter the public export, restored the reusable evaluation corpora to the exported package allowlist, and documented the one-way draft-PR publication flow.
 - Clarified that MCP transport is not currently usable and refined the future design around authenticated project-scoped reads plus Curate candidate submission without canonical write access or caller self-approval.
 - Separated evidence discovery date from original work date in the dashboard, limited “today” learning to same-day evidence, hid individual profile-only session cards behind compact aggregate coverage, collapsed summary archives by default, and added owner topic suppression that automatically expires when newer evidence appears.

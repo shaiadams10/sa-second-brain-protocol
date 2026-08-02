@@ -374,7 +374,8 @@
     .briefing-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 22px; font-family: var(--mono); font-size: 11px; }
     .briefing-foot a { color: var(--pink-soft); border-bottom: 1px solid currentColor; }
 
-    .personality-panel { grid-column: span 12; overflow: hidden; background: linear-gradient(128deg, var(--paper-bright) 0 32%, var(--purple-soft) 32% 100%); }
+    .personality-panel { grid-column: span 12; overflow: visible; background: linear-gradient(128deg, var(--paper-bright) 0 32%, var(--purple-soft) 32% 100%); }
+    .personality-panel::before { z-index: 4; }
     .personality-map { display: grid; grid-template-columns: minmax(210px, 0.7fr) minmax(0, 2.3fr); gap: clamp(22px, 4vw, 54px); align-items: center; }
     .personality-core { position: relative; display: grid; place-items: center; min-height: 250px; }
     .personality-core::before, .personality-core::after { content: ""; position: absolute; border: 1.5px dashed var(--purple); border-radius: 50%; }
@@ -2225,6 +2226,55 @@
       background: #17141c;
       color: #f4eff6;
     }
+    html[data-theme="dark"] .personality-panel {
+      overflow: visible;
+      border-color: #756d80;
+      background:
+        radial-gradient(circle at 15% 54%, rgba(170, 155, 236, 0.3), transparent 24%),
+        linear-gradient(128deg, #17131d 0 32%, #2a2138 32% 100%);
+      box-shadow: 4px 4px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-panel::before {
+      border-color: #f2edf5;
+      background: #7465b6;
+      color: white;
+      box-shadow: 3px 3px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-core::before { border-color: rgba(192, 178, 255, 0.72); }
+    html[data-theme="dark"] .personality-core::after { border-color: rgba(255, 95, 167, 0.82); }
+    html[data-theme="dark"] .personality-orb {
+      border-color: #f2edf5;
+      background: linear-gradient(145deg, #6253a0, #8f3f70);
+      box-shadow: 8px 8px 0 #ff5fa7;
+    }
+    html[data-theme="dark"] .personality-status { color: #ffe0ed; }
+    html[data-theme="dark"] .personality-measure {
+      border-color: #8b8196;
+      background: #1b1722;
+      color: #eee8f2;
+      box-shadow: 3px 3px 0 #050407;
+    }
+    html[data-theme="dark"] .personality-measure strong { color: #c8bcff; }
+    html[data-theme="dark"] .personality-facet {
+      border-color: #776e82;
+      background: linear-gradient(145deg, rgba(54, 46, 68, 0.98), rgba(32, 27, 41, 0.98));
+      color: #f4eff6;
+      box-shadow: 3px 3px 0 #08060b;
+    }
+    html[data-theme="dark"] .personality-facet:hover {
+      border-color: #aa9bec;
+      background: linear-gradient(145deg, rgba(65, 53, 82, 0.98), rgba(39, 31, 49, 0.98));
+      box-shadow: 4px 6px 0 #08060b;
+    }
+    html[data-theme="dark"] .personality-marker {
+      border: 1px solid #b9adf4;
+      background: #7465b6;
+      color: white;
+    }
+    html[data-theme="dark"] .personality-facet-title { color: #f4eff6; }
+    html[data-theme="dark"] .personality-facet-count { color: #aaa0b2; }
+    html[data-theme="dark"] .personality-signal,
+    html[data-theme="dark"] .personality-forming { color: #c9c0ce; }
     html[data-theme="dark"] .focus-panel,
     html[data-theme="dark"] .matt-intro {
       background: #29223d;
