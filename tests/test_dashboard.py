@@ -498,6 +498,41 @@ def test_dashboard_surfaces_pipeline_failure_stage_and_safe_error(
     assert "openRunDialog(run)" in rendered
 
 
+def test_dashboard_surfaces_scheduler_failure_without_pipeline_receipt(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "Example Person Second Brain"
+    vault.mkdir()
+    paths = RuntimePaths.from_root(tmp_path / "runtime")
+    store = StateStore(paths.state)
+    store.set_bootstrap_state("completed")
+    store.set_meta(
+        "daily-weekly-governed-cutover-baseline-v1",
+        json.dumps({"completed_at": "2026-08-02T11:33:37+00:00"}),
+    )
+
+    snapshot = build_snapshot(
+        paths,
+        vault,
+        now=datetime(2026, 8, 3, 12, 0, tzinfo=UTC),
+        schedule={
+            "installed": True,
+            "state": "Ready",
+            "last_run": "2026-08-02T22:30:01-04:00",
+            "next_run": "2026-08-03T22:30:00-04:00",
+            "last_result": 0x800710E0,
+            "missed_runs": 0,
+        },
+        codex_usage_snapshot={"available": False, "windows": []},
+    )
+
+    assert snapshot["runs"][0]["status"] == "failed"
+    assert snapshot["runs"][0]["stage"] == "Launch"
+    assert snapshot["runs"][0]["source"] == "Windows Task Scheduler"
+    assert "0x800710E0" in snapshot["runs"][0]["error"]
+    assert snapshot["status"]["label"] == "Last scheduled launch failed"
+
+
 def test_dashboard_uses_safe_promoted_knowledge_and_aggregate_review_counts(
     tmp_path: Path,
     monkeypatch,

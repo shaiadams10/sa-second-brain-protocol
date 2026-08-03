@@ -2690,7 +2690,51 @@ def _governed_pipeline_rows(
     ]
 
 
-def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
+def _scheduler_failure_row(
+    schedule: dict[str, Any] | None,
+    pipeline_rows: list[dict[str, Any]],
+    *,
+    cutover_at: datetime | None,
+) -> dict[str, Any] | None:
+    if not schedule:
+        return None
+    result = int(schedule.get("last_result") or 0)
+    started = _parse_datetime(schedule.get("last_run"))
+    if result == 0 or started is None or (cutover_at and started < cutover_at):
+        return None
+    newest_pipeline = max(
+        (_parse_datetime(row.get("started_at")) for row in pipeline_rows),
+        default=None,
+    )
+    if newest_pipeline is not None and newest_pipeline >= started:
+        return None
+    code = f"0x{result & 0xFFFFFFFF:08X}"
+    known = {
+        0x800710E0: "The operator or administrator refused the request.",
+    }
+    message = known.get(result & 0xFFFFFFFF, "Windows did not launch the scheduled task.")
+    return {
+        "kind": "daily",
+        "trigger": "scheduled",
+        "status": "failed",
+        "stage": "launch",
+        "started_at": schedule.get("last_run"),
+        "completed_at": schedule.get("last_run"),
+        "error": f"Task Scheduler {code}: {message}",
+        "pipeline": False,
+        "scheduler": True,
+        "model": None,
+        "reasoning": None,
+        "evidence_count": 0,
+    }
+
+
+def _group_runs(
+    store: StateStore,
+    *,
+    limit: int = 7,
+    schedule: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     cutover_at = _governed_cutover_at(store)
     pipeline_rows = _governed_pipeline_rows(store, limit=30)
     grouped: list[dict[str, Any]] = []
@@ -2726,6 +2770,13 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
     else:
         source_rows = [{**row, "pipeline": False} for row in store.runs(limit=30)]
 
+    scheduler_failure = _scheduler_failure_row(
+        schedule, pipeline_rows, cutover_at=cutover_at
+    )
+    if scheduler_failure is not None:
+        source_rows.append(scheduler_failure)
+        source_rows.sort(key=lambda row: str(row.get("started_at") or ""), reverse=True)
+
     for run in source_rows:
         started = _parse_datetime(run.get("started_at"))
         completed = _parse_datetime(run.get("completed_at"))
@@ -2751,7 +2802,13 @@ def _group_runs(store: StateStore, *, limit: int = 7) -> list[dict[str, Any]]:
             "error": error,
             "error_summary": sanitize_text(error, max_chars=240),
             "trigger": str(run.get("trigger") or ""),
-            "source": "Pipeline" if run.get("pipeline") else "Model run",
+            "source": (
+                "Windows Task Scheduler"
+                if run.get("scheduler")
+                else "Pipeline"
+                if run.get("pipeline")
+                else "Model run"
+            ),
         }
         previous = grouped[-1] if grouped else None
         previous_started = (
@@ -2920,8 +2977,11 @@ def _system_status(
     ):
         return {
             "tone": "danger",
-            "label": "Last scheduled run failed",
-            "detail": f"Scheduler exit code {schedule_result}. Evidence is preserved for retry.",
+            "label": "Last scheduled launch failed",
+            "detail": (
+                f"Task Scheduler exit code 0x{schedule_result & 0xFFFFFFFF:08X}. "
+                "The pipeline did not start, so no evidence checkpoint changed."
+            ),
         }
     if latest and latest.get("status") == "failed":
         return {
@@ -3331,7 +3391,7 @@ def build_snapshot(
     total_sessions = int(session_coverage["total"])
     pending = store.observations("pending")
     reviews = review_summary(pending)
-    runs = _group_runs(store)
+    runs = _group_runs(store, schedule=schedule)
     status = _system_status(store, schedule, now=now)
 
     runtime_projects = store.present_projects()

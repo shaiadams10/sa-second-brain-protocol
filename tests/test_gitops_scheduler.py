@@ -114,10 +114,24 @@ def test_scheduler_is_interactive_exact_time_and_single_instance() -> None:
 
 def test_scheduled_script_refreshes_dashboard_and_syncs_changed_public_protocol() -> None:
     script = (Path(__file__).resolve().parents[1] / "scripts" / "scheduled-run.ps1").read_text(encoding="utf-8")
-    assert "sb dashboard build" in script
-    assert "sb protocol publish --if-changed" in script
+    assert '@("dashboard", "build")' in script
+    assert '@("protocol", "publish", "--if-changed")' in script
     assert "will retry on the next scheduled run" in script
+    assert "Write-RunSection" in script
+    assert "Invoke-LoggedSbCommand" in script
+    assert "Add-DailySummary" in script
+    assert "Start-Process" in script
+    assert "scheduled-run-viewer.ps1" in script
     assert "exit $finalExit" in script
+
+
+def test_scheduled_viewer_stays_open_without_blocking_the_task() -> None:
+    viewer = (
+        Path(__file__).resolve().parents[1] / "scripts" / "scheduled-run-viewer.ps1"
+    ).read_text(encoding="utf-8")
+    assert "Get-Content -LiteralPath $LogPath" in viewer
+    assert "Read-Host" in viewer
+    assert "Close this window when you are finished reviewing the run" in viewer
 
 
 def test_automatic_private_commit_excludes_obsidian_ui_state(tmp_path: Path) -> None:
