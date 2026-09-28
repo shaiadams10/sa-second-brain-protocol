@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,7 +58,8 @@ class ProjectScanTest(unittest.TestCase):
         catalog = scan(self.root)
         self.assertNotIn("App.worktrees", catalog.projects)
         self.assertEqual(catalog.resolve(self.root / "App.worktrees" / "feature" / "x.js"), "App")
-        self.assertEqual(catalog.resolve(str(self.root / "tools" / "clipper").upper()), "Tools/Clipper")
+        if os.name == "nt":  # Windows paths are case-insensitive; POSIX paths are not
+            self.assertEqual(catalog.resolve(str(self.root / "tools" / "clipper").upper()), "Tools/Clipper")
         self.assertEqual(catalog.resolve(self.root / "Tools"), "Tools")
         self.assertIsNone(catalog.resolve("Z:/elsewhere"))
 
