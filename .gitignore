@@ -9,3 +9,22 @@ dist/
 .impeccable/mocks/
 .impeccable/config.local.json
 .impeccable/build/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+secrets.json
+
+# Local runtime/data artifacts that may contain personal information
+*.sqlite
+*.sqlite3
+*.db
+*.log
