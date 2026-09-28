@@ -36,7 +36,12 @@ def _hint_paths(tool_calls: list[dict]) -> Iterator[str]:
             if isinstance(value, str):
                 value = value.strip('"').replace("\\\\", "\\")
                 for match in _PATH.findall(value):
-                    yield match.strip().rstrip("\\/.,;:)")
+                    path = match.strip().rstrip("\\/.,;:)")
+                    lowered = path.replace("/", "\\").lower()
+                    # The agent's own artifact and scratch folders say nothing about the project.
+                    if "\\.gemini\\" in lowered or "\\appdata\\local\\temp" in lowered:
+                        continue
+                    yield path
 
 
 def parse(path: Path) -> Session:

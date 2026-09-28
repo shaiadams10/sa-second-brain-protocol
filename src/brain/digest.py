@@ -82,6 +82,7 @@ class DigestExchange:
     reply: str
     tool_calls: int
     signal: str | None = None
+    sub: str | None = None  # sub-project, for projects tracked with sub-projects
 
 
 @dataclass
@@ -153,7 +154,7 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
           activity: Activity | None = None) -> Digest:
     start, end = week_bounds(week)
     decisions = config.load_decisions()
-    catalog = catalog or scan(config.projects_root, decisions.get("folders", {}))
+    catalog = catalog or scan(config.projects_root, decisions.get("folders", {}), config.places)
     activity = activity or Activity(config.git_authors)
     weeks: dict[str, ProjectWeek] = {}
 
@@ -171,13 +172,14 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
     for session in load_sources_for(config.sources, start, end):
         location = session.cwd or (session.path_hints.most_common(1)[0][0] if session.path_hints else None)
         pid = catalog.resolve(location) or OUTSIDE
+        sub = catalog.subproject(location, pid)
         pw = entry(pid)
         pw.sessions[session.tool] = pw.sessions.get(session.tool, 0) + 1
         for ex in session.exchanges:
             raw.setdefault(pid, []).append(DigestExchange(
                 at=ex.at.isoformat(timespec="minutes"), tool=session.tool, session=session.id,
                 user=clip(redact(ex.user), USER_LIMIT), reply=clip(redact(ex.reply), REPLY_LIMIT),
-                tool_calls=ex.tool_calls, signal=signal(ex.user),
+                tool_calls=ex.tool_calls, signal=signal(ex.user), sub=sub,
             ))
 
     for pid, project in catalog.projects.items():

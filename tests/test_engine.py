@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from brain.digest import signal, week_bounds
+from brain.knowledge import Knowledge
 from brain.projects import scan
 from brain.sources import antigravity, claude_code, codex
 from brain.text import clip, redact
@@ -59,6 +60,21 @@ class ProjectScanTest(unittest.TestCase):
         self.assertEqual(catalog.resolve(str(self.root / "tools" / "clipper").upper()), "Tools/Clipper")
         self.assertEqual(catalog.resolve(self.root / "Tools"), "Tools")
         self.assertIsNone(catalog.resolve("Z:/elsewhere"))
+
+    def test_history_outlives_folder_layout(self) -> None:
+        catalog = scan(self.root, {"OldApp": "part-of:App"})
+        # moved into a group since: matched by name
+        self.assertEqual(catalog.resolve(self.root / "Clipper" / "main.py"), "Tools/Clipper")
+        # deleted and merged by the owner's rule
+        self.assertEqual(catalog.resolve(self.root / "OldApp" / "src"), "App")
+        # deleted, unknown: a historical project that keeps its original casing
+        self.assertEqual(catalog.resolve(str(self.root / "Retired Thing" / "a.txt")), "Retired Thing")
+        self.assertEqual(catalog.projects["Retired Thing"].kind, "historical")
+
+    def test_extra_places(self) -> None:
+        with tempfile.TemporaryDirectory() as other:
+            catalog = scan(self.root, {}, {"Vault": other})
+            self.assertEqual(catalog.resolve(Path(other) / "notes.md"), "Vault")
 
     def test_decisions_override_guesses(self) -> None:
         catalog = scan(self.root, {"Boards": "collection", "Homework": "ignore"})
@@ -131,6 +147,60 @@ class SourceParserTest(unittest.TestCase):
         self.assertEqual(session.exchanges[0].user, "add a speedometer")
         self.assertEqual(session.exchanges[0].reply, "Here is the speedometer proposal.")
         self.assertEqual(session.path_hints.most_common(1)[0][0], "d:\\Projects\\App")
+
+
+class KnowledgeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.k = Knowledge(Path(self.tmp.name) / "knowledge.json")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _week(self, week: str, results: dict[str, list[dict]]) -> None:
+        self.k.begin_week(week)
+        for pid, observations in results.items():
+            self.k.record_project(week, pid, pid, None, "project", [], {"attention": 5.0})
+            self.k.apply_project_result(week, pid, {"blurb": "", "week_summary": "", "project_notes": [],
+                                                    "observations": observations})
+        self.k.apply_synthesis(week, {"headline": "", "summary": "", "highlights": [], "merges": []},
+                               "m", False, {})
+
+    @staticmethod
+    def obs(text: str, scope: str = "me", reinforces: str = "") -> dict:
+        return {"scope": scope, "kind": "preference", "text": text, "evidence": "q", "reinforces": reinforces}
+
+    def test_promotion_needs_recurrence(self) -> None:
+        self._week("2026-W38", {"A": [self.obs("Likes previews")], "B": [self.obs("One-off", "ephemeral")]})
+        (item_id, item), = self.k.items.items()
+        self.assertEqual(item["status"], "candidate")
+        self._week("2026-W39", {"B": [self.obs("Likes previews again", reinforces=item_id)]})
+        self.assertEqual(self.k.items[item_id]["status"], "active")
+
+    def test_rerun_does_not_double_count(self) -> None:
+        self._week("2026-W39", {"A": [self.obs("Likes previews")]})
+        item_id = next(iter(self.k.items))
+        self._week("2026-W39", {"A": [self.obs("Likes previews", reinforces=item_id)]})
+        self.assertNotIn(item_id, self.k.items)  # its only evidence was the re-run week
+        self.assertEqual(len(self.k.items), 1)
+        self.assertEqual(next(iter(self.k.items.values()))["status"], "candidate")
+
+    def test_removed_items_stay_removed(self) -> None:
+        self._week("2026-W38", {"A": [self.obs("Wrong claim")]})
+        item_id = next(iter(self.k.items))
+        self.k.remove_item(item_id)
+        self._week("2026-W39", {"B": [self.obs("Wrong claim"), self.obs("x", reinforces=item_id)]})
+        self.assertEqual(self.k.items[item_id]["status"], "removed")
+        self.assertEqual([i["text"] for i in self.k.items.values()], ["Wrong claim"])
+
+    def test_status(self) -> None:
+        from datetime import date
+        for week in ("2026-W36", "2026-W37", "2026-W38"):
+            self.k.record_project(week, "A", "A", None, "project", [], {"attention": 6.0, "active_days": []})
+        self.assertEqual(self.k.status("A", {}, date(2026, 9, 24))["state"], "ongoing")
+        self.assertEqual(self.k.status("A", {}, date(2026, 11, 20))["state"], "on-hold")
+        self.assertEqual(self.k.status("A", {"unmarked": ["A"]}, date(2026, 9, 24))["state"], "exploring")
+        self.assertEqual(self.k.status("Z", {"marked": ["Z"]}, date(2026, 9, 24))["state"], "ongoing")
 
 
 class TextAndSignalTest(unittest.TestCase):

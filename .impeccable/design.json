@@ -1,0 +1,589 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-28T19:23:09+00:00",
+  "title": "Design System: Second Brain Logbook",
+  "extensions": {
+    "colorMeta": {
+      "blue-ink": {
+        "role": "primary",
+        "displayName": "Blue Ink",
+        "canonical": "oklch(70.7% 0.155 256)",
+        "cssVar": "--blue",
+        "dayToken": "day-blue-ink",
+        "tonalRamp": [
+          "#000433",
+          "#001969",
+          "#003a8e",
+          "#0c5bb2",
+          "#357dd7",
+          "#58a0fc",
+          "#92c7ff",
+          "#dff0ff"
+        ]
+      },
+      "blue-wash": {
+        "role": "primary",
+        "displayName": "Blue Wash",
+        "canonical": "rgba(90, 162, 255, 0.14)",
+        "cssVar": "--blue-soft",
+        "dayToken": "day-blue-wash"
+      },
+      "bar": {
+        "role": "primary",
+        "displayName": "Gauge Blue",
+        "canonical": "oklch(60.3% 0.162 258)",
+        "cssVar": "--bar",
+        "dayToken": "day-bar",
+        "tonalRamp": [
+          "#000235",
+          "#00156d",
+          "#003793",
+          "#1559b7",
+          "#397bdc",
+          "#5b9eff",
+          "#93c6ff",
+          "#dff0ff"
+        ]
+      },
+      "pencil": {
+        "role": "secondary",
+        "displayName": "Graphite Pencil",
+        "canonical": "oklch(75.4% 0.021 257)",
+        "cssVar": "--pencil",
+        "dayToken": "day-pencil",
+        "tonalRamp": [
+          "#080b11",
+          "#1e242e",
+          "#39404b",
+          "#565e6a",
+          "#757e8a",
+          "#969fac",
+          "#bec5ce",
+          "#eceff2"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Amber Caution",
+        "canonical": "oklch(76.7% 0.130 73)",
+        "cssVar": "--warn",
+        "dayToken": "day-warn",
+        "tonalRamp": [
+          "#1e0200",
+          "#451000",
+          "#672f00",
+          "#884e00",
+          "#ab6f00",
+          "#cf9033",
+          "#eabb7d",
+          "#fcecd9"
+        ]
+      },
+      "bad": {
+        "role": "tertiary",
+        "displayName": "Correction Red",
+        "canonical": "oklch(73.2% 0.165 28)",
+        "cssVar": "--bad",
+        "dayToken": "day-bad",
+        "tonalRamp": [
+          "#2a0000",
+          "#5b0000",
+          "#810000",
+          "#a72720",
+          "#cd4d41",
+          "#f47061",
+          "#ffa597",
+          "#ffe5e0"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Cockpit Ground",
+        "canonical": "oklch(16.3% 0.012 261)",
+        "cssVar": "--ground",
+        "dayToken": "day-ground",
+        "tonalRamp": [
+          "#090b0e",
+          "#21242a",
+          "#3c4046",
+          "#5a5e64",
+          "#797d84",
+          "#9a9fa6",
+          "#c1c4ca",
+          "#edeef0"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "oklch(20.4% 0.024 262)",
+        "cssVar": "--panel",
+        "dayToken": "day-panel",
+        "tonalRamp": [
+          "#080b12",
+          "#1e242f",
+          "#39404d",
+          "#565e6c",
+          "#767e8c",
+          "#969fae",
+          "#bec4d0",
+          "#eceef2"
+        ]
+      },
+      "panel-2": {
+        "role": "neutral",
+        "displayName": "Margin Panel",
+        "canonical": "#0e131c",
+        "cssVar": "--panel-2",
+        "dayToken": "day-panel-2",
+        "tonalRamp": [
+          "#080b12",
+          "#1e242f",
+          "#39404d",
+          "#565e6c",
+          "#767e8c",
+          "#969fae",
+          "#bec4d0",
+          "#eceef2"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline Rule",
+        "canonical": "oklch(28.3% 0.035 259)",
+        "cssVar": "--rule",
+        "dayToken": "day-rule",
+        "tonalRamp": [
+          "#060b15",
+          "#1a2434",
+          "#354052",
+          "#525e72",
+          "#717e93",
+          "#929fb5",
+          "#bac5d5",
+          "#ebeff4"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule",
+        "canonical": "#2c3a50",
+        "cssVar": "--rule-strong",
+        "dayToken": "day-rule-strong",
+        "tonalRamp": [
+          "#060b15",
+          "#1a2434",
+          "#354052",
+          "#525e72",
+          "#717e93",
+          "#929fb5",
+          "#bac5d5",
+          "#ebeff4"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "oklch(93.8% 0.011 257)",
+        "cssVar": "--ink",
+        "dayToken": "day-ink",
+        "tonalRamp": [
+          "#090b0e",
+          "#212429",
+          "#3c4046",
+          "#5a5e64",
+          "#797e84",
+          "#9a9fa5",
+          "#c1c4c9",
+          "#edeef0"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "#97a4b6",
+        "cssVar": "--ink-2",
+        "dayToken": "day-ink-2",
+        "tonalRamp": [
+          "#090b0e",
+          "#212429",
+          "#3c4046",
+          "#5a5e64",
+          "#797e84",
+          "#9a9fa5",
+          "#c1c4c9",
+          "#edeef0"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Tertiary Ink",
+        "canonical": "#8390a3",
+        "cssVar": "--ink-3",
+        "dayToken": "day-ink-3",
+        "tonalRamp": [
+          "#090b0e",
+          "#212429",
+          "#3c4046",
+          "#5a5e64",
+          "#797e84",
+          "#9a9fa5",
+          "#c1c4c9",
+          "#edeef0"
+        ]
+      },
+      "bar-track": {
+        "role": "neutral",
+        "displayName": "Bar Track",
+        "canonical": "#18202d",
+        "cssVar": "--bar-track",
+        "dayToken": "day-bar-track",
+        "tonalRamp": [
+          "#080b12",
+          "#1e242f",
+          "#39404d",
+          "#565e6c",
+          "#767e8c",
+          "#969fae",
+          "#bec4d0",
+          "#eceef2"
+        ]
+      },
+      "day-ground": {
+        "role": "neutral",
+        "displayName": "Day Paper Ground",
+        "theme": "day",
+        "nightToken": "ground",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-panel": {
+        "role": "neutral",
+        "displayName": "Day Page",
+        "theme": "day",
+        "nightToken": "panel",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-panel-2": {
+        "role": "neutral",
+        "displayName": "Day Margin Paper",
+        "theme": "day",
+        "nightToken": "panel-2",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-rule": {
+        "role": "neutral",
+        "displayName": "Day Blue Rule",
+        "theme": "day",
+        "nightToken": "rule",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-rule-strong": {
+        "role": "neutral",
+        "displayName": "Day Strong Blue Rule",
+        "theme": "day",
+        "nightToken": "rule-strong",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-ink": {
+        "role": "neutral",
+        "displayName": "Logbook Black",
+        "theme": "day",
+        "nightToken": "ink",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-ink-2": {
+        "role": "neutral",
+        "displayName": "Day Secondary Ink",
+        "theme": "day",
+        "nightToken": "ink-2",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-ink-3": {
+        "role": "neutral",
+        "displayName": "Day Tertiary Ink",
+        "theme": "day",
+        "nightToken": "ink-3",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-blue-ink": {
+        "role": "primary",
+        "displayName": "Day Blue Ink",
+        "theme": "day",
+        "nightToken": "blue-ink",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-blue-wash": {
+        "role": "primary",
+        "displayName": "Day Blue Wash",
+        "theme": "day",
+        "nightToken": "blue-wash",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-bar": {
+        "role": "primary",
+        "displayName": "Day Gauge Blue",
+        "theme": "day",
+        "nightToken": "bar",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-pencil": {
+        "role": "secondary",
+        "displayName": "Day Graphite",
+        "theme": "day",
+        "nightToken": "pencil",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-warn": {
+        "role": "tertiary",
+        "displayName": "Day Amber",
+        "theme": "day",
+        "nightToken": "warn",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-bad": {
+        "role": "tertiary",
+        "displayName": "Day Correction Red",
+        "theme": "day",
+        "nightToken": "bad",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      },
+      "day-bar-track": {
+        "role": "neutral",
+        "displayName": "Day Bar Track",
+        "theme": "day",
+        "nightToken": "bar-track",
+        "note": "Applied via :root[data-theme=light] or prefers-color-scheme: light, overriding the same CSS variable."
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Margin Headline",
+        "purpose": "The week's headline atop the remarks margin; one per page, balanced wrap."
+      },
+      "title": {
+        "displayName": "Wordmark",
+        "purpose": "Logbook wordmark, uppercase; the pager label uses the same face at 15px mixed case."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Names, numbers, summaries; tabular numerals everywhere."
+      },
+      "body-sm": {
+        "displayName": "Body Small",
+        "purpose": "Remarks, blurbs, legend text, state labels, buttons."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Sub-lines, provenance, last-run status, metadata."
+      },
+      "label-tab": {
+        "displayName": "Tab Label",
+        "purpose": "Index tabs, uppercase tracked."
+      },
+      "label": {
+        "displayName": "Column Label",
+        "purpose": "Column heads, footer labels, section and margin headings, kind tags; uppercase tracked, tertiary ink."
+      },
+      "mono": {
+        "displayName": "Run Log",
+        "purpose": "Streaming run output only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "toast-float",
+        "value": "0 10px 30px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--rule-strong)",
+        "purpose": "Night theme: the toast, the only floating element."
+      },
+      {
+        "name": "toast-float-day",
+        "value": "0 10px 30px -14px rgba(20, 40, 70, 0.28), 0 0 0 1px var(--rule-strong)",
+        "purpose": "Day theme toast."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-stroke",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Correction stroke and toast entrance."
+      },
+      {
+        "name": "duration-stroke",
+        "value": "0.32s",
+        "purpose": "Strike line drawn left to right (scaleX 0 to 1); no transition under reduced motion."
+      },
+      {
+        "name": "duration-toast",
+        "value": "0.2s opacity, 0.25s transform",
+        "purpose": "Toast rises 16px and fades in."
+      },
+      {
+        "name": "duration-control",
+        "value": "0.15s",
+        "purpose": "Button border, background, and colour transitions."
+      },
+      {
+        "name": "spin",
+        "value": "1s linear infinite",
+        "purpose": "Run-in-progress icon."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stack",
+        "value": "1100px"
+      },
+      {
+        "name": "narrow",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Standard compact action with a strong-rule border.",
+      "html": "<button class=\"ds-btn\" type=\"button\">Separate projects</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border: 1px solid var(--rule-strong, #2c3a50); border-radius: 3px; background: var(--panel, #111722); color: var(--ink, #e6ebf2); font: 500 13.5px/1 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; cursor: pointer; white-space: nowrap; transition: border-color 0.15s, background 0.15s, color 0.15s; } .ds-btn:hover { border-color: var(--ink-3, #8390a3); } .ds-btn:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; } .ds-btn:disabled { opacity: 0.55; cursor: default; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action per view, filled in blue ink.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 3.2v9.6L12.6 8z\"/></svg>Run now</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border: 1px solid var(--blue, #5aa2ff); border-radius: 3px; background: var(--blue, #5aa2ff); color: var(--ground, #0b0e13); font: 600 13.5px/1 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; cursor: pointer; transition: filter 0.15s; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Borderless until hover; pager arrows and theme toggle.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\" aria-label=\"Previous week\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M10 3.5 5.5 8l4.5 4.5\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--ink-2, #97a4b6); cursor: pointer; transition: border-color 0.15s, color 0.15s; } .ds-btn-ghost:hover { color: var(--ink, #e6ebf2); border-color: var(--rule-strong, #2c3a50); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Index Tabs",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Uppercase Semi Condensed tabs on the margin-panel strip; the active tab carries a 2px blue-ink rule.",
+      "html": "<nav class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">Log <span class=\"ds-count\">1</span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Projects <span class=\"ds-count\">3 ongoing</span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Runs <span class=\"ds-flag\"></span></button></nav>",
+      "css": ".ds-tabs { display: flex; gap: 2px; padding: 0 24px; border-bottom: 1px solid var(--rule, #1f2a3b); background: var(--panel-2, #0e131c); } .ds-tab { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 12px 14px 11px; border: 0; background: none; cursor: pointer; color: var(--ink-2, #97a4b6); font: 600 13px/1 'Barlow Semi Condensed', Barlow, system-ui, sans-serif; letter-spacing: 0.07em; text-transform: uppercase; } .ds-tab:hover, .ds-tab[aria-selected=\"true\"] { color: var(--ink, #e6ebf2); } .ds-tab[aria-selected=\"true\"]::after { content: \"\"; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--blue, #5aa2ff); } .ds-tab:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; } .ds-count { font: 500 11.5px/1 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; letter-spacing: 0; text-transform: none; color: var(--ink-3, #8390a3); } .ds-flag { width: 6px; height: 6px; border-radius: 50%; background: var(--warn, #e5a54b); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "segmented-option-active",
+      "description": "Outlined option group for filters and classification; the pressed option takes the blue wash.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"Classification\"><button type=\"button\" aria-pressed=\"true\">Auto</button><button type=\"button\" aria-pressed=\"false\">Project</button><button type=\"button\" aria-pressed=\"false\">Not one</button></div>",
+      "css": ".ds-seg { display: inline-flex; border: 1px solid var(--rule-strong, #2c3a50); border-radius: 3px; overflow: hidden; } .ds-seg button { height: 26px; padding: 0 9px; border: 0; background: none; color: var(--ink-2, #97a4b6); font: 400 12.5px/1 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; cursor: pointer; } .ds-seg button + button { border-left: 1px solid var(--rule-strong, #2c3a50); } .ds-seg button[aria-pressed=\"true\"] { background: var(--blue-soft, rgba(90, 162, 255, 0.14)); color: var(--blue, #5aa2ff); font-weight: 600; } .ds-seg button:hover { color: var(--ink, #e6ebf2); } .ds-seg button:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: -2px; }"
+    },
+    {
+      "name": "Filter Input",
+      "kind": "input",
+      "refersTo": "filter-input",
+      "description": "Compact search field on panel fill with a blue caret.",
+      "html": "<input class=\"ds-filter\" type=\"search\" placeholder=\"Filter folders\" aria-label=\"Filter folders\">",
+      "css": ".ds-filter { height: 30px; width: 220px; padding: 0 10px; border: 1px solid var(--rule-strong, #2c3a50); border-radius: 3px; background: var(--panel, #111722); color: var(--ink, #e6ebf2); font: 400 15px/1.5 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; caret-color: var(--blue, #5aa2ff); } .ds-filter::placeholder { color: var(--ink-3, #8390a3); } .ds-filter:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Log Table",
+      "kind": "custom",
+      "refersTo": "log-row",
+      "description": "Ruled log page: label heads over a double rule, 44px rows with vertical hairlines, tabular right-aligned numbers, line-pattern state markers, fixed-scale attention bars, totals under a double rule.",
+      "html": "<table class=\"ds-log\"><thead><tr><th>Project</th><th>Status</th><th>Days</th><th>Commits</th><th>Attention</th></tr></thead><tbody><tr><td><b>Sample project</b></td><td><span class=\"ds-state ongoing\">Ongoing</span></td><td>4</td><td>27</td><td><div class=\"ds-att\"><div class=\"ds-track\"><div class=\"ds-fill\" style=\"width:62%\"></div></div><span>6.2</span></div></td></tr><tr><td><b>Side experiment</b></td><td><span class=\"ds-state exploring\">Exploring</span></td><td>1</td><td class=\"ds-zero\">–</td><td><div class=\"ds-att\"><div class=\"ds-track\"><div class=\"ds-fill\" style=\"width:14%\"></div></div><span>1.4</span></div></td></tr></tbody><tfoot><tr><td class=\"ds-foot\">Totals this page</td><td></td><td>5</td><td>27</td><td>2 projects</td></tr></tfoot></table>",
+      "css": ".ds-log { width: 100%; border-collapse: collapse; background: var(--panel, #111722); color: var(--ink, #e6ebf2); font: 400 15px/1.5 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; font-variant-numeric: tabular-nums; } .ds-log th { padding: 11px 10px 9px; text-align: right; border-bottom: 3px double var(--rule-strong, #2c3a50); font: 600 11.5px/1.15 'Barlow Semi Condensed', Barlow, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3, #8390a3); } .ds-log td { padding: 0 10px; height: 44px; border-bottom: 1px solid var(--rule, #1f2a3b); text-align: right; white-space: nowrap; } .ds-log td + td, .ds-log th + th { border-left: 1px solid var(--rule, #1f2a3b); } .ds-log th:nth-child(-n+2), .ds-log td:nth-child(-n+2), .ds-log th:last-child, .ds-log td:last-child { text-align: left; } .ds-log th:first-child, .ds-log td:first-child { padding-left: 18px; } .ds-log tbody tr { cursor: pointer; } .ds-log tbody tr:hover td { background: var(--blue-soft, rgba(90, 162, 255, 0.14)); } .ds-log tfoot td { height: 38px; font-weight: 600; background: var(--panel-2, #0e131c); border-top: 3px double var(--rule-strong, #2c3a50); } .ds-log .ds-foot { font: 600 11.5px/1 'Barlow Semi Condensed', Barlow, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2, #97a4b6); } .ds-zero { color: var(--ink-3, #8390a3); } .ds-state { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2, #97a4b6); font-size: 13.5px; } .ds-state::before { content: \"\"; width: 18px; border-top: 2px solid currentColor; } .ds-state.ongoing { color: var(--blue, #5aa2ff); } .ds-state.exploring::before { border-top-style: dashed; } .ds-att { display: flex; align-items: center; gap: 10px; } .ds-track { position: relative; flex: 1; min-width: 80px; height: 8px; border-radius: 1px; background: var(--bar-track, #18202d); background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), var(--rule, #1f2a3b) calc(10% - 1px) 10%); } .ds-fill { position: absolute; inset: 0 auto 0 0; border-radius: 1px; background: var(--bar, #3d7fe0); } .ds-att span { width: 3.2ch; font-size: 13px; color: var(--ink-2, #97a4b6); }"
+    },
+    {
+      "name": "Ink, Pencil, Struck Entries",
+      "kind": "custom",
+      "refersTo": "entry",
+      "description": "Learned entries carry certainty by writing instrument; striking draws one ruled line left to right and Undo lifts it.",
+      "html": "<ul class=\"ds-entries\"><li class=\"ds-entry ink\"><span class=\"ds-text\">Prefers small reviewable changes.</span><button class=\"ds-strike\" type=\"button\">Strike</button></li><li class=\"ds-entry pencil\"><span class=\"ds-text\">Writes tests before refactors.</span><button class=\"ds-strike\" type=\"button\">Strike</button></li><li class=\"ds-entry struck\"><span class=\"ds-text\">Works mostly at night.</span><button class=\"ds-undo\" type=\"button\">Undo</button></li></ul>",
+      "css": ".ds-entries { list-style: none; margin: 0; padding: 0; font: 400 15px/1.5 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--ink, #e6ebf2); } .ds-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; padding: 11px 0 12px; border-top: 1px solid var(--rule, #1f2a3b); } .ds-text { position: relative; justify-self: start; } .ds-entry.ink .ds-text { text-decoration: underline 1.5px var(--blue, #5aa2ff); text-underline-offset: 5px; } .ds-entry.pencil .ds-text { color: var(--pencil, #a7b0bd); text-decoration: underline 1px dashed var(--pencil, #a7b0bd); text-underline-offset: 5px; } .ds-text::after { content: \"\"; position: absolute; left: -2px; right: -2px; top: 55%; height: 1.5px; background: var(--ink-2, #97a4b6); transform: scaleX(0); transform-origin: left center; transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1); } .ds-entry.struck .ds-text { color: var(--ink-3, #8390a3); } .ds-entry.struck .ds-text::after { transform: scaleX(1); } .ds-strike, .ds-undo { height: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: 3px; background: none; color: var(--ink-3, #8390a3); font: 400 12.5px/1 Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; cursor: pointer; } .ds-strike:hover { color: var(--bad, #ff7a6b); border-color: var(--rule-strong, #2c3a50); } .ds-undo { color: var(--blue, #5aa2ff); } .ds-undo:hover { border-color: var(--rule-strong, #2c3a50); } .ds-strike:focus-visible, .ds-undo:focus-visible { outline: 2px solid var(--blue, #5aa2ff); outline-offset: 2px; } @media (prefers-reduced-motion: reduce) { .ds-text::after { transition: none; } }"
+    },
+    {
+      "name": "Eight-Week History",
+      "kind": "custom",
+      "refersTo": "weeks8",
+      "description": "Eight columns on one axis and one fixed scale; empty weeks show a 2px track stub.",
+      "html": "<div class=\"ds-weeks\" aria-label=\"Attention over the last 8 weeks\"><i style=\"height:30%\"></i><i class=\"none\"></i><i style=\"height:55%\"></i><i style=\"height:80%\"></i><i class=\"none\"></i><i style=\"height:40%\"></i><i style=\"height:100%\"></i><i style=\"height:20%\"></i></div>",
+      "css": ".ds-weeks { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; width: 208px; height: 22px; align-items: end; } .ds-weeks i { display: block; min-height: 2px; border-radius: 1px; background: var(--bar, #3d7fe0); } .ds-weeks i.none { height: 2px; background: var(--bar-track, #18202d); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Cockpit Logbook",
+    "overview": "The interface is a pilot's logbook kept by the machine. Each week is one ruled page: a line per item logged, numbers in fixed columns, totals and brought-forward figures closing the page under double accounting rules, and prose remarks in a margin beside it. The night theme is a cockpit at rest: near-black blue ground, hairline blue-grey rules, paper-white type. The day theme is cool white logbook paper with light blue rules. Both themes are the same page, only the lighting changes.\n\nState is written, not painted. Two writing instruments carry certainty: blue ink underlines what is confirmed, graphite pencil (lighter, dashed underline) marks what is only a candidate. A removal follows logbook law: never erase; a single ruled line is drawn through the entry, which dims but stays legible and restorable. The same principle runs through every status marker: a short rule whose line pattern (solid, dashed, dotted, hairline) carries the meaning, with colour only supporting it.\n\nThe system is dense and quiet. Surfaces are flat, square-cornered (3px), and separated by 1px rules rather than shadows or fills. There are no stat cards, no sidebar, no charts beyond single-scale bars. A healthy page has almost no colour on it except blue ink.",
+    "keyCharacteristics": [
+      "Ruled table grammar everywhere: hairline rows, vertical column rules, double rules at head and foot.",
+      "Barlow for reading, Barlow Semi Condensed uppercase with tracking for column heads, tabs, and section labels.",
+      "Tabular numerals on the whole page.",
+      "Blue is the only accent; amber and red appear only for warnings and failures.",
+      "Line pattern, never colour alone, distinguishes states.",
+      "One fixed attention scale and one week axis across every view."
+    ],
+    "rules": [
+      {
+        "name": "The One Pen Rule",
+        "body": "Blue is the only accent. Amber and red are signals, not decoration; a healthy week shows neither.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cool Paper Rule",
+        "body": "The day theme is cool white paper with blue rules. Never cream, beige, or warm off-white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "`font-variant-numeric: tabular-nums` is set on the body; every number on every view sits in a fixed-width column.",
+        "section": "typography"
+      },
+      {
+        "name": "The Stencil Rule",
+        "body": "Uppercase tracked text is reserved for the Semi Condensed label roles (column heads, tabs, section headings, kind tags). Body copy, names, and headlines are never set uppercase.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled To The Foot Rule",
+        "body": "A logbook page never ends in empty panel: blank ruled rows carry the rules down until the totals sit flush on the page frame.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Axis Rule",
+        "body": "Every history view uses the same eight-week axis, oldest left, and one fixed attention scale shared across weeks and projects. Bars are never normalised per page.",
+        "section": "layout"
+      },
+      {
+        "name": "The Double Accounting Rule",
+        "body": "The log's header and its totals are separated from the body by a 3px double rule in the strong rule colour, as in a ledger. Ordinary rows use 1px hairlines.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Flat Page Rule",
+        "body": "Pages, sheets, and panels never cast shadows; separation is a rule or a paper-tone step.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do separate everything with rules: 1px hairlines between rows and columns, strong rules under heads, a 3px double rule at the log's head and foot.",
+      "Do encode every state as a line pattern first (solid, dashed, dotted, hairline, struck) and let colour only reinforce it.",
+      "Do strike removed items with one ruled line and keep them legible with an inline Undo.",
+      "Do keep tabular numerals and right-aligned numbers in every numeric column.",
+      "Do plot attention on the one fixed scale and the one eight-week axis in every view.",
+      "Do fill the log page with blank ruled rows to the foot of the frame when the margin is taller.",
+      "Do keep both themes in step: every token has a night value and a cool day value."
+    ],
+    "donts": [
+      "Don't use colour alone to distinguish states, candidates, or results.",
+      "Don't delete, fade out, or hide a removed entry; strike it.",
+      "Don't add stat cards, sidebars, or charts beyond single-scale bars; the page is a logbook, not an admin dashboard.",
+      "Don't put shadows on pages, sheets, or panels; the toast is the only floating element.",
+      "Don't introduce a second accent hue; amber and red are reserved for warnings and failures.",
+      "Don't warm the day theme toward cream or beige.",
+      "Don't normalise bars per week or per project.",
+      "Don't set body copy, names, or headlines in uppercase; tracked uppercase belongs to the Semi Condensed label roles."
+    ]
+  }
+}

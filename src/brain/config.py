@@ -27,6 +27,9 @@ class Config:
     projects_root: Path
     sources: dict[str, Path]
     git_authors: list[str] = field(default_factory=list)
+    owner: str = "the owner"
+    auto_commit: bool = True
+    places: dict[str, str] = field(default_factory=dict)  # extra project folders outside projects_root
 
     @property
     def work_dir(self) -> Path:
@@ -67,4 +70,7 @@ def load(vault: Path) -> Config:
         projects_root=Path(data.get("projects_root", "~/Projects")).expanduser(),
         sources={name: Path(p).expanduser() for name, p in sources.items() if p},
         git_authors=list(data.get("git_authors", [])),
+        owner=data.get("owner", "the owner"),
+        auto_commit=bool(data.get("auto_commit", True)),
+        places={name: str(Path(p).expanduser()) for name, p in data.get("places", {}).items()},
     )

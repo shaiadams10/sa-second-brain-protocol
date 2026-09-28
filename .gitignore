@@ -4,3 +4,8 @@ __pycache__/
 dist/
 *.egg-info/
 .brain/
+.impeccable/questions/
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/config.local.json
+.impeccable/build/

@@ -8,7 +8,12 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-brain = "brain.cli:main"
+sbrain = "brain.cli:main"
+
+# Windowless entry points for the scheduled task and the desktop shortcut.
+[project.gui-scripts]
+sbrain-silent = "brain.cli:main"
+sbrain-dashboard = "brain.cli:dashboard_main"
 
 [build-system]
 requires = ["hatchling"]

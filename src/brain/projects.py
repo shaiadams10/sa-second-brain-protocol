@@ -56,11 +56,12 @@ class Project:
     id: str  # path relative to the projects folder, with "/" separators
     name: str
     path: Path
-    kind: str  # "project" | "loose"
+    kind: str  # "project" | "loose" | "historical" (a folder that no longer exists)
     group: str | None = None
     has_git: bool = False
     aliases: list[Path] = field(default_factory=list)  # worktrees, backups, legacy copies
     needs_review: str | None = None  # why the owner should confirm how this folder is treated
+    subprojects: list[str] = field(default_factory=list)  # named parts tracked inside one project
 
 
 @dataclass
@@ -71,13 +72,58 @@ class Catalog:
     _index: list[tuple[str, str]] = field(default_factory=list)
 
     def resolve(self, path: str | os.PathLike | None) -> str | None:
-        """Return the id of the most specific project or group containing path."""
+        """Return the id of the most specific project or group containing path.
+
+        History outlives folder layouts. A path under the projects root that no longer
+        exists is matched by folder name to where that folder lives now (a project moved
+        into a group). If nothing matches, it becomes a historical project under its old
+        name, which the owner can merge later with a "part-of:<id>" folder rule."""
         if not path:
             return None
         target = _norm(path)
         for prefix, pid in self._index:
             if target == prefix or target.startswith(prefix + os.sep):
                 return pid
+        root = _norm(self.root)
+        if not target.startswith(root + os.sep):
+            return None
+        # Take the name from the original path: normcase lowercases it on Windows.
+        original = os.path.normpath(str(path).replace("/", os.sep))
+        name = original[len(root) + 1:].split(os.sep, 1)[0]
+        return self._moved(name) or self._historical(name)
+
+    def _moved(self, name: str) -> str | None:
+        key = name.casefold()
+        exact = [p.id for p in self.projects.values() if p.kind != "historical" and p.name.casefold() == key]
+        if len(exact) == 1:
+            return exact[0]
+        if len(key) >= 4:  # a path cut short, e.g. "VSD Craft (StreamDeck"
+            prefix = [p.id for p in self.projects.values() if p.kind != "historical" and p.name.casefold().startswith(key)]
+            if len(prefix) == 1:
+                return prefix[0]
+        return None
+
+    def _historical(self, name: str) -> str:
+        for p in self.projects.values():
+            if p.kind == "historical" and p.name.casefold() == name.casefold():
+                return p.id
+        self.projects[name] = Project(id=name, name=name, path=self.root / name, kind="historical")
+        self.build_index()
+        return name
+
+    def subproject(self, path: str | os.PathLike | None, pid: str) -> str | None:
+        """For a project tracked with sub-projects, name the one that path is inside."""
+        project = self.projects.get(pid)
+        if not path or not project or not project.subprojects:
+            return None
+        target = _norm(path)
+        for root in (project.path, *project.aliases):
+            base = _norm(root)
+            if target.startswith(base + os.sep):
+                first = target[len(base) + 1:].split(os.sep, 1)[0]
+                for name in project.subprojects:
+                    if os.path.normcase(name) == first:
+                        return name
         return None
 
     def build_index(self) -> None:
@@ -145,9 +191,9 @@ def _copy_base(name: str, siblings: set[str]) -> str | None:
     return None
 
 
-def scan(root: Path, overrides: dict[str, str] | None = None) -> Catalog:
-    """Classify every folder under root. overrides maps folder id to
-    "project", "collection", "ignore", or "part-of:<id>"."""
+def scan(root: Path, overrides: dict[str, str] | None = None, extra: dict[str, str] | None = None) -> Catalog:
+    """Classify every folder under root. overrides maps folder id to "project",
+    "project+subprojects", "collection", "ignore", or "part-of:<id>"."""
     overrides = overrides or {}
     catalog = Catalog(root=root)
     pending_aliases: list[tuple[Path, str]] = []
@@ -176,6 +222,14 @@ def scan(root: Path, overrides: dict[str, str] | None = None) -> Catalog:
         if rule == "collection":
             catalog.groups.add(fid)
             visit_children(folder, children, fid, depth + 1)
+            return
+
+        if rule == "project+subprojects":
+            names = {c.name for c in children}
+            subs = [c.name for c in children if (_is_project_dir(c) or _contains_projects(c, depth + 2))
+                    and not _copy_base(c.name, names)]
+            catalog.projects[fid] = Project(id=fid, name=folder.name, path=folder, kind="project",
+                                            group=group, has_git=git, subprojects=subs)
             return
 
         if rule == "project" or marked:
@@ -207,6 +261,14 @@ def scan(root: Path, overrides: dict[str, str] | None = None) -> Catalog:
                 visit(child, group, depth)
 
     visit_children(root, _subdirs(root), None, 0)
+
+    for fid, place in (extra or {}).items():
+        catalog.projects[fid] = Project(id=fid, name=fid, path=Path(place), kind="project",
+                                        has_git=(Path(place) / ".git").exists())
+    for fid, rule in overrides.items():
+        # "part-of" rules for folders that no longer exist merge their history into the target.
+        if rule.startswith("part-of:") and not (root / fid).exists():
+            pending_aliases.append((root / fid, rule.removeprefix("part-of:")))
 
     for alias, target in pending_aliases:
         if target in catalog.projects:
