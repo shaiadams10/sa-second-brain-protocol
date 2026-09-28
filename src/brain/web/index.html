@@ -28,6 +28,7 @@
     <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></symbol>
     <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/></symbol>
     <symbol id="i-auto" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-down" viewBox="0 0 16 16"><path d="M4 6.2 8 10l4-3.8"/></symbol>
     <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.2 14.2 13H1.8z"/><path d="M8 6.5v3M8 11.3v.2"/></symbol>
   </svg>
 
@@ -37,7 +38,13 @@
     <div class="right">
       <div class="lastrun" id="lastrun"></div>
       <button class="btn ghost icon" id="theme" type="button" aria-label="Switch theme"></button>
-      <button class="btn primary" id="runnow" type="button"></button>
+      <div class="runsplit">
+        <button class="btn primary" id="runnow" type="button"></button>
+        <button class="btn primary icon" id="runpick" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="runmenu" aria-label="Choose CLI, model and effort">
+          <svg class="i" aria-hidden="true"><use href="#i-down"/></svg>
+        </button>
+      </div>
+      <div class="runmenu" id="runmenu" role="dialog" aria-label="Run now settings" hidden></div>
     </div>
   </header>
 

@@ -33,6 +33,11 @@ def _user_text(content: list[dict]) -> str:
         if item.get("type") != "input_text":
             continue
         text = item.get("text", "")
+        if text.lstrip().startswith("# Context from my IDE setup:"):
+            marker = "## My request for Codex:"
+            if marker not in text:
+                continue
+            text = text.split(marker, 1)[1]
         if is_injected(text):
             continue
         if "<send_user_message_question_reply>" in text:

@@ -59,15 +59,19 @@ def cmd_run(cfg: config_mod.Config, args: argparse.Namespace) -> int:
 
     weeks = [digest_mod.resolve_week(w) for w in args.week] if args.week else None
     try:
-        results = run(cfg, weeks, current=args.current, model_name=args.model, backfill=args.backfill)
+        results = run(cfg, weeks, current=args.current, model_name=args.model, backfill=args.backfill,
+                      cli=args.cli, effort=args.effort)
     except Busy as exc:
         print(exc)
         return 1
     for r in results:
         if r.get("skipped"):
             continue
+        usage = r.get("usage") or {}
+        tokens = (f", {usage.get('input_tokens', 0):,} input / {usage.get('output_tokens', 0):,} output tokens"
+                  if usage.get("measured", True) else "")
         print(f"{r['week']}: {r['status']}, {r.get('model_calls', 0)} model calls, "
-              f"{r.get('new_observations', 0)} new observations, {r['seconds']}s")
+              f"{r.get('new_observations', 0)} new observations, {r['seconds']}s{tokens}")
     return 0
 
 
@@ -101,7 +105,10 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--week", action="append", help="a specific week (repeatable); default: catch up")
     p_run.add_argument("--current", action="store_true", help="also write the week in progress")
     p_run.add_argument("--backfill", action="store_true", help="walk all history from the first conversation, oldest first")
-    p_run.add_argument("--model", help="model id for this run (default: newest Gemini Flash)")
+    p_run.add_argument("--cli", choices=("agy", "codex"), help="which CLI answers (default: [model] cli in config.toml, else agy)")
+    p_run.add_argument("--model", help="model id for this run (default: [model] name, else newest Gemini Flash "
+                                       "or the Codex default); manual-<name> to answer by hand")
+    p_run.add_argument("--effort", help="reasoning effort, e.g. low, medium, high (default: [model] effort)")
     p_dash = sub.add_parser("dashboard", help="open the dashboard")
     p_dash.add_argument("--port", type=int, default=8765)
     p_dash.add_argument("--no-browser", action="store_true")

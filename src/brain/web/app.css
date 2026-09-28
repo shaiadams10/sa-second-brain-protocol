@@ -123,6 +123,31 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .btn.small { height: 26px; padding: 0 9px; font-size: 12.5px; }
 .btn.icon { width: 32px; padding: 0; justify-content: center; }
 .btn.running .spin { animation: spin 1s linear infinite; }
+
+/* Run now: the main button runs with the current choice; the caret opens the choice. */
+.right { position: relative; }
+.runsplit { display: inline-flex; }
+.runsplit #runnow { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.runsplit #runpick { width: 28px; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(0, 0, 0, 0.28); }
+#runpick[aria-expanded="true"] svg { transform: rotate(180deg); }
+.runmenu { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; width: 310px; max-width: calc(100vw - 32px); padding: 14px 16px 16px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+.runmenu[hidden] { display: none; }
+.runmenu h3 { margin: 0 0 10px; font: 600 11px/1 var(--font-cond); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.runmenu .field { display: block; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.runmenu select { display: block; width: 100%; height: 30px; margin-top: 5px; padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--panel-2); }
+.runmenu select:disabled { opacity: 0.55; }
+.runmenu select option { background: var(--panel); color: var(--ink); }
+.runmenu .hint { margin: 10px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.runmenu .hint.loading { display: flex; align-items: center; gap: 8px; }
+.runmenu .hint .spin { animation: spin 1s linear infinite; }
+.runmenu .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+.seg { display: flex; border: 1px solid var(--rule-strong); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1 1 0; height: 30px; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule-strong); }
+.seg button[aria-pressed="true"] { background: var(--blue-soft); color: var(--ink); box-shadow: inset 0 -2px 0 var(--blue); }
+.seg button:disabled { opacity: 0.45; cursor: default; }
+.runs .unmeasured { color: var(--ink-3); font-size: 12.5px; }
+.runs .sub { display: block; margin-top: 2px; color: var(--ink-3); font-size: 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- index tabs */

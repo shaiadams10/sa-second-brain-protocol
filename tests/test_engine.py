@@ -113,6 +113,15 @@ class SourceParserTest(unittest.TestCase):
         self.assertEqual(session.exchanges[0].reply, "Done: login page added")
         self.assertEqual(session.exchanges[0].tool_calls, 1)
 
+    def test_codex_strips_ide_context(self) -> None:
+        user = "# Context from my IDE setup:\n\n## Active file: src/app.py\n\n## My request for Codex:\nFix the login form"
+        path = jsonl(self.root / "rollout-ide.jsonl", [
+            {"timestamp": "2026-09-21T10:00:00Z", "type": "response_item",
+             "payload": {"type": "message", "role": "user",
+                         "content": [{"type": "input_text", "text": user}]}},
+        ])
+        self.assertEqual([e.user for e in codex.parse(path).exchanges], ["Fix the login form"])
+
     def test_claude_code(self) -> None:
         path = jsonl(self.root / "proj" / "s2.jsonl", [
             {"type": "user", "cwd": "D:\\P\\App", "timestamp": "2026-09-21T10:00:00Z",

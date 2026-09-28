@@ -19,7 +19,7 @@ from brain.activity import Activity
 from brain.config import Config
 from brain.digest import OUTSIDE, Digest, ProjectWeek, build, week_bounds, week_label
 from brain.knowledge import Knowledge
-from brain.llm import Model, find_agy, update
+from brain.llm import Model, make_model
 from brain.projects import Catalog, scan
 from brain.render import render_all
 
@@ -196,8 +196,7 @@ def backfill_weeks(cfg: Config, model_name: str | None) -> list[str]:
     if not first:
         return []
     knowledge = knowledge_for(cfg)
-    done = {w for w, e in knowledge.weeks.items()
-            if e.get("ran_at") and not e.get("partial") and e.get("model") == model_name}
+    done = {w for w, e in knowledge.weeks.items() if e.get("ran_at") and not e.get("partial")}
     last = week_label(date.today() - timedelta(days=date.today().isoweekday()))
     weeks, cursor = [], week_bounds(first)[0].date()
     while week_label(cursor) <= last:
@@ -208,9 +207,11 @@ def backfill_weeks(cfg: Config, model_name: str | None) -> list[str]:
 
 
 def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log: Log = print,
-        model_name: str | None = None, backfill: bool = False) -> list[dict]:
+        model_name: str | None = None, backfill: bool = False, cli: str | None = None,
+        effort: str | None = None) -> list[dict]:
     """Update the brain. With no weeks given, catch up every completed week not yet logged.
-    current=True also (re)writes the week in progress. backfill=True walks all history."""
+    current=True also (re)writes the week in progress. backfill=True walks all history.
+    cli, model_name and effort override the vault's [model] settings for this run."""
     results = []
     with RunLock(cfg.work_dir / "run.lock", stale_after=24 * 3600 if backfill else 3 * 3600):
         knowledge = knowledge_for(cfg)
@@ -222,11 +223,11 @@ def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log:
             log("Nothing to do: every finished week is already in the brain.")
             return results
 
-        agy = find_agy()
-        log("Updating the Antigravity CLI")
-        update(agy)
-        model = Model(cfg.work_dir / "agy", agy=agy, name=model_name)
-        log(f"Using {model.name}")
+        cli = cli or cfg.model_cli
+        if cli == cfg.model_cli:  # the configured model and effort belong to the configured CLI
+            model_name, effort = model_name or cfg.model_name, effort or cfg.model_effort
+        model = make_model(cfg.work_dir, cli, model_name, effort, log)
+        log(f"Using {model.cli} · {model.name}" + (f" · {model.effort} effort" if model.effort else ""))
         decisions = cfg.load_decisions()
         catalog = scan(cfg.projects_root, decisions.get("folders", {}), cfg.places)
         activity = Activity(cfg.git_authors)
@@ -234,7 +235,8 @@ def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log:
         for week in todo:
             started = time.time()
             record = {"week": week, "started": datetime.now().astimezone().isoformat(timespec="seconds"),
-                      "model": model.name, "partial": week == this_week}
+                      "cli": model.cli, "model": model.name, "effort": model.effort, "partial": week == this_week}
+            usage_before = dict(model.usage)
             try:
                 record.update(run_week(cfg, week, model, catalog, activity, week == this_week, log))
                 record["status"] = "ok"
@@ -243,14 +245,22 @@ def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log:
                 raise
             finally:
                 record["seconds"] = round(time.time() - started)
-                record["usage"] = dict(model.usage)
+                record["usage"] = usage_since(usage_before, model.usage)
                 _append_run_log(cfg, record)
                 results.append(record)
             if not record.get("skipped"):
-                commit(cfg, f"Brain update {week}{' (in progress)' if week == this_week else ''}"
-                            f"{' (backfill)' if backfill else ''}")
+                failed = commit(cfg, f"Brain update {week}{' (in progress)' if week == this_week else ''}"
+                                     f"{' (backfill)' if backfill else ''}")
+                if failed:
+                    log(f"{week}: WARNING, the vault commit failed: {failed}")
             log(f"{week}: done in {record['seconds']}s")
     return results
+
+
+def usage_since(before: dict, now: dict) -> dict:
+    """This week's share of the model's running usage totals (numbers only; flags are kept)."""
+    return {k: v - before.get(k, 0) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+            for k, v in now.items()}
 
 
 def _append_run_log(cfg: Config, record: dict) -> None:
@@ -271,12 +281,19 @@ def read_run_log(cfg: Config, limit: int = 30) -> list[dict]:
 GENERATED_PATHS = ["log", "me/learned.md", "brain/knowledge.json", "brain/projects.json", ":(glob)projects/*.md"]
 
 
-def commit(cfg: Config, message: str) -> None:
-    """Commit only the brain's own files, leaving anything else the owner has staged alone."""
+def commit(cfg: Config, message: str) -> str | None:
+    """Commit only the brain's own files, leaving anything else the owner has staged alone.
+    Returns git's complaint if the commit failed (for example inside a sandbox that protects .git)."""
     if not cfg.auto_commit or not (cfg.vault / ".git").exists():
-        return
+        return None
     git = ["git", "-C", str(cfg.vault)]
-    subprocess.run(git + ["add", "-A", "--", *GENERATED_PATHS], capture_output=True)
+    added = subprocess.run(git + ["add", "-A", "--", *GENERATED_PATHS], capture_output=True, text=True)
+    if added.returncode != 0:
+        return (added.stderr or added.stdout).strip()[-500:] or "git add failed"
     changed = subprocess.run(git + ["diff", "--cached", "--quiet", "--", *GENERATED_PATHS], capture_output=True)
     if changed.returncode == 1:
-        subprocess.run(git + ["commit", "-q", "-m", message, "--", *GENERATED_PATHS], capture_output=True)
+        done = subprocess.run(git + ["commit", "-q", "-m", message, "--", *GENERATED_PATHS],
+                              capture_output=True, text=True)
+        if done.returncode != 0:
+            return (done.stderr or done.stdout).strip()[-500:] or "git commit failed"
+    return None

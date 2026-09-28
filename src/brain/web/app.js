@@ -6,12 +6,20 @@ const SCALE = 38; // fixed attention scale: the digest formula tops out near 37.
 const KIND_LABEL = { preference: "Preference", dislike: "Dislike", "work-style": "Work style", skill: "Skill", interest: "Interest" };
 const NOTE_ORDER = [["goal", "Goals"], ["decision", "Decisions"], ["milestone", "Milestones"], ["stack", "Stack"], ["preference", "Preferences here"], ["open-problem", "Open problems"]];
 const STATE_LABEL = { ongoing: "Ongoing", exploring: "Exploring", "on-hold": "On hold", earlier: "Earlier" };
+const CLI_LABEL = { agy: "Antigravity", codex: "Codex", manual: "By hand" };
 const RULES = [["", "Automatic"], ["project", "One project"], ["project+subprojects", "With sub-projects"], ["collection", "Collection"], ["ignore", "Ignore"]];
 
-const S = { data: null, tab: "log", week: null, open: new Set(), quotes: new Set(), kind: "all", folderFilter: "", polling: null, lastRunFinished: null };
+const S = { models: null, choice: loadChoice(), data: null, tab: "log", week: null, open: new Set(), quotes: new Set(), kind: "all", folderFilter: "", polling: null, lastRunFinished: null };
 const $ = (sel) => document.querySelector(sel);
 
 /* ---------- helpers */
+
+function loadChoice() {
+  try { return JSON.parse(localStorage.getItem("brain-run-choice")) || {}; } catch (e) { return {}; }
+}
+function saveChoice() {
+  try { localStorage.setItem("brain-run-choice", JSON.stringify(S.choice)); } catch (e) {}
+}
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icon = (name, cls = "") => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -135,7 +143,8 @@ function renderHeader() {
   btn.disabled = running;
   btn.classList.toggle("running", running);
   btn.innerHTML = running ? `${icon("spin", "spin")}Logging…` : `${icon("run")}Run now`;
-  btn.title = running ? "An update is running" : "Update the brain now, including the week in progress";
+  btn.title = running ? "An update is running" : `Update the brain now, including the week in progress, with ${choiceLabel()}`;
+  $("#runpick").disabled = running;
 
   const mode = document.documentElement.dataset.theme || "auto";
   const themeBtn = $("#theme");
@@ -416,15 +425,16 @@ function viewRuns() {
       <td>${esc(day(x.started))} ${esc(new Date(x.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}</td>
       <td><span class="${x.status === "ok" ? "ok" : "fail"}">${x.status === "ok" ? "Logged" : "Failed"}</span>${x.error ? `<div class="err">${esc(x.error)}</div>` : ""}</td>
       <td class="n">${x.seconds != null ? `${Math.floor(x.seconds / 60)}m ${String(x.seconds % 60).padStart(2, "0")}s` : "–"}</td>
-      <td>${esc(x.model || "")}</td>
-      <td class="n">${fmtNum((x.usage || {}).calls)}</td>
-      <td class="n">${fmtNum(Math.round(((x.usage || {}).input_tokens || 0) / 1000))}k</td>
+      <td>${esc(x.model || "")}<span class="sub">${esc([CLI_LABEL[runCli(x)] || "", x.effort ? `${x.effort} effort` : ""].filter(Boolean).join(" · "))}</span></td>
+      <td class="n">${fmtNum(measured(x) ? (x.usage || {}).calls : x.model_calls)}</td>
+      ${measured(x) ? `<td class="n">${kTokens((x.usage || {}).input_tokens)}</td><td class="n">${kTokens((x.usage || {}).output_tokens)}</td>`
+        : `<td class="n unmeasured" colspan="2" title="Answered by hand in another tool, so its tokens were counted there">not measured</td>`}
     </tr>`).join("");
   return live + `
     <div class="section-head"><h2>Run history</h2><p>${d.schedule && d.schedule.next && !d.schedule.next.startsWith("0001")
       ? `Next scheduled run ${esc(day(d.schedule.next))} at ${esc(new Date(d.schedule.next).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}. Missed weeks are caught up.`
       : "No weekly schedule installed. Run <code>sbrain install</code> to add one."} Every run is committed to the vault.</p></div>
-    <div class="sheet">${d.runs.length ? `<table class="runs"><thead><tr><th>Week</th><th>Started</th><th>Result</th><th class="n">Duration</th><th>Model</th><th class="n">Calls</th><th class="n">Input</th></tr></thead><tbody>${rows}</tbody></table>`
+    <div class="sheet">${d.runs.length ? `<table class="runs"><thead><tr><th>Week</th><th>Started</th><th>Result</th><th class="n">Duration</th><th>Model</th><th class="n">Calls</th><th class="n">Input tokens</th><th class="n">Output tokens</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty"><h2>No runs yet</h2><p>The first run logs last week.</p></div>`}</div>`;
 }
 
@@ -558,10 +568,110 @@ $("#theme").onclick = () => {
 };
 
 $("#runnow").onclick = startRun;
+$("#runpick").onclick = () => toggleRunMenu();
+document.addEventListener("click", (e) => {
+  if (!$("#runmenu").hidden && e.target.isConnected && !e.target.closest("#runmenu, #runpick")) toggleRunMenu(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#runmenu").hidden) { toggleRunMenu(false); $("#runpick").focus(); }
+});
+
+/* ---------- Run now: which CLI, model and effort */
+
+const runCli = (x) => x.cli || ((x.model || "").startsWith("manual") ? "manual" : "agy");
+const measured = (x) => (x.usage || {}).measured !== false && runCli(x) !== "manual";
+function kTokens(n) {
+  if (!n) return "0";
+  return n < 1000 ? fmtNum(n) : n < 1e6 ? `${fmtNum(Math.round(n / 1000))}k` : `${(n / 1e6).toFixed(2)}M`;
+}
+
+// What a choice resolves to when nothing is picked: the vault's [model] for its own CLI,
+// otherwise the CLI's own default (the Codex config model, or the newest Gemini Flash for agy).
+function resolved() {
+  const m = S.models || { clis: {}, config: {} };
+  const cfg = m.config || {};
+  const clis = Object.keys(m.clis);
+  let cli = S.choice.cli || cfg.cli || "agy";
+  if (S.models && clis.length && !clis.includes(cli)) cli = clis[0];
+  const own = cli === (cfg.cli || "agy");
+  const fallback = (own && cfg.model) || (m.clis[cli] || {}).default || null;
+  const model = S.choice.model || fallback;
+  const effort = S.choice.effort || (own && !S.choice.model ? cfg.effort : null) || null;
+  return { cli, model, fallback, effort };
+}
+function choiceLabel() {
+  const r = resolved();
+  return [CLI_LABEL[r.cli] || r.cli, r.model || (r.cli === "agy" ? "newest Gemini Flash" : "its default model"),
+    r.effort ? `${r.effort} effort` : ""].filter(Boolean).join(" · ");
+}
+
+async function toggleRunMenu(open) {
+  const menu = $("#runmenu");
+  open = open ?? menu.hidden;
+  menu.hidden = !open;
+  $("#runpick").setAttribute("aria-expanded", String(open));
+  if (!open) return;
+  if (!S.models) {
+    menu.innerHTML = `<h3>Run now with</h3><p class="hint loading">${icon("spin", "spin")}Asking the CLIs for their models…</p>`;
+    try { S.models = await api("/api/models"); } catch (e) { menu.innerHTML = `<p class="hint">${esc(e.message)}</p>`; return; }
+    renderHeader();
+  }
+  if (!menu.hidden) renderRunMenu();
+}
+
+function renderRunMenu() {
+  const menu = $("#runmenu");
+  const m = S.models;
+  const clis = Object.keys(m.clis);
+  if (!clis.length) {
+    menu.innerHTML = `<h3>Run now with</h3><p class="hint">Neither the Antigravity CLI (agy) nor the Codex CLI was found on this PC.</p>`;
+    return;
+  }
+  const r = resolved();
+  const models = m.clis[r.cli].models || [];
+  const current = models.find((x) => x.id === r.model);
+  const efforts = current ? current.efforts || [] : (r.cli === "agy" && !r.model ? [] : ["low", "medium", "high"]);
+  const defaultName = r.fallback || (r.cli === "agy" ? "newest Gemini Flash" : "Codex default");
+  const cfg = m.config || {};
+  const cfgText = [CLI_LABEL[cfg.cli] || cfg.cli, cfg.model, cfg.effort].filter(Boolean).join(" · ");
+  menu.innerHTML = `
+    <h3>Run now with</h3>
+    <div class="seg" role="group" aria-label="CLI">${["agy", "codex"].map((c) =>
+      `<button type="button" data-cli="${c}" aria-pressed="${c === r.cli}" ${m.clis[c] ? "" : "disabled title=\"Not installed\""}>${CLI_LABEL[c]}</button>`).join("")}</div>
+    <label class="field">Model
+      <select data-model>
+        <option value="">Default (${esc(defaultName)})</option>
+        ${models.map((x) => `<option value="${esc(x.id)}" ${x.id === S.choice.model ? "selected" : ""}>${esc(x.label)}${x.label === x.id ? "" : ` · ${esc(x.id)}`}</option>`).join("")}
+      </select></label>
+    <label class="field">Reasoning effort
+      <select data-effort ${efforts.length ? "" : "disabled"}>
+        <option value="">${efforts.length ? `Default${current && current.default_effort ? ` (${esc(current.default_effort)})` : ""}` : "Set by the model's name"}</option>
+        ${efforts.map((e) => `<option value="${esc(e)}" ${e === r.effort ? "selected" : ""}>${esc(e)}</option>`).join("")}
+      </select></label>
+    <p class="hint">Scheduled runs use <code>[model]</code> in brain/config.toml (now ${esc(cfgText || "Antigravity")}). Tokens are counted either way.</p>
+    <div class="actions">
+      <button class="btn ghost small" type="button" data-reset>Use defaults</button>
+      <button class="btn primary" type="button" data-go ${S.data.run && S.data.run.running ? "disabled" : ""}>${icon("run")}Run now</button>
+    </div>`;
+  menu.querySelectorAll("[data-cli]").forEach((b) => (b.onclick = () => {
+    S.choice = { cli: b.dataset.cli };
+    saveChoice(); renderRunMenu(); renderHeader();
+  }));
+  menu.querySelector("[data-model]").onchange = (e) => {
+    S.choice = { cli: r.cli, model: e.target.value || undefined };
+    saveChoice(); renderRunMenu(); renderHeader();
+  };
+  menu.querySelector("[data-effort]").onchange = (e) => {
+    S.choice = { ...S.choice, cli: r.cli, effort: e.target.value || undefined };
+    saveChoice(); renderHeader();
+  };
+  menu.querySelector("[data-reset]").onclick = () => { S.choice = {}; saveChoice(); renderRunMenu(); renderHeader(); };
+  menu.querySelector("[data-go]").onclick = () => { toggleRunMenu(false); startRun(); };
+}
 
 async function startRun() {
   try {
-    const r = await api("/api/run", {});
+    const r = await api("/api/run", { cli: S.choice.cli || null, model: S.choice.model || null, effort: S.choice.effort || null });
     S.data.run = r;
     if (!r.started && !r.running) toast("An update is already running.");
     render();

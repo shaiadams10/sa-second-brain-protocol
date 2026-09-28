@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import threading
 import time
 import webbrowser
@@ -28,6 +29,30 @@ from brain.run import Busy, commit, knowledge_for, read_run_log, run
 WEB = Path(__file__).parent / "web"
 IDLE_SHUTDOWN = 3 * 3600  # the server stops itself after 3 idle hours
 FOLDER_RULES = {"project", "project+subprojects", "collection", "ignore"}
+_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,80}$")
+_EFFORT = re.compile(r"^[a-z]{1,12}$")
+
+
+def run_active(cfg: Config) -> bool:
+    """A brain update (Run now, the schedule, or a backfill) holds the run lock. Its knowledge is
+    in memory and will be saved over any edit made meanwhile, so edits wait until it ends."""
+    lock = cfg.work_dir / "run.lock"
+    try:
+        return time.time() - lock.stat().st_mtime < 24 * 3600
+    except OSError:
+        return False
+
+
+def run_choice(body: dict) -> dict:
+    """The CLI, model and effort picked in Run now; empty values mean the configured default."""
+    cli, model, effort = body.get("cli") or None, body.get("model") or None, body.get("effort") or None
+    if cli not in (None, "agy", "codex"):
+        raise ValueError("unknown CLI")
+    if model is not None and (not isinstance(model, str) or not _MODEL_ID.match(model) or model.startswith("manual")):
+        raise ValueError("bad model id")
+    if effort is not None and (not isinstance(effort, str) or not _EFFORT.match(effort)):
+        raise ValueError("bad effort")
+    return {"cli": cli, "model_name": model, "effort": effort}
 
 
 class RunState:
@@ -40,17 +65,20 @@ class RunState:
         self.started: str | None = None
         self.finished: str | None = None
         self.error: str | None = None
+        self.choice: dict = {}
 
     def snapshot(self) -> dict:
         with self.lock:
             return {"running": bool(self.thread and self.thread.is_alive()), "lines": self.lines[-60:],
-                    "started": self.started, "finished": self.finished, "error": self.error}
+                    "started": self.started, "finished": self.finished, "error": self.error,
+                    "choice": self.choice}
 
-    def start(self, cfg: Config, on_done) -> bool:
+    def start(self, cfg: Config, on_done, choice: dict | None = None) -> bool:
         with self.lock:
             if self.thread and self.thread.is_alive():
                 return False
             self.lines, self.error, self.finished = [], None, None
+            self.choice = {k: v for k, v in (choice or {}).items() if v}
             self.started = datetime.now().astimezone().isoformat(timespec="seconds")
 
             def log(line: str) -> None:
@@ -59,7 +87,7 @@ class RunState:
 
             def work() -> None:
                 try:
-                    run(cfg, current=True, log=log)
+                    run(cfg, current=True, log=log, **(choice or {}))
                 except Busy as exc:
                     self.error = str(exc)
                 except Exception as exc:  # noqa: BLE001 - shown on the dashboard
@@ -135,7 +163,21 @@ class App:
             "vault": str(cfg.vault),
         }
 
+    def models(self) -> dict:
+        """CLIs, models and effort levels for Run now. Listing agy models takes a few seconds."""
+        if not hasattr(self, "_models") or time.time() - self._models[0] > 600:
+            from brain.llm import available_models
+            self._models = (time.time(), available_models())
+        cfg = self.cfg
+        return {"clis": self._models[1],
+                "config": {"cli": cfg.model_cli, "model": cfg.model_name, "effort": cfg.model_effort}}
+
     # ----- write
+
+    def guard(self) -> None:
+        if run_active(self.cfg):
+            raise Busy("A brain update is running. Try again when it has finished, "
+                       "otherwise the update would overwrite this change.")
 
     def _finish_edit(self, knowledge, message: str, rescan: bool = False) -> None:
         knowledge.save()
@@ -144,6 +186,7 @@ class App:
 
     def item(self, item_id: str, action: str) -> None:
         with self.write_lock:
+            self.guard()
             knowledge = knowledge_for(self.cfg)
             if item_id not in knowledge.items:
                 raise KeyError(item_id)
@@ -153,6 +196,7 @@ class App:
 
     def note(self, pid: str, note_id: str, action: str) -> None:
         with self.write_lock:
+            self.guard()
             knowledge = knowledge_for(self.cfg)
             if pid not in knowledge.projects:
                 raise KeyError(pid)
@@ -161,6 +205,7 @@ class App:
 
     def mark(self, pid: str, value: str) -> None:
         with self.write_lock:
+            self.guard()
             decisions = self.cfg.load_decisions()
             marked, unmarked = set(decisions.get("marked", [])), set(decisions.get("unmarked", []))
             marked.discard(pid)
@@ -176,6 +221,7 @@ class App:
 
     def folder(self, fid: str, rule: str | None) -> None:
         with self.write_lock:
+            self.guard()
             decisions = self.cfg.load_decisions()
             folders = decisions.setdefault("folders", {})
             if rule:
@@ -212,6 +258,8 @@ def _handler(app: App):
                 return self._json(app.state())
             if path == "/api/run":
                 return self._json(app.run_state.snapshot())
+            if path == "/api/models":
+                return self._json(app.models())
             target = (WEB / (path.lstrip("/") or "index.html")).resolve()
             if not target.is_file() or WEB.resolve() not in target.parents:
                 target = WEB / "index.html"
@@ -241,12 +289,18 @@ def _handler(app: App):
                 elif parts[:2] == ["api", "folder"] and (body.get("rule") in FOLDER_RULES or body.get("rule") is None):
                     app.folder(body["id"], body.get("rule"))
                 elif parts[:2] == ["api", "run"]:
-                    started = app.run_state.start(app.cfg, on_done=lambda: None)
+                    try:
+                        choice = run_choice(body)
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    started = app.run_state.start(app.cfg, on_done=lambda: None, choice=choice)
                     return self._json({"started": started, **app.run_state.snapshot()})
                 else:
                     return self._json({"error": "unknown request"}, HTTPStatus.BAD_REQUEST)
             except KeyError as exc:
                 return self._json({"error": f"not found: {exc}"}, HTTPStatus.NOT_FOUND)
+            except Busy as exc:
+                return self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
             self._json(app.state())
 
     return Handler
