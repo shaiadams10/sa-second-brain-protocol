@@ -64,6 +64,8 @@ A backfill resumes where it stopped: finished weeks are skipped. For a one-time 
 
 A local page on `127.0.0.1` with the Signal color theme and Reading Room layout, in light and dark modes. Press the week number to browse the year's saved weeks directly.
 
+The desktop shortcut opens it from a normal terminal window titled "Second Brain dashboard": close that window to stop the dashboard. (Started without a window, it stops itself after three idle hours.) Helper programs it starts (git, PowerShell, the model CLIs) never open windows of their own, here or in the scheduled run.
+
 - **Log**: each week has the complete project ledger, totals carried forward, headline, highlights, observations and skill activity. Wide tables scroll within the page on smaller screens.
 - **Projects**: ongoing, exploring, on hold, and earlier projects with an 8-week attention strip; mark a folder as a real project or not; answer folder questions; set how any folder is treated.
 - **About you**: inked (confirmed) and pencilled (candidate) entries with evidence quotes and reversible Strike/Undo. Filters include stated facts, communication, goals and advice. Skills show computed progress and evidence history; goals show whether they are open or settled.
