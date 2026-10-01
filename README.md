@@ -18,12 +18,15 @@ Version 2 is a rewrite. Version 1 was a large governed pipeline that grew hard t
 
    When files alone can't tell a monorepo from a collection of separate projects, the dashboard asks you once and remembers. Folders outside the projects root can be added as named places.
 3. **Keep history intact when folders move.** A conversation in a folder that has since moved is matched by name to where that folder lives now. A folder that no longer exists becomes a historical project under its old name, and one rule (`"Old Name": "part-of:New Name"`) merges its history into its successor.
-4. **Build the weekly digest, without AI.** Each project gets an attention score from active days, conversations, file changes, and commits (git is optional). Exchanges where you praised, corrected, or interrupted the assistant are always kept, because that's where your preferences show.
+4. **Build the weekly digest, without AI.** Each project gets an attention score from active days, conversations, file changes, and commits (git is optional). Exchanges where you praised, corrected, or interrupted the assistant are always kept, because that's where your preferences show, and so are your questions about how something works, because that's where the edge of what you know shows. Pasted text is marked as pasted, and attached terminal output and agent handoff briefs are dropped: they aren't your words.
 5. **Summarize with a model you choose.** Each project's week goes to a coding-agent CLI you already use, answering in JSON against a fixed schema. Code, not the model, writes the vault:
    - **Antigravity** (`agy -p`): with no model named, the newest Gemini Flash your account offers is picked at run time.
    - **Codex** (`codex exec`): read-only, ephemeral sandbox so the brain's own calls never show up as conversations; with no model named, your Codex default is used.
 6. **Only what recurs becomes part of you.** An observation about you stays a pencilled candidate until it shows up in two different projects or two different weeks. One-off instructions are dropped, and anything you struck is never proposed again. Sensitive matters (coursework, grades, health, money, accounts) stay high level.
-7. **Projects earn their status.** Ongoing means real attention in 3 of the last 8 weeks, or marked by you. A project that goes quiet is shown neutrally as "on hold since", never as abandoned.
+7. **Skills come from how you talk, not from what the assistant did.** Each week, every topic you touched is noted as one you *directed* (specific direction, catching mistakes, using its terms without asking), were *learning* (asking how it works), or *struggled* with. From that history the brain computes where each skill stands: strong, growing, shown once, learning, or struggled. What you stopped asking about and now direct is what you've learned.
+8. **Conversations about you count directly.** Folders listed under `about_me` (usually the vault itself) are where you talk about yourself. There the model also records what you state about yourself, corrections to what the brain believed (the wrong belief is struck), goals you are working out, and advice you took or turned down. These count at once, without waiting to recur.
+9. **Themes across projects.** At the end of each run, one call reads the catalog, the skill map, and what you've stated, and names the areas you keep coming back to. Which projects you return to after a break is counted without AI.
+10. **Projects earn their status.** Ongoing means real attention in 3 of the last 8 weeks, or marked by you. A project that goes quiet is shown neutrally as "on hold since", never as abandoned.
 
 Every run and every edit you make on the dashboard is committed to the vault's git history. Each run records how many model calls it made and the tokens they used.
 
@@ -43,6 +46,8 @@ sbrain run                        catch up every finished week not yet logged
 sbrain run --current              also write the week in progress
 sbrain run --week 2026-W39        (re)write one week; re-running replaces its earlier result
 sbrain run --backfill             walk all history from your first conversation, oldest first
+sbrain run --learn                read logged weeks again for skills, communication, and what you stated,
+                                  without rewriting their logs (resumes where it stopped)
 sbrain run --cli codex --model <id> --effort medium
                                   pick the CLI, model and reasoning effort for this run
 sbrain dashboard                  open the logbook dashboard
@@ -57,11 +62,11 @@ A backfill resumes where it stopped: finished weeks are skipped. For a one-time 
 
 ## The dashboard
 
-A local page on `127.0.0.1` in the shape of a pilot's logbook:
+A local page on `127.0.0.1` with the Signal color theme and Reading Room layout, in light and dark modes. Press the week number to browse the year's saved weeks directly.
 
-- **Log**: each week is a ruled page, one line per project with its remark, totals carried forward, and the week's headline, highlights, and what was learned in the margin.
+- **Log**: each week has the complete project ledger, totals carried forward, headline, highlights, observations and skill activity. Wide tables scroll within the page on smaller screens.
 - **Projects**: ongoing, exploring, on hold, and earlier projects with an 8-week attention strip; mark a folder as a real project or not; answer folder questions; set how any folder is treated.
-- **About you**: inked (confirmed) and pencilled (candidate) entries with the quotes behind them. Strike one and it is gone for good, with undo.
+- **About you**: inked (confirmed) and pencilled (candidate) entries with evidence quotes and reversible Strike/Undo. Filters include stated facts, communication, goals and advice. Skills show computed progress and evidence history; goals show whether they are open or settled.
 - **Runs**: run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that run.
 
 ## Vault setup
@@ -72,7 +77,8 @@ The engine holds no personal data. Everything about you lives in your private va
 <vault>/brain/config.toml      owner, paths, git identities, model settings, extra places
 <vault>/brain/projects.json    your decisions about folders and real projects
 <vault>/brain/knowledge.json   everything the brain has learned (rendered to Markdown)
-<vault>/log/, projects/, me/learned.md   the generated notes
+<vault>/log/, projects/       the generated weekly logs and project notes
+<vault>/me/learned.md, skills.md, themes.md, open-questions.md   generated notes about you
 <vault>/.brain/                working files: digests, run log, locks (keep out of git)
 ```
 
@@ -83,6 +89,9 @@ owner = "Alex"
 projects_root = "D:/Projects"
 git_authors = ["you@example.com", "noreply@anthropic.com"]
 auto_commit = true
+
+# Folders whose conversations are about you, not only project work.
+about_me = ["Notes Vault"]
 
 # Which CLI answers scheduled runs, and Run now unless you pick something else there.
 [model]

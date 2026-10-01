@@ -30,6 +30,9 @@ class Config:
     owner: str = "the owner"
     auto_commit: bool = True
     places: dict[str, str] = field(default_factory=dict)  # extra project folders outside projects_root
+    # Projects or places whose conversations are about the owner (advice, goals, self-description),
+    # read for what they say about the owner, not only for project work.
+    about_me: list[str] = field(default_factory=list)
     model_cli: str = "agy"  # which CLI answers scheduled runs: "agy" or "codex"
     model_name: str | None = None  # None: newest Gemini Flash (agy) or the Codex default model
     model_effort: str | None = None  # reasoning effort, e.g. "medium"; None: the CLI's default
@@ -77,6 +80,7 @@ def load(vault: Path) -> Config:
         owner=data.get("owner", "the owner"),
         auto_commit=bool(data.get("auto_commit", True)),
         places={name: str(Path(p).expanduser()) for name, p in data.get("places", {}).items()},
+        about_me=list(data.get("about_me", [])),
         model_cli=model.get("cli") or "agy",
         model_name=model.get("name") or None,
         model_effort=model.get("effort") or None,

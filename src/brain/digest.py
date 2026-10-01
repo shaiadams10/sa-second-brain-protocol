@@ -3,7 +3,12 @@
 For each project it records how much attention it got (conversations, active days,
 file changes, commits) and a bounded selection of exchanges: the owner's message and
 the assistant's final reply. Exchanges where the owner praised, corrected, or
-interrupted the assistant are always kept, because that is where preferences show.
+interrupted the assistant are always kept, because that is where preferences show,
+and so are the owner's questions about how things work, because that is where the
+edge of their knowledge shows.
+
+Folders listed under `about_me` hold conversations about the owner rather than about a
+project, so more of each conversation is kept.
 """
 
 from __future__ import annotations
@@ -25,10 +30,20 @@ USER_LIMIT = 1200
 REPLY_LIMIT = 900
 SAMPLE_PER_PROJECT = 20
 MAX_PER_PROJECT = 60
+ABOUT_USER_LIMIT = 4000
+ABOUT_MAX = 150
 
 _PRAISE = re.compile(
     r"(?i)\b(gj|good job|great job|nice work|well done|perfect(ly)?|love (it|this|that)|amazing|awesome|"
-    r"exactly what i (wanted|meant)|works (great|perfectly|now)|looks (great|amazing|good|perfect))\b"
+    r"exactly what i (wanted|meant)|works (great|perfectly|now)|looks (great|amazing|good|perfect)|"
+    r"so cool|super cool|wow|this is (fun|sick|great))\b"
+)
+# Questions about how something works: the edge of what the owner knows. Questions that ask the
+# assistant for a plan or an opinion ("how would we", "what do you think") are not learning.
+_LEARNING = re.compile(
+    r"(?i)(\bwhat(?:'?s| is| are| does)\b|\bhow (?:does|do|is|are|can) (?!(?:you|u|we|i)\b)|"
+    r"\bwhy (?:does|do|is|are)\b|\bexplain\b|\bi (?:do ?n'?t|dont) (?:understand|get it|know (?:what|how|why))\b|"
+    r"\bwhat do (?:you|u) mean\b|\bdifference between\b|\bconfused\b|\beli5\b)"
 )
 # Pushback shows up at the start of a message; later in the text these words are usually instructions.
 _CORRECTION = re.compile(
@@ -70,6 +85,8 @@ def signal(text: str) -> str | None:
         return "correction"
     if _PRAISE.search(head):
         return "praise"
+    if _LEARNING.search(head):
+        return "learning"
     return None
 
 
@@ -134,19 +151,20 @@ def _spread(indices: list[int], room: int) -> list[int]:
     return [indices[int(k * step)] for k in range(room)]
 
 
-def _select(exchanges: list[DigestExchange]) -> list[DigestExchange]:
-    """Within MAX_PER_PROJECT: signals first, then how each session started and ended,
-    then an even sample of the rest."""
+def _select(exchanges: list[DigestExchange], limit: int = MAX_PER_PROJECT) -> list[DigestExchange]:
+    """Within `limit`: signals first, then how each session started and ended,
+    then an even sample of the rest (all the room that is left, for conversations about the owner)."""
     keep: set[int] = set()
     signals = [i for i, e in enumerate(exchanges) if e.signal]
-    keep.update(_spread(signals, MAX_PER_PROJECT * 2 // 3))
+    keep.update(_spread(signals, limit * 2 // 3))
     by_session: dict[str, list[int]] = {}
     for i, e in enumerate(exchanges):
         by_session.setdefault(e.session, []).append(i)
     edges = [i for idx in by_session.values() for i in (idx[0], idx[-1]) if i not in keep]
-    keep.update(_spread(sorted(set(edges)), MAX_PER_PROJECT - len(keep)))
+    keep.update(_spread(sorted(set(edges)), limit - len(keep)))
     rest = [i for i in range(len(exchanges)) if i not in keep]
-    keep.update(_spread(rest, min(SAMPLE_PER_PROJECT, MAX_PER_PROJECT - len(keep))))
+    room = limit - len(keep)
+    keep.update(_spread(rest, room if limit > MAX_PER_PROJECT else min(SAMPLE_PER_PROJECT, room)))
     return [exchanges[i] for i in sorted(keep)]
 
 
@@ -175,10 +193,11 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
         sub = catalog.subproject(location, pid)
         pw = entry(pid)
         pw.sessions[session.tool] = pw.sessions.get(session.tool, 0) + 1
+        user_limit = ABOUT_USER_LIMIT if pid in config.about_me else USER_LIMIT
         for ex in session.exchanges:
             raw.setdefault(pid, []).append(DigestExchange(
                 at=ex.at.isoformat(timespec="minutes"), tool=session.tool, session=session.id,
-                user=clip(redact(ex.user), USER_LIMIT), reply=clip(redact(ex.reply), REPLY_LIMIT),
+                user=clip(redact(ex.user), user_limit), reply=clip(redact(ex.reply), REPLY_LIMIT),
                 tool_calls=ex.tool_calls, signal=signal(ex.user), sub=sub,
             ))
 
@@ -198,7 +217,7 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
         pw = entry(pid)
         exchanges.sort(key=lambda e: e.at)
         pw.exchange_count = len(exchanges)
-        pw.exchanges = _select(exchanges)
+        pw.exchanges = _select(exchanges, ABOUT_MAX if pid in config.about_me else MAX_PER_PROJECT)
         if not pw.active_days:
             pw.active_days = sorted({e.at[:10] for e in exchanges})
 
