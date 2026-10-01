@@ -37,7 +37,7 @@ uv tool install --editable <path to this repo>
 sbrain --vault <path to your vault> install     # Windows: weekly task + desktop shortcut
 ```
 
-The weekly task runs Mondays at 09:00. If the machine was off, Windows starts it at the next opportunity and every missed week is caught up.
+The weekly task runs on the day and time in `[schedule]` (Monday 09:00 unless set), in the PC's local time. Change it, and the CLI, model and effort scheduled runs use, from **Weekly run** on the dashboard's Runs page; saving rewrites `config.toml` and re-registers the task. If the machine was off, Windows starts the run at the next opportunity and every missed week is caught up.
 
 ## Commands
 
@@ -67,7 +67,7 @@ A local page on `127.0.0.1` with the Signal color theme and Reading Room layout,
 - **Log**: each week has the complete project ledger, totals carried forward, headline, highlights, observations and skill activity. Wide tables scroll within the page on smaller screens.
 - **Projects**: ongoing, exploring, on hold, and earlier projects with an 8-week attention strip; mark a folder as a real project or not; answer folder questions; set how any folder is treated.
 - **About you**: inked (confirmed) and pencilled (candidate) entries with evidence quotes and reversible Strike/Undo. Filters include stated facts, communication, goals and advice. Skills show computed progress and evidence history; goals show whether they are open or settled.
-- **Runs**: run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that run.
+- **Runs**: the **Weekly run** settings (CLI, model, effort, day, time for every scheduled run), run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that one run.
 
 ## Vault setup
 
@@ -98,6 +98,11 @@ about_me = ["Notes Vault"]
 cli = "agy"      # "agy" or "codex"
 name = ""        # a model id, or "" for the newest Gemini Flash (agy) / your Codex default
 effort = ""      # e.g. "low", "medium", "high"; "" for the CLI's default
+
+# When the weekly run starts, in the PC's local time.
+[schedule]
+day = "Monday"
+time = "22:00"
 
 # Project folders outside projects_root.
 [places]

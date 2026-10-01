@@ -133,11 +133,11 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .runmenu { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; width: 310px; max-width: calc(100vw - 32px); padding: 14px 16px 16px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
 .runmenu[hidden] { display: none; }
 .runmenu h3 { margin: 0 0 10px; font: 600 11px/1 var(--font-cond); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
-.runmenu .field { display: block; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
-.runmenu select { display: block; width: 100%; height: 30px; margin-top: 5px; padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--panel-2); }
-.runmenu select:disabled { opacity: 0.55; }
-.runmenu select option { background: var(--panel); color: var(--ink); }
-.runmenu .hint { margin: 10px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.runmenu .field, .weekly .field { display: block; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.runmenu select, .weekly select, .weekly input[type="time"] { display: block; width: 100%; height: 30px; margin-top: 5px; padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--panel-2); }
+.runmenu select:disabled, .weekly select:disabled { opacity: 0.55; }
+.runmenu select option, .weekly select option { background: var(--panel); color: var(--ink); }
+.runmenu .hint, .weekly .hint { margin: 10px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
 .runmenu .hint.loading { display: flex; align-items: center; gap: 8px; }
 .runmenu .hint .spin { animation: spin 1s linear infinite; }
 .runmenu .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
@@ -315,6 +315,14 @@ table.log { width: 100%; border-collapse: collapse; }
 
 /* ---------- register (projects) */
 
+/* Weekly run settings (Runs tab) */
+.weekly { padding: 14px 20px 16px; margin-bottom: 26px; }
+.weekly .weekly-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.weekly .weekly-head p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+.weekly .weekly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 4px 16px; margin-top: 8px; }
+.weekly .seg { margin-top: 5px; }
+.weekly input[type="time"] { color: var(--ink); }
+.weekly .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 30px 0 10px; }
 .section-head:first-child { margin-top: 0; }
 .section-head p { margin: 0; color: var(--ink-3); font-size: 13px; }

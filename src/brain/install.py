@@ -1,18 +1,21 @@
 """Windows setup: a weekly scheduled task and a desktop shortcut to the dashboard.
 
-The task runs Mondays at 09:00. If the PC was off, Windows starts it at the next
-opportunity, and `sbrain run` catches up every finished week that is missing.
+The task runs on the day and time in the vault's `[schedule]` (Monday 09:00 unless set),
+in the PC's local time. If the PC was off, Windows starts it at the next opportunity,
+and `sbrain run` catches up every finished week that is missing.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from brain.config import Config
+from brain.config import DAYS, Config
 
+TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 TASK_NAME = "Second Brain weekly update"
 SHORTCUT = "Second Brain.lnk"
 
@@ -39,19 +42,28 @@ def _ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def install(cfg: Config, day: str = "Monday", at: str = "9:00am") -> list[str]:
+def register_task(cfg: Config) -> str:
+    """Create or replace the weekly task from the vault's [schedule]. Returns a one-line summary."""
     if sys.platform != "win32":
-        raise SystemExit("sbrain install sets up Windows Task Scheduler; on other systems use cron with `sbrain run`.")
+        raise SystemExit("The weekly run uses Windows Task Scheduler; on other systems use cron with `sbrain run`.")
+    if cfg.schedule_day not in DAYS or not TIME.match(cfg.schedule_time):
+        raise SystemExit(f"Bad schedule in config.toml: {cfg.schedule_day} at {cfg.schedule_time}")
     silent = _script("sbrain-silent")
-    dashboard = _script("sbrain-dashboard")
     vault_arg = f'--vault "{cfg.vault}"'
     _powershell(f"""
 $action = New-ScheduledTaskAction -Execute {_ps_quote(silent)} -Argument {_ps_quote(vault_arg + ' run')}
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek {day} -At {_ps_quote(at)}
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek {cfg.schedule_day} -At {_ps_quote(cfg.schedule_time)}
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 3) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName {_ps_quote(TASK_NAME)} -Action $action -Trigger $trigger -Settings $settings `
   -Description 'Updates the second brain vault from the past week of AI conversations and project folders.' -Force | Out-Null
 """)
+    return f"Scheduled task '{TASK_NAME}': every {cfg.schedule_day} at {cfg.schedule_time}, catching up after missed runs"
+
+
+def install(cfg: Config) -> list[str]:
+    summary = register_task(cfg)
+    dashboard = _script("sbrain-dashboard")
+    vault_arg = f'--vault "{cfg.vault}"'
     desktop = _powershell("[Environment]::GetFolderPath('Desktop')")
     link = str(Path(desktop) / SHORTCUT)
     _powershell(f"""
@@ -62,8 +74,7 @@ $s.WorkingDirectory = {_ps_quote(str(cfg.vault))}
 $s.Description = 'Open the second brain logbook'
 $s.Save()
 """)
-    return [f"Scheduled task '{TASK_NAME}': every {day} at {at}, catching up after missed runs",
-            f"Desktop shortcut: {link}"]
+    return [summary, f"Desktop shortcut: {link}"]
 
 
 def uninstall() -> list[str]:
