@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
+from brain import proc
 from brain.config import DAYS, Config
 
 TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -31,7 +31,7 @@ def _script(name: str) -> str:
 
 
 def _powershell(script: str) -> str:
-    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+    result = proc.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                             capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(result.stderr.strip() or result.stdout.strip())
@@ -60,21 +60,27 @@ Register-ScheduledTask -TaskName {_ps_quote(TASK_NAME)} -Action $action -Trigger
     return f"Scheduled task '{TASK_NAME}': every {cfg.schedule_day} at {cfg.schedule_time}, catching up after missed runs"
 
 
-def install(cfg: Config) -> list[str]:
-    summary = register_task(cfg)
-    dashboard = _script("sbrain-dashboard")
-    vault_arg = f'--vault "{cfg.vault}"'
+def create_shortcut(cfg: Config) -> str:
+    """A desktop shortcut that opens the dashboard in a normal terminal window: closing the
+    window stops the dashboard. Returns the shortcut's path."""
+    sbrain = _script("sbrain")
     desktop = _powershell("[Environment]::GetFolderPath('Desktop')")
     link = str(Path(desktop) / SHORTCUT)
     _powershell(f"""
 $s = (New-Object -ComObject WScript.Shell).CreateShortcut({_ps_quote(link)})
-$s.TargetPath = {_ps_quote(dashboard)}
-$s.Arguments = {_ps_quote(vault_arg)}
+$s.TargetPath = {_ps_quote(sbrain)}
+$s.Arguments = {_ps_quote(f'--vault "{cfg.vault}" dashboard')}
 $s.WorkingDirectory = {_ps_quote(str(cfg.vault))}
-$s.Description = 'Open the second brain logbook'
+$s.WindowStyle = 1
+$s.Description = 'Open the second brain logbook. Close its terminal window to stop it.'
 $s.Save()
 """)
-    return [summary, f"Desktop shortcut: {link}"]
+    return link
+
+
+def install(cfg: Config) -> list[str]:
+    summary = register_task(cfg)
+    return [summary, f"Desktop shortcut: {create_shortcut(cfg)}"]
 
 
 def uninstall() -> list[str]:

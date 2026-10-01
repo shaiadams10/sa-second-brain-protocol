@@ -24,6 +24,8 @@ import tomllib
 import uuid
 from pathlib import Path
 
+from brain import proc
+
 CLIS = ("agy", "codex")
 AGY_CANDIDATES = ("agy", "~/AppData/Local/agy/bin/agy.exe", "~/.local/bin/agy")
 AGY_EFFORTS = ("low", "medium", "high", "max")
@@ -67,14 +69,14 @@ def find_agy() -> str:
 def update(agy: str) -> None:
     """Keep the CLI current; a failed update is not a reason to skip the run."""
     try:
-        subprocess.run([agy, "update"], capture_output=True, timeout=300)
+        proc.run([agy, "update"], capture_output=True, timeout=300)
     except (OSError, subprocess.TimeoutExpired):
         pass
 
 
 def agy_models(agy: str) -> list[tuple[str, str]]:
     """(id, label) for every model the signed-in account offers, in the CLI's order."""
-    out = subprocess.run([agy, "models"], capture_output=True, text=True, timeout=120,
+    out = proc.run([agy, "models"], capture_output=True, text=True, timeout=120,
                          encoding="utf-8", errors="replace").stdout
     models = []
     for line in out.splitlines():
@@ -127,7 +129,7 @@ class Model:
         last_error = ""
         try:
             for _ in range(attempts):
-                result = subprocess.run(
+                result = proc.run(
                     command, cwd=folder, capture_output=True, text=True, encoding="utf-8", errors="replace",
                     timeout=timeout_minutes * 60 + 60,
                 )
@@ -240,7 +242,7 @@ class CodexModel:
             for _ in range(attempts):
                 answer_path.unlink(missing_ok=True)
                 try:
-                    result = subprocess.run(command, cwd=folder, input=prompt, capture_output=True, text=True,
+                    result = proc.run(command, cwd=folder, input=prompt, capture_output=True, text=True,
                                             encoding="utf-8", errors="replace", timeout=timeout_minutes * 60)
                 except subprocess.TimeoutExpired:
                     last_error = f"no answer within {timeout_minutes} minutes"

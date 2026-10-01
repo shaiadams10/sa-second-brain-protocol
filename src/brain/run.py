@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from brain import proc
 from brain import prompts
 from brain.activity import Activity
 from brain.config import Config
@@ -31,13 +31,25 @@ class Busy(RuntimeError):
     pass
 
 
+def lock_held(path: Path, stale_after: float) -> bool:
+    """A run holds the lock if the file is recent and the process that wrote it is still alive.
+    A run whose process was killed (a closed dashboard window, a crash) holds nothing."""
+    try:
+        if time.time() - path.stat().st_mtime >= stale_after:
+            return False
+        holder = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    return proc.alive(int(holder)) if holder.isdigit() else True
+
+
 class RunLock:
     def __init__(self, path: Path, stale_after: float = 3 * 3600) -> None:
         self.path, self.stale_after = path, stale_after
 
     def __enter__(self) -> "RunLock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.exists() and time.time() - self.path.stat().st_mtime < self.stale_after:
+        if lock_held(self.path, self.stale_after):
             raise Busy("Another brain update is already running.")
         self.path.write_text(str(os.getpid()), encoding="utf-8")
         return self
@@ -396,12 +408,12 @@ def commit(cfg: Config, message: str, paths: list[str] | None = None) -> str | N
         return None
     paths = paths or GENERATED_PATHS
     git = ["git", "-C", str(cfg.vault)]
-    added = subprocess.run(git + ["add", "-A", "--", *paths], capture_output=True, text=True)
+    added = proc.run(git + ["add", "-A", "--", *paths], capture_output=True, text=True)
     if added.returncode != 0:
         return (added.stderr or added.stdout).strip()[-500:] or "git add failed"
-    changed = subprocess.run(git + ["diff", "--cached", "--quiet", "--", *paths], capture_output=True)
+    changed = proc.run(git + ["diff", "--cached", "--quiet", "--", *paths], capture_output=True)
     if changed.returncode == 1:
-        done = subprocess.run(git + ["commit", "-q", "-m", message, "--", *paths],
+        done = proc.run(git + ["commit", "-q", "-m", message, "--", *paths],
                               capture_output=True, text=True)
         if done.returncode != 0:
             return (done.stderr or done.stdout).strip()[-500:] or "git commit failed"
