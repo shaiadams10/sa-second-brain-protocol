@@ -873,7 +873,7 @@ function viewRuns() {
         : `<td class="n unmeasured" colspan="2" title="Answered by hand in another tool, so its tokens were counted there">not measured</td>`}
     </tr>`).join("");
   const pager = renderPager(runsSlice, "runs", "runs", "run history");
-  return live + `
+  return live + weeklyPanel() + `
     <div class="section-head">
       <div>
         <h2>Run history</h2>
@@ -885,6 +885,92 @@ function viewRuns() {
     </div>
     <div class="sheet">${d.runs.length ? `<table class="runs"><thead><tr><th>Week</th><th>Started</th><th>Result</th><th class="n">Duration</th><th>Model</th><th class="n">Calls</th><th class="n">Input tokens</th><th class="n">Output tokens</th></tr></thead><tbody>${rows}</tbody></table>`
       : `<div class="empty"><h2>No runs yet</h2><p>The first run logs last week.</p></div>`}</div>`;
+}
+
+/* ---------- weekly run settings: the defaults every scheduled run uses */
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function weeklySummary(s) {
+  const model = s.model || (s.cli === "agy" ? "newest Gemini Flash" : "Codex default model");
+  return `Every ${s.day} at ${s.time} with ${CLI_LABEL[s.cli] || s.cli} · ${model}${s.effort ? ` · ${s.effort} effort` : ""}`;
+}
+
+function weeklyPanel() {
+  const s = S.data.settings;
+  if (!s) return "";
+  const w = S.weekly;
+  if (!w) {
+    return `
+    <section class="sheet weekly" aria-label="Weekly run">
+      <div class="weekly-head">
+        <div><div class="section-head" style="margin:0 0 4px"><h2>Weekly run</h2></div><p>${esc(weeklySummary(s))}, your PC's time.</p></div>
+        <button class="btn ghost small" type="button" data-weekly-edit>Change</button>
+      </div>
+    </section>`;
+  }
+  const m = S.models;
+  if (!m) {
+    return `<section class="sheet weekly"><p class="hint">${icon("spin", "spin")} Asking the CLIs for their models…</p></section>`;
+  }
+  const info = m.clis[w.cli] || { models: [] };
+  const models = info.models || [];
+  const picked = models.find((x) => x.id === (w.model || info.default));
+  const efforts = picked ? picked.efforts || [] : [];
+  const defaultName = w.cli === "agy" ? "newest Gemini Flash" : info.default || "your Codex default";
+  return `
+    <section class="sheet weekly" aria-label="Weekly run settings">
+      <div class="section-head" style="margin:0 0 4px"><h2>Weekly run</h2></div>
+      <p class="hint" style="margin-top:0">Every scheduled run uses these. Run now can still pick something else for one run.</p>
+      <div class="weekly-grid">
+        <div class="field">CLI
+          <div class="seg" role="group" aria-label="CLI">${["agy", "codex"].map((c) =>
+            `<button type="button" data-weekly-cli="${c}" aria-pressed="${c === w.cli}" ${m.clis[c] ? "" : "disabled title=\"Not installed\""}>${CLI_LABEL[c]}</button>`).join("")}</div>
+        </div>
+        <label class="field">Model
+          <select data-weekly-field="model">
+            <option value="">Default (${esc(defaultName)})</option>
+            ${models.map((x) => `<option value="${esc(x.id)}" ${x.id === w.model ? "selected" : ""}>${esc(x.label)}${x.label === x.id ? "" : ` · ${esc(x.id)}`}</option>`).join("")}
+          </select></label>
+        <label class="field">Reasoning effort
+          <select data-weekly-field="effort" ${efforts.length ? "" : "disabled"}>
+            <option value="">${efforts.length ? `Default${picked && picked.default_effort ? ` (${esc(picked.default_effort)})` : ""}` : "Set by the model's name"}</option>
+            ${efforts.map((e) => `<option value="${esc(e)}" ${e === w.effort ? "selected" : ""}>${esc(e)}</option>`).join("")}
+          </select></label>
+        <label class="field">Day
+          <select data-weekly-field="day">${DAYS.map((d) => `<option ${d === w.day ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+        <label class="field">Time (your PC's time)
+          <input type="time" data-weekly-field="time" value="${esc(w.time)}" required></label>
+      </div>
+      <p class="hint">A run covers the weeks that ended before it starts, so Monday catches the week that just ended. If the PC is off at that time, the run starts when it is next on.</p>
+      <div class="actions">
+        <button class="btn ghost small" type="button" data-weekly-cancel>Cancel</button>
+        <button class="btn primary" type="button" data-weekly-save>Save</button>
+      </div>
+    </section>`;
+}
+
+async function editWeekly() {
+  S.weekly = { ...S.data.settings };
+  render();
+  if (!S.models) {
+    try { S.models = await api("/api/models"); } catch (e) { S.weekly = null; toast(e.message, null, true); }
+    render();
+  }
+}
+
+async function saveWeekly() {
+  try {
+    const r = await api("/api/settings", S.weekly);
+    S.models = r.models ? { ...S.models, config: r.models.config } : S.models;
+    delete r.models;
+    const message = r.message;
+    delete r.message;
+    S.data = r;
+    S.weekly = null;
+    render();
+    toast(message || "Saved.");
+  } catch (e) { toast(e.message, null, true); }
 }
 
 /* ---------- render + events */
@@ -1067,6 +1153,10 @@ $("#view").addEventListener("click", async (ev) => {
     return render();
   }
 
+  if ("weeklyEdit" in ds) return editWeekly();
+  if ("weeklyCancel" in ds) { S.weekly = null; return render(); }
+  if ("weeklySave" in ds) return saveWeekly();
+  if (ds.weeklyCli) { S.weekly = { ...S.weekly, cli: ds.weeklyCli, model: "", effort: "" }; return render(); }
   if ("run" in ds) return startRun();
   if (ds.strike) {
     const text = S.data.items.find((i) => i.id === ds.strike)?.text || "";
@@ -1116,6 +1206,12 @@ $("#view").addEventListener("keydown", (ev) => {
 
 $("#view").addEventListener("change", (ev) => {
   const t = ev.target;
+  if (t.dataset.weeklyField && S.weekly) {
+    const field = t.dataset.weeklyField;
+    S.weekly = { ...S.weekly, [field]: t.value, ...(field === "model" ? { effort: "" } : {}) };
+    if (field !== "time") render();
+    return;
+  }
   if (t.dataset.folderRule !== undefined) {
     write("/api/folder", { id: t.dataset.folderRule, rule: t.value || null }, () => toast(`${t.dataset.folderRule}: ${t.options[t.selectedIndex].text.toLowerCase()}.`));
   }
@@ -1229,7 +1325,7 @@ function renderRunMenu() {
         <option value="">${efforts.length ? `Default${current && current.default_effort ? ` (${esc(current.default_effort)})` : ""}` : "Set by the model's name"}</option>
         ${efforts.map((e) => `<option value="${esc(e)}" ${e === r.effort ? "selected" : ""}>${esc(e)}</option>`).join("")}
       </select></label>
-    <p class="hint">Scheduled runs use <code>[model]</code> in brain/config.toml (now ${esc(cfgText || "Antigravity")}). Tokens are counted either way.</p>
+    <p class="hint">Scheduled runs use the Weekly run settings on the Runs page (now ${esc(cfgText || "Antigravity")}). Tokens are counted either way.</p>
     <div class="actions">
       <button class="btn ghost small" type="button" data-reset>Use defaults</button>
       <button class="btn primary" type="button" data-go ${S.data.run && S.data.run.running ? "disabled" : ""}>${icon("run")}Run now</button>

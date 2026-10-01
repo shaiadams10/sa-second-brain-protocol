@@ -389,18 +389,19 @@ GENERATED_PATHS = ["log", "me/learned.md", "me/skills.md", "me/themes.md", "me/o
                    "brain/knowledge.json", "brain/projects.json", ":(glob)projects/*.md"]
 
 
-def commit(cfg: Config, message: str) -> str | None:
-    """Commit only the brain's own files, leaving anything else the owner has staged alone.
+def commit(cfg: Config, message: str, paths: list[str] | None = None) -> str | None:
+    """Commit only the brain's own files (or `paths`), leaving anything else the owner has staged alone.
     Returns git's complaint if the commit failed (for example inside a sandbox that protects .git)."""
     if not cfg.auto_commit or not (cfg.vault / ".git").exists():
         return None
+    paths = paths or GENERATED_PATHS
     git = ["git", "-C", str(cfg.vault)]
-    added = subprocess.run(git + ["add", "-A", "--", *GENERATED_PATHS], capture_output=True, text=True)
+    added = subprocess.run(git + ["add", "-A", "--", *paths], capture_output=True, text=True)
     if added.returncode != 0:
         return (added.stderr or added.stdout).strip()[-500:] or "git add failed"
-    changed = subprocess.run(git + ["diff", "--cached", "--quiet", "--", *GENERATED_PATHS], capture_output=True)
+    changed = subprocess.run(git + ["diff", "--cached", "--quiet", "--", *paths], capture_output=True)
     if changed.returncode == 1:
-        done = subprocess.run(git + ["commit", "-q", "-m", message, "--", *GENERATED_PATHS],
+        done = subprocess.run(git + ["commit", "-q", "-m", message, "--", *paths],
                               capture_output=True, text=True)
         if done.returncode != 0:
             return (done.stderr or done.stdout).strip()[-500:] or "git commit failed"

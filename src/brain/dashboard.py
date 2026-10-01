@@ -20,8 +20,10 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from brain.config import Config
+from brain import config as config_mod
+from brain.config import DAYS, Config
 from brain.digest import week_label
+from brain.install import TIME, register_task
 from brain.knowledge import skill_standing
 from brain.projects import Catalog, scan
 from brain.render import has_page, render_all, slug
@@ -162,6 +164,8 @@ class App:
             "items": items, "review": review, "runs": read_run_log(cfg), "run": self.run_state.snapshot(),
             "names": {pid: p["name"] for pid, p in knowledge.projects.items()},
             "schedule": self.schedule(),
+            "settings": {"cli": cfg.model_cli, "model": cfg.model_name or "", "effort": cfg.model_effort or "",
+                         "day": cfg.schedule_day, "time": cfg.schedule_time},
             "vault": str(cfg.vault),
         }
 
@@ -172,7 +176,33 @@ class App:
             self._models = (time.time(), available_models())
         cfg = self.cfg
         return {"clis": self._models[1],
-                "config": {"cli": cfg.model_cli, "model": cfg.model_name, "effort": cfg.model_effort}}
+                "config": {"cli": cfg.model_cli, "model": cfg.model_name, "effort": cfg.model_effort,
+                           "day": cfg.schedule_day, "time": cfg.schedule_time}}
+
+    def settings(self, body: dict) -> str:
+        """Save the weekly run's defaults (CLI, model, effort, day, time) to config.toml, re-register
+        the scheduled task, and commit. Returns a line for the toast."""
+        choice = run_choice(body)
+        day, at = body.get("day"), body.get("time")
+        if day not in DAYS or not isinstance(at, str) or not TIME.match(at):
+            raise ValueError("pick a weekday and a time as HH:MM")
+        with self.write_lock:
+            config_mod.save_settings(self.cfg.vault, {
+                "model": {"cli": choice["cli"] or "agy", "name": choice["model_name"] or "",
+                          "effort": choice["effort"] or ""},
+                "schedule": {"day": day, "time": at},
+            })
+            self.cfg = config_mod.load(self.cfg.vault)
+            self.__dict__.pop("_schedule", None)
+            try:
+                summary = register_task(self.cfg)
+            except SystemExit as exc:
+                summary = f"Saved, but the scheduled task was not updated: {exc}"
+            commit(self.cfg, f"Dashboard: weekly run {day} {at} with {self.cfg.model_cli}"
+                             f"{' ' + self.cfg.model_name if self.cfg.model_name else ''}"
+                             f"{' ' + self.cfg.model_effort if self.cfg.model_effort else ''}",
+                   paths=["brain/config.toml"])
+            return summary
 
     # ----- write
 
@@ -297,6 +327,12 @@ def _handler(app: App):
                         return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
                     started = app.run_state.start(app.cfg, on_done=lambda: None, choice=choice)
                     return self._json({"started": started, **app.run_state.snapshot()})
+                elif parts[:2] == ["api", "settings"]:
+                    try:
+                        summary = app.settings(body)
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return self._json({**app.state(), "message": summary, "models": app.models()})
                 else:
                     return self._json({"error": "unknown request"}, HTTPStatus.BAD_REQUEST)
             except KeyError as exc:
