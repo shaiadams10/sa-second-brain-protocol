@@ -3,6 +3,7 @@
   sbrain scan                 show how the projects folder is classified
   sbrain digest [--week W]    build the no-AI weekly digest (W = 2026-W39, "last", or "this")
   sbrain run                  update the brain: catch up finished weeks (add --current for this week)
+  sbrain run --learn          read logged weeks again for skills and what the owner stated
   sbrain dashboard            open the dashboard
   sbrain install              weekly scheduled run + desktop shortcut (Windows)
   sbrain uninstall            remove both
@@ -60,7 +61,7 @@ def cmd_run(cfg: config_mod.Config, args: argparse.Namespace) -> int:
     weeks = [digest_mod.resolve_week(w) for w in args.week] if args.week else None
     try:
         results = run(cfg, weeks, current=args.current, model_name=args.model, backfill=args.backfill,
-                      cli=args.cli, effort=args.effort)
+                      cli=args.cli, effort=args.effort, learn=args.learn)
     except Busy as exc:
         print(exc)
         return 1
@@ -105,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--week", action="append", help="a specific week (repeatable); default: catch up")
     p_run.add_argument("--current", action="store_true", help="also write the week in progress")
     p_run.add_argument("--backfill", action="store_true", help="walk all history from the first conversation, oldest first")
+    p_run.add_argument("--learn", action="store_true",
+                       help="read already-logged weeks again for skills, communication, and what the owner "
+                            "stated, without rewriting their logs (resumes where it stopped)")
     p_run.add_argument("--cli", choices=("agy", "codex"), help="which CLI answers (default: [model] cli in config.toml, else agy)")
     p_run.add_argument("--model", help="model id for this run (default: [model] name, else newest Gemini Flash "
                                        "or the Codex default); manual-<name> to answer by hand")

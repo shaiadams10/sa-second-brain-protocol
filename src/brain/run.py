@@ -18,7 +18,7 @@ from brain import prompts
 from brain.activity import Activity
 from brain.config import Config
 from brain.digest import OUTSIDE, Digest, ProjectWeek, build, week_bounds, week_label
-from brain.knowledge import Knowledge
+from brain.knowledge import Knowledge, skill_standing
 from brain.llm import Model, make_model
 from brain.projects import Catalog, scan
 from brain.render import render_all
@@ -90,7 +90,7 @@ def _week_file(owner: str, pw: ProjectWeek, digest: Digest) -> str:
     return "\n".join(lines)
 
 
-def _context_file(owner: str, knowledge: Knowledge, pid: str, subprojects: list[str]) -> str:
+def _context_file(owner: str, knowledge: Knowledge, pid: str, subprojects: list[str], about: bool = False) -> str:
     project = knowledge.projects.get(pid, {})
     lines = ["# What the brain already knows", "", "## This folder", ""]
     lines.append(f"Existing blurb: {project.get('blurb') or '(none yet)'}")
@@ -99,12 +99,22 @@ def _context_file(owner: str, knowledge: Knowledge, pid: str, subprojects: list[
     for note in project.get("notes", [])[-40:]:
         lines.append(f"- [{note['kind']}] {note['text']}")
     lines += ["", f"## About {owner} (use these ids in `reinforces`)", ""]
-    known = [(i, it) for i, it in knowledge.items.items() if it["status"] in ("active", "candidate")]
+    known = [(i, it) for i, it in knowledge.items.items()
+             if it["status"] in ("active", "candidate") and it["kind"] != "skill"]
     known.sort(key=lambda kv: (kv[1]["status"] != "active", -len(kv[1]["evidence"])))
     for item_id, item in known[:80]:
         lines.append(f"- {item_id} [{item['kind']}] {item['text']}")
     if not known:
         lines.append("(nothing yet)")
+    skills = [(i, it) for i, it in knowledge.items.items() if it["kind"] == "skill" and it["status"] != "removed"]
+    if skills:
+        lines += ["", "## Skills (reuse these topic names and ids)", ""]
+        lines += [f"- {i} {it['text']}" for i, it in sorted(skills, key=lambda kv: -len(kv[1]["evidence"]))[:150]]
+    if about:
+        goals = [(i, it) for i, it in knowledge.items.items()
+                 if it["kind"] == "goal" and it.get("open") and it["status"] == "active"]
+        lines += ["", "## Open goals (ids for `resolved_goals`)", ""]
+        lines += [f"- {i} {it['text']}" for i, it in goals] or ["(none)"]
     removed = [it["text"] for it in knowledge.items.values() if it["status"] == "removed"]
     removed += [n["text"] for n in project.get("removed_notes", [])]
     if removed:
@@ -127,11 +137,81 @@ def _synthesis_files(knowledge: Knowledge, week: str, new_ids: list[str]) -> tup
     candidates += ["", "## Already known", ""]
     known = [(i, it) for i, it in knowledge.items.items()
              if it["status"] in ("active", "candidate") and i not in new_ids]
-    candidates += [f"- {i} [{it['kind']}] {it['text']}" for i, it in known[:120]] or ["(none)"]
+    known.sort(key=lambda kv: kv[1]["kind"] == "skill")  # observations first, then skill topics
+    candidates += [f"- {i} [{it['kind']}] {it['text']}" for i, it in known[:250]] or ["(none)"]
     return {"projects.md": "\n".join(projects), "candidates.md": "\n".join(candidates)}, alias
 
 
 # ----- the run
+
+def _ask_project(cfg: Config, model: Model, knowledge: Knowledge, catalog: Catalog,
+                 pw: ProjectWeek, digest: Digest) -> dict:
+    subprojects = catalog.projects[pw.id].subprojects if pw.id in catalog.projects else []
+    about = pw.id in cfg.about_me
+    task = prompts.PROJECT_WEEK_TASK + (prompts.ABOUT_ME_RULES if about else "")
+    return model.ask(
+        task.format(owner=cfg.owner),
+        {"week.md": _week_file(cfg.owner, pw, digest),
+         "context.md": _context_file(cfg.owner, knowledge, pw.id, subprojects, about)},
+        prompts.ABOUT_ME_SCHEMA if about else prompts.PROJECT_WEEK_SCHEMA,
+    )
+
+
+def learn_week(cfg: Config, week: str, model: Model, catalog: Catalog, activity: Activity, log: Log) -> dict:
+    """Fill in skills, communication, interests and what the owner stated for a week that is
+    already logged, leaving its summaries, notes and other observations as they are."""
+    knowledge = knowledge_for(cfg)
+    if week not in knowledge.weeks:
+        log(f"{week}: not logged yet, skipped (a normal run writes it)")
+        return {"projects": 0, "model_calls": 0, "new_observations": 0, "skipped": True}
+    digest = build(cfg, week, catalog, activity)
+    knowledge.begin_learn(week)
+    talked = [pw for pw in digest.projects if pw.exchanges and pw.id in knowledge.projects]
+    new_ids: list[str] = []
+    for n, pw in enumerate(talked, 1):
+        log(f"{week}: learning from {pw.name} ({n}/{len(talked)}, {pw.exchange_count} exchanges)")
+        result = _ask_project(cfg, model, knowledge, catalog, pw, digest)
+        new_ids += knowledge.apply_project_result(week, pw.id, result, learn_only=True)
+        knowledge.save()
+    knowledge.promote()
+    knowledge.save()
+    render_all(cfg.vault, knowledge, cfg.load_decisions(), catalog, cfg.owner)
+    return {"projects": len(talked), "model_calls": len(talked), "new_observations": len(new_ids)}
+
+
+def refresh_themes(cfg: Config, model: Model, catalog: Catalog, log: Log) -> None:
+    """One call that reads the whole catalog, skill map and stated interests, and names the
+    areas the owner keeps coming back to."""
+    knowledge = knowledge_for(cfg)
+    decisions = cfg.load_decisions()
+    rows = []
+    for pid, project in knowledge.projects.items():
+        if project.get("kind") in ("outside", "group"):
+            continue
+        history = knowledge.attention(pid)
+        touched = sorted(w for w, a in history.items() if a > 0)
+        if not touched:
+            continue
+        state = knowledge.status(pid, decisions)["state"]
+        rows.append((sum(history.values()), f"- {project['name']}: {project.get('blurb') or '(no description)'} "
+                     f"· attention {sum(history.values()):.0f} over {len(touched)} weeks, {touched[0]} to "
+                     f"{touched[-1]} · came back {knowledge.returns(pid)} times after a break · {state}"))
+    if len(rows) < 2:
+        return
+    skills = [f"- {it['text']}: {skill_standing(it)['level']} ({skill_standing(it)['trend']})"
+              for it in knowledge.items.values() if it["kind"] == "skill" and it["status"] != "removed"]
+    about = [f"- [{it['kind']}] {it['text']}" for it in knowledge.items.values()
+             if it["status"] == "active" and it["kind"] in ("interest", "stated")]
+    log("Naming the themes across projects")
+    result = model.ask(prompts.THEMES_TASK.format(owner=cfg.owner), {
+        "projects.md": "# Projects, most attention first\n\n" + "\n".join(r for _, r in sorted(rows, reverse=True)),
+        "skills.md": "# Skills\n\n" + ("\n".join(skills) or "(none yet)"),
+        "about.md": "# Interests and stated facts\n\n" + ("\n".join(about) or "(none yet)"),
+    }, prompts.THEMES_SCHEMA)
+    knowledge.set_themes(max(knowledge.weeks), result.get("themes", []))
+    knowledge.save()
+    render_all(cfg.vault, knowledge, decisions, catalog, cfg.owner)
+
 
 def run_week(cfg: Config, week: str, model: Model, catalog: Catalog, activity: Activity,
              partial: bool, log: Log) -> dict:
@@ -156,13 +236,7 @@ def run_week(cfg: Config, week: str, model: Model, catalog: Catalog, activity: A
     talked = [pw for pw in digest.projects if pw.exchanges]
     for n, pw in enumerate(talked, 1):
         log(f"{week}: reading {pw.name} ({n}/{len(talked)}, {pw.exchange_count} exchanges)")
-        subprojects = catalog.projects[pw.id].subprojects if pw.id in catalog.projects else []
-        result = model.ask(
-            prompts.PROJECT_WEEK_TASK.format(owner=cfg.owner),
-            {"week.md": _week_file(cfg.owner, pw, digest),
-             "context.md": _context_file(cfg.owner, knowledge, pw.id, subprojects)},
-            prompts.PROJECT_WEEK_SCHEMA,
-        )
+        result = _ask_project(cfg, model, knowledge, catalog, pw, digest)
         new_ids += knowledge.apply_project_result(week, pw.id, result)
         knowledge.save()
 
@@ -206,18 +280,28 @@ def backfill_weeks(cfg: Config, model_name: str | None) -> list[str]:
     return weeks
 
 
+def unlearned_weeks(knowledge: Knowledge) -> list[str]:
+    """Logged weeks the learning pass has not read yet, oldest first (so it can resume)."""
+    return sorted(w for w, e in knowledge.weeks.items() if e.get("ran_at") and not e.get("learned"))
+
+
 def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log: Log = print,
         model_name: str | None = None, backfill: bool = False, cli: str | None = None,
-        effort: str | None = None) -> list[dict]:
+        effort: str | None = None, learn: bool = False) -> list[dict]:
     """Update the brain. With no weeks given, catch up every completed week not yet logged.
     current=True also (re)writes the week in progress. backfill=True walks all history.
+    learn=True reads already-logged weeks again for skills and what the owner stated, without
+    rewriting their logs (every logged week not yet read this way, unless weeks are given).
     cli, model_name and effort override the vault's [model] settings for this run."""
     results = []
-    with RunLock(cfg.work_dir / "run.lock", stale_after=24 * 3600 if backfill else 3 * 3600):
+    with RunLock(cfg.work_dir / "run.lock", stale_after=24 * 3600 if backfill or learn else 3 * 3600):
         knowledge = knowledge_for(cfg)
-        todo = weeks or (backfill_weeks(cfg, model_name) if backfill else pending_weeks(knowledge))
+        if learn:
+            todo = weeks or unlearned_weeks(knowledge)
+        else:
+            todo = weeks or (backfill_weeks(cfg, model_name) if backfill else pending_weeks(knowledge))
         this_week = week_label(date.today())
-        if current and this_week not in todo:
+        if current and this_week not in todo and not learn:
             todo.append(this_week)
         if not todo:
             log("Nothing to do: every finished week is already in the brain.")
@@ -236,9 +320,15 @@ def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log:
             started = time.time()
             record = {"week": week, "started": datetime.now().astimezone().isoformat(timespec="seconds"),
                       "cli": model.cli, "model": model.name, "effort": model.effort, "partial": week == this_week}
+            if learn:
+                record["learn"] = True
             usage_before = dict(model.usage)
             try:
-                record.update(run_week(cfg, week, model, catalog, activity, week == this_week, log))
+                if learn:
+                    record.update(learn_week(cfg, week, model, catalog, activity, log))
+                else:
+                    record.update(run_week(cfg, week, model, catalog, activity, week == this_week, log))
+                _mark_learned(cfg, week)
                 record["status"] = "ok"
             except Exception as exc:  # noqa: BLE001 - recorded for the dashboard, then re-raised
                 record.update(status="failed", error=str(exc)[:1000])
@@ -249,12 +339,29 @@ def run(cfg: Config, weeks: list[str] | None = None, current: bool = False, log:
                 _append_run_log(cfg, record)
                 results.append(record)
             if not record.get("skipped"):
-                failed = commit(cfg, f"Brain update {week}{' (in progress)' if week == this_week else ''}"
+                label = "Brain learning pass" if learn else "Brain update"
+                failed = commit(cfg, f"{label} {week}{' (in progress)' if week == this_week else ''}"
                                      f"{' (backfill)' if backfill else ''}")
                 if failed:
                     log(f"{week}: WARNING, the vault commit failed: {failed}")
             log(f"{week}: done in {record['seconds']}s")
+
+        if any(not r.get("skipped") for r in results):
+            try:
+                refresh_themes(cfg, model, catalog, log)
+                failed = commit(cfg, "Brain themes")
+                if failed:
+                    log(f"WARNING, the vault commit failed: {failed}")
+            except Exception as exc:  # noqa: BLE001 - the weeks are already saved; themes wait for the next run
+                log(f"WARNING, the themes were not refreshed: {exc}")
     return results
+
+
+def _mark_learned(cfg: Config, week: str) -> None:
+    knowledge = knowledge_for(cfg)
+    if week in knowledge.weeks:
+        knowledge.weeks[week]["learned"] = True
+        knowledge.save()
 
 
 def usage_since(before: dict, now: dict) -> dict:
@@ -278,7 +385,8 @@ def read_run_log(cfg: Config, limit: int = 30) -> list[dict]:
 
 
 # Only the brain's own files; `projects/*.md` does not reach into subfolders.
-GENERATED_PATHS = ["log", "me/learned.md", "brain/knowledge.json", "brain/projects.json", ":(glob)projects/*.md"]
+GENERATED_PATHS = ["log", "me/learned.md", "me/skills.md", "me/themes.md", "me/open-questions.md",
+                   "brain/knowledge.json", "brain/projects.json", ":(glob)projects/*.md"]
 
 
 def commit(cfg: Config, message: str) -> str | None:

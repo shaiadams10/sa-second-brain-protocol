@@ -5,10 +5,10 @@ import unittest
 from pathlib import Path
 
 from brain.digest import signal, week_bounds
-from brain.knowledge import Knowledge
+from brain.knowledge import Knowledge, skill_standing
 from brain.projects import scan
 from brain.sources import antigravity, claude_code, codex
-from brain.text import clip, redact
+from brain.text import clip, is_injected, redact
 
 
 def touch(root: Path, *paths: str) -> None:
@@ -213,6 +213,156 @@ class KnowledgeTest(unittest.TestCase):
         self.assertEqual(self.k.status("A", {"unmarked": ["A"]}, date(2026, 9, 24))["state"], "exploring")
         self.assertEqual(self.k.status("Z", {"marked": ["Z"]}, date(2026, 9, 24))["state"], "ongoing")
 
+    def test_returns_after_a_break(self) -> None:
+        for week in ("2026-W10", "2026-W11", "2026-W20", "2026-W30"):
+            self.k.record_project(week, "A", "A", None, "project", [], {"attention": 4.0})
+        self.assertEqual(self.k.returns("A"), 2)
+
+
+def skill(topic: str, level: str, reinforces: str = "") -> dict:
+    return {"topic": topic, "level": level, "evidence": "q", "reinforces": reinforces}
+
+
+def said(kind: str, text: str, wrong: str = "") -> dict:
+    return {"kind": kind, "text": text, "wrong": wrong, "evidence": "q"}
+
+
+class SkillsAndSaidTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.k = Knowledge(Path(self.tmp.name) / "knowledge.json")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _week(self, week: str, pid: str = "A", learn: bool = False, **result) -> None:
+        if learn:
+            self.k.begin_learn(week)
+        else:
+            self.k.begin_week(week)
+            self.k.record_project(week, pid, pid, None, "project", [], {"attention": 5.0})
+        base = {"blurb": "", "week_summary": f"summary {week}", "project_notes": [], "observations": []}
+        self.k.apply_project_result(week, pid, {**base, **result}, learn_only=learn)
+        if learn:
+            self.k.promote()
+        else:
+            self.k.apply_synthesis(week, {"headline": "", "summary": "", "highlights": [], "merges": []},
+                                   "m", False, {})
+
+    def _skill(self, topic: str) -> dict:
+        return next(i for i in self.k.items.values() if i["kind"] == "skill" and i["text"] == topic)
+
+    def test_skill_standing_follows_history(self) -> None:
+        self._week("2026-W30", skills=[skill("Docker", "learning"), skill("Git", "directs"), skill("Rust", "directs")])
+        self._week("2026-W31", skills=[skill("docker", "directs"), skill("Git", "directs")])  # topic case is ignored
+        self.assertEqual(skill_standing(self._skill("Docker"))["level"], "growing")
+        self.assertIn("asked about it in 2026-W30", skill_standing(self._skill("Docker"))["trend"])
+        self.assertEqual(skill_standing(self._skill("Git"))["level"], "strong")
+        self.assertEqual(skill_standing(self._skill("Rust"))["level"], "shown")
+        self._week("2026-W32", skills=[skill("Docker", "directs"), skill("Rust", "struggled")])
+        self.assertEqual(skill_standing(self._skill("Docker"))["level"], "strong")
+        self.assertEqual(skill_standing(self._skill("Rust"))["level"], "struggled")
+
+    def test_a_week_counts_at_its_worst_level(self) -> None:
+        self._week("2026-W30", skills=[skill("Docker", "directs")])
+        self._week("2026-W30", pid="B", skills=[skill("Docker", "learning")])  # same week, another project
+        self.assertEqual(skill_standing(self._skill("Docker"))["level"], "learning")
+
+    def test_stated_counts_at_once_and_corrections_strike(self) -> None:
+        self._week("2026-W30", observations=[{"scope": "me", "kind": "preference", "text": "Likes dense layouts",
+                                               "evidence": "q", "reinforces": ""}])
+        self._week("2026-W31", said=[said("stated", "Photography is their main hobby"),
+                                     said("correction", "Likes spacious layouts", wrong="Likes dense layouts"),
+                                     said("correction", "Works alone", wrong="Works in a team")])
+        by_text = {i["text"]: i for i in self.k.items.values()}
+        self.assertEqual(by_text["Photography is their main hobby"]["status"], "active")
+        self.assertEqual(by_text["Likes spacious layouts"]["status"], "active")
+        self.assertEqual(by_text["Likes dense layouts"]["status"], "removed")
+        self.assertEqual(by_text["Works in a team"]["status"], "removed")
+        # a struck belief is never proposed again
+        self._week("2026-W32", observations=[{"scope": "me", "kind": "work-style", "text": "Works in a team",
+                                               "evidence": "q", "reinforces": ""}])
+        self.assertEqual([i["status"] for i in self.k.items.values() if i["text"] == "Works in a team"], ["removed"])
+
+    def test_goals_open_and_settle(self) -> None:
+        self._week("2026-W30", said=[said("goal", "Wants to find a side income")])
+        goal_id = next(k for k, v in self.k.items.items() if v["kind"] == "goal")
+        self.assertTrue(self.k.items[goal_id]["open"])
+        self._week("2026-W31", resolved_goals=[goal_id])
+        self.assertFalse(self.k.items[goal_id]["open"])
+        self._week("2026-W31", resolved_goals=[])  # re-running the week undoes it
+        self.assertTrue(self.k.items[goal_id]["open"])
+
+    def test_rerun_keeps_stated_items_active(self) -> None:
+        self._week("2026-W30", said=[said("stated", "Fact")])
+        self._week("2026-W31", said=[said("stated", "Fact")])
+        self._week("2026-W31", said=[said("stated", "Fact")])
+        (item,) = self.k.items.values()
+        self.assertEqual(item["status"], "active")
+        self.assertEqual(len(item["evidence"]), 2)
+
+    def test_learn_pass_leaves_logs_alone(self) -> None:
+        self._week("2026-W30", observations=[{"scope": "me", "kind": "preference", "text": "Likes previews",
+                                               "evidence": "q", "reinforces": ""}])
+        self._week("2026-W30", learn=True, week_summary="REWRITTEN", project_notes=[{"kind": "goal", "text": "n"}],
+                   observations=[{"scope": "me", "kind": "preference", "text": "Another pref", "evidence": "q",
+                                  "reinforces": ""},
+                                 {"scope": "me", "kind": "communication", "text": "Writes tersely", "evidence": "q",
+                                  "reinforces": ""}],
+                   skills=[skill("Docker", "directs")])
+        self.assertEqual(self.k.weeks["2026-W30"]["projects"]["A"]["summary"], "summary 2026-W30")
+        self.assertEqual(self.k.projects["A"]["notes"], [])
+        texts = sorted(i["text"] for i in self.k.items.values())
+        self.assertEqual(texts, ["Docker", "Likes previews", "Writes tersely"])
+        self._week("2026-W30", learn=True)  # learning the week again replaces what it learned
+        self.assertEqual(sorted(i["text"] for i in self.k.items.values()), ["Likes previews"])
+
+    def test_skills_never_merge_with_observations(self) -> None:
+        self._week("2026-W30", skills=[skill("Docker", "directs")],
+                   observations=[{"scope": "me", "kind": "interest", "text": "Containers", "evidence": "q",
+                                  "reinforces": ""}])
+        ids = {v["text"]: k for k, v in self.k.items.items()}
+        self.k.apply_synthesis("2026-W30", {"headline": "", "summary": "", "highlights": [],
+                                            "merges": [{"id": ids["Docker"], "same_as": ids["Containers"]}]},
+                               "m", False, {})
+        self.assertEqual(len(self.k.items), 2)
+
+    def test_themes_keep_known_projects_only(self) -> None:
+        for pid in ("A", "B"):
+            self.k.record_project("2026-W30", pid, pid, None, "project", [], {"attention": 5.0})
+        self.k.set_themes("2026-W30", [{"name": "Both", "summary": "s", "projects": ["a", "B", "Nope"]},
+                                       {"name": "One", "summary": "s", "projects": ["A"]}])
+        self.assertEqual(self.k.themes["items"], [{"name": "Both", "summary": "s", "projects": ["A", "B"]}])
+
+
+class RenderTest(unittest.TestCase):
+    def test_new_pages(self) -> None:
+        from brain.projects import Catalog
+        from brain.render import render_all
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            k = Knowledge(vault / "brain" / "knowledge.json")
+            for week in ("2026-W30", "2026-W31"):
+                k.begin_week(week)
+                k.record_project(week, "A", "App", None, "project", [], {"attention": 5.0})
+                k.apply_project_result(week, "A", {
+                    "blurb": "", "week_summary": "s", "project_notes": [], "observations": [],
+                    "skills": [skill("Docker", "learning" if week == "2026-W30" else "directs")],
+                    "said": [said("goal", "Wants a side income"), said("stated", "Loves tinkering")],
+                    "resolved_goals": []})
+                k.apply_synthesis(week, {"headline": "h", "summary": "", "highlights": [], "merges": []}, "m", False, {})
+            render_all(vault, k, {}, Catalog(vault), "Sam")
+            skills = (vault / "me" / "skills.md").read_text(encoding="utf-8")
+            self.assertIn("## Growing", skills)
+            self.assertNotIn("## Asked about once", skills)
+            self.assertIn("**Docker**: asked about it in 2026-W30, directing it by 2026-W31", skills)
+            self.assertIn("Wants a side income", (vault / "me" / "open-questions.md").read_text(encoding="utf-8"))
+            learned = (vault / "me" / "learned.md").read_text(encoding="utf-8")
+            self.assertIn("## Stated by Sam", learned)
+            self.assertNotIn("Docker", learned)
+            self.assertIn("**Directed:** Docker", (vault / "log" / "2026-W31.md").read_text(encoding="utf-8"))
+            self.assertTrue((vault / "me" / "themes.md").exists())
+
 
 class TextAndSignalTest(unittest.TestCase):
     def test_signals(self) -> None:
@@ -222,6 +372,32 @@ class TextAndSignalTest(unittest.TestCase):
         self.assertIsNone(signal("add a toggle, and don't show it in menus instead of the HUD"))
         self.assertIsNone(signal("how exactly would we do it?"))
         self.assertEqual(signal("(interrupted the assistant)"), "interrupt")
+
+    def test_learning_signal(self) -> None:
+        self.assertEqual(signal("what is a docker volume?"), "learning")
+        self.assertEqual(signal("how does the turnstile check work"), "learning")
+        self.assertEqual(signal("i dont understand why it needs a token"), "learning")
+        self.assertEqual(signal("what do u mean by worktree"), "learning")
+        self.assertIsNone(signal("how do we split this into phases?"))
+        self.assertIsNone(signal("what do u think, which one is better?"))
+
+    def test_attachments_and_pastes(self) -> None:
+        from brain.text import strip_injected
+        text = ("<!-- attach: Terminal | tab:0 -->\n> PS D:\\x> git push\n> error: failed\nagain errors, fix it\n"
+                "<pasted_content id=\"ab\">\nreport from another agent\n</pasted_content id=\"ab\">")
+        self.assertEqual(strip_injected(text), "[attached Terminal]\nagain errors, fix it\n"
+                                               "[pasted text]\nreport from another agent\n[end of pasted text]")
+
+    def test_handoff_briefs_are_not_the_owner_speaking(self) -> None:
+        self.assertTrue(is_injected("# Handoff: finish the backfill\n\nYou are continuing work..."))
+
+    def test_conversations_about_the_owner_keep_more(self) -> None:
+        from brain.digest import ABOUT_MAX, DigestExchange, MAX_PER_PROJECT, _select
+        exchanges = [DigestExchange(at=f"2026-09-21T10:{n:02d}", tool="t", session="s", user="u", reply="",
+                                    tool_calls=0) for n in range(100)]
+        self.assertEqual(len(_select(exchanges)), 22)  # session edges plus an even sample
+        self.assertEqual(len(_select(exchanges, ABOUT_MAX)), 100)
+        self.assertLess(MAX_PER_PROJECT, ABOUT_MAX)
 
     def test_redact_and_clip(self) -> None:
         text = redact("key sk-ant-abcdefghijklmnopqrstuv and api_key=supersecretvalue ok")

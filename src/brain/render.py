@@ -11,16 +11,27 @@ from datetime import date
 from pathlib import Path
 
 from brain.digest import week_bounds
-from brain.knowledge import Knowledge
+from brain.knowledge import Knowledge, skill_standing
 from brain.projects import Catalog
 
 GENERATED_MARK = "<!-- Written by the second brain. Change it from the dashboard; edits here are overwritten. -->"
+# Sections of me/learned.md. Skills and goals have pages of their own.
 KIND_TITLES = [
+    ("stated", "Stated by {owner}"),
+    ("interest", "Interests"),
     ("preference", "Preferences"),
     ("dislike", "Dislikes"),
     ("work-style", "How {owner} works"),
-    ("skill", "Skills shown in recent work"),
-    ("interest", "Interests"),
+    ("communication", "How {owner} communicates"),
+    ("advice", "Advice {owner} took or turned down"),
+]
+SKILL_TITLES = [
+    ("strong", "Strong", "Directing it confidently in two or more weeks or projects."),
+    ("growing", "Growing", "Asked about it earlier, directing it now."),
+    ("shown", "Shown once", "Directed confidently, so far in one week and one project."),
+    ("learning", "Learning", "Still asking how it works, across two or more weeks."),
+    ("struggled", "Struggled", "It kept failing the last time it came up."),
+    ("asked", "Asked about once", "A question in one week; it becomes Learning or Growing if it comes up again."),
 ]
 NOTE_TITLES = [
     ("goal", "Goals"),
@@ -71,6 +82,9 @@ def render_all(vault: Path, knowledge: Knowledge, decisions: dict, catalog: Cata
         if stale.name not in pages | {"catalog.md"} and _is_generated(stale):
             stale.unlink()
     written.append(_write(vault / "me" / "learned.md", render_learned(knowledge, owner)))
+    written.append(_write(vault / "me" / "skills.md", render_skills(knowledge, owner)))
+    written.append(_write(vault / "me" / "themes.md", render_themes(knowledge, states, owner)))
+    written.append(_write(vault / "me" / "open-questions.md", render_open_questions(knowledge, owner)))
     return written
 
 
@@ -114,8 +128,24 @@ def render_week(week: str, knowledge: Knowledge, states: dict, owner: str) -> st
         names = ", ".join(knowledge.projects.get(pid, {}).get("name", pid) for pid, _ in quiet)
         lines += ["## Also touched", "", f"Files changed without AI conversations: {names}.", ""]
 
-    promoted = [i for i in knowledge.items.values() if i.get("promoted") == week and i["status"] == "active"]
-    noticed = [i for i in knowledge.items.values() if i["status"] == "candidate"
+    skills: dict[str, list[str]] = {}
+    for item in knowledge.items.values():
+        if item["kind"] == "skill" and item["status"] != "removed":
+            levels = {e.get("level") for e in item["evidence"] if e["week"] == week}
+            for level in ("struggled", "learning", "directs"):
+                if level in levels:
+                    skills.setdefault(level, []).append(item["text"])
+                    break
+    if skills:
+        lines += ["## Skills this week", ""]
+        for level, label in (("directs", "Directed"), ("learning", "Asked about"), ("struggled", "Struggled with")):
+            if skills.get(level):
+                lines.append(f"- **{label}:** {', '.join(sorted(skills[level], key=str.lower))}")
+        lines.append("")
+
+    promoted = [i for i in knowledge.items.values() if i.get("promoted") == week and i["status"] == "active"
+                and i["kind"] != "skill"]
+    noticed = [i for i in knowledge.items.values() if i["status"] == "candidate" and i["kind"] != "skill"
                and any(e["week"] == week for e in i["evidence"])]
     if promoted or noticed:
         lines += [f"## Learned about {owner}", ""]
@@ -199,20 +229,115 @@ def render_project(pid: str, knowledge: Knowledge, state: dict) -> str:
 def render_learned(knowledge: Knowledge, owner: str) -> str:
     lines = [f"# What the brain has learned about {owner}", "",
              "Learned from AI coding conversations. An observation is added once it shows up in two "
-             "different projects or two different weeks. Hand-written notes in this folder take priority.", ""]
+             f"different projects or two different weeks; what {owner} states directly counts at once. "
+             f"Skills are in `skills.md`, recurring areas in `themes.md`, and goals in `open-questions.md`. "
+             "Hand-written notes in this folder take priority.", ""]
     active = [i for i in knowledge.items.values() if i["status"] == "active"]
+    shown = False
     for kind, title in KIND_TITLES:
         items = sorted((i for i in active if i["kind"] == kind), key=lambda i: -len(i["evidence"]))
         if not items:
             continue
+        shown = True
         lines += [f"## {title.format(owner=owner)}", ""]
         for item in items:
-            projects = sorted({knowledge.projects.get(e["project"], {}).get("name", e["project"])
-                               for e in item["evidence"]})
-            weeks = sorted({e["week"] for e in item["evidence"]})
-            lines.append(f"- {item['text']} *(seen in {', '.join(projects)}; {weeks[0]}"
-                         f"{' to ' + weeks[-1] if len(weeks) > 1 else ''})*")
+            verb = "said in" if kind in ("stated", "advice") else "seen in"
+            lines.append(f"- {item['text']} *({verb} {_where(knowledge, item)})*")
         lines.append("")
-    if not active:
+    if not shown:
         lines += ["Nothing confirmed yet.", ""]
+    return "\n".join(lines)
+
+
+def _project_names(knowledge: Knowledge, pids) -> list[str]:
+    return sorted({knowledge.projects.get(pid, {}).get("name", pid) for pid in pids}, key=str.lower)
+
+
+def _where(knowledge: Knowledge, item: dict) -> str:
+    projects = _project_names(knowledge, (e["project"] for e in item["evidence"]))
+    weeks = sorted({e["week"] for e in item["evidence"]})
+    return f"{', '.join(projects)}; {weeks[0]}{' to ' + weeks[-1] if len(weeks) > 1 else ''}"
+
+
+def render_skills(knowledge: Knowledge, owner: str) -> str:
+    lines = [f"# {owner}'s skills", "",
+             f"Every week the brain notes which technologies and domains {owner} directed with confidence, "
+             "asked about, or struggled with, judged from their own words. Standing comes from that history: "
+             "what they stopped asking about and now direct is what they have learned.", ""]
+    skills = [i for i in knowledge.items.values() if i["kind"] == "skill" and i["status"] != "removed"]
+    if not skills:
+        return "\n".join(lines + ["Nothing recorded yet.", ""])
+    by_level: dict[str, list[tuple[dict, dict]]] = {}
+    for item in skills:
+        standing = skill_standing(item)
+        level = standing["level"]
+        if level == "learning" and len({e["week"] for e in item["evidence"]}) == 1:
+            level = "asked"
+        by_level.setdefault(level, []).append((item, standing))
+    for level, title, meaning in SKILL_TITLES:
+        rows = by_level.get(level)
+        if not rows:
+            continue
+        rows.sort(key=lambda r: (-len({e["week"] for e in r[0]["evidence"]}), r[0]["text"].lower()))
+        lines += [f"## {title}", "", f"*{meaning}*", ""]
+        for item, standing in rows:
+            lines.append(f"- **{item['text']}**: {standing['trend']} "
+                         f"*({', '.join(_project_names(knowledge, standing['projects']))})*")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_themes(knowledge: Knowledge, states: dict, owner: str) -> str:
+    lines = [f"# Themes in {owner}'s work", "",
+             f"The areas {owner} keeps coming back to across projects, named once per run from the project "
+             "catalog, the skill map, and what they have said about themself.", ""]
+    names = {p["name"]: pid for pid, p in knowledge.projects.items()}
+
+    def link(name: str) -> str:
+        pid = names.get(name)
+        return f"[{name}](../projects/{slug(pid)}.md)" if pid in states and has_page(states[pid]) else name
+
+    themes = knowledge.themes.get("items", [])
+    if themes:
+        for theme in themes:
+            lines += [f"## {theme['name']}", "", theme["summary"], "",
+                      "Projects: " + ", ".join(link(n) for n in theme["projects"]), ""]
+    else:
+        lines += ["No themes named yet. They are written at the end of the next run.", ""]
+
+    totals = []
+    for pid in states:
+        history = knowledge.attention(pid)
+        if history:
+            totals.append((sum(history.values()), len([a for a in history.values() if a > 0]),
+                           knowledge.returns(pid), knowledge.projects[pid]["name"]))
+    returns = sorted((t for t in totals if t[2]), key=lambda t: (-t[2], -t[0]))
+    if returns:
+        lines += ["## Came back to after a break", "",
+                  "Projects picked up again after four or more weeks away.", ""]
+        lines += [f"- {link(name)}: {n} time{'s' if n != 1 else ''} · {weeks} weeks in all"
+                  for _, weeks, n, name in returns[:15]]
+        lines.append("")
+    if totals:
+        lines += ["## Most attention overall", ""]
+        lines += [f"- {link(name)}: attention {total:.0f} over {weeks} week{'s' if weeks != 1 else ''}"
+                  for total, weeks, _, name in sorted(totals, reverse=True)[:12]]
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render_open_questions(knowledge: Knowledge, owner: str) -> str:
+    lines = [f"# What {owner} is working out", "",
+             f"Goals and decisions {owner} has described in conversations about themself, beyond any single "
+             "task. A goal moves to Settled when a later conversation shows it reached or decided.", ""]
+    goals = [i for i in knowledge.items.values() if i["kind"] == "goal" and i["status"] == "active"]
+    open_goals = sorted((g for g in goals if g.get("open", True)), key=lambda g: g["created"], reverse=True)
+    settled = sorted((g for g in goals if not g.get("open", True)), key=lambda g: g.get("resolved", ""), reverse=True)
+    if not goals:
+        return "\n".join(lines + ["Nothing recorded yet.", ""])
+    if open_goals:
+        lines += ["## Open", ""] + [f"- {g['text']} *(since {g['created']})*" for g in open_goals] + [""]
+    if settled:
+        lines += ["## Settled", ""]
+        lines += [f"- {g['text']} *({g['created']} to {g.get('resolved', '?')})*" for g in settled] + [""]
     return "\n".join(lines)

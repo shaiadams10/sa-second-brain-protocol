@@ -26,6 +26,8 @@ INJECTED_PREFIXES = (
     "Caveat: The messages below were generated",
     "Base directory for this skill:",
     "[Image: source:",
+    # Handoff briefs one agent writes for another: pasted by the owner, but not in their words.
+    "# Handoff",
 )
 
 _SECRETS = [
@@ -44,9 +46,20 @@ _SECRETS = [
 ]
 
 
+# An attached terminal or file: a marker line followed by its contents quoted with ">".
+# It is output, not what the owner said, so only a short placeholder is kept.
+_ATTACHED = re.compile(r"<!-- attach: ([^|>]+?)\s*(?:\|[^>]*)?-->[ \t]*\n?(?:[ \t]*>.*(?:\n|$))*")
+# Pasted text may be the owner's own draft or someone else's output: kept, but marked.
+_PASTED_OPEN = re.compile(r"<pasted_content\b[^>]*>")
+_PASTED_CLOSE = re.compile(r"</pasted_content\b[^>]*>")
+
+
 def strip_injected(text: str) -> str:
     text = _TAG_BLOCK.sub("", text)
     text = _TAG_SINGLE.sub("", text)
+    text = _ATTACHED.sub(lambda m: f"[attached {m.group(1).strip()}]\n", text)
+    text = _PASTED_OPEN.sub("[pasted text]", text)
+    text = _PASTED_CLOSE.sub("[end of pasted text]", text)
     return text.strip()
 
 
