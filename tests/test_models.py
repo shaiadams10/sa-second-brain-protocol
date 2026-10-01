@@ -91,10 +91,13 @@ class ModelChoiceTest(unittest.TestCase):
             self.assertFalse(run_active(cfg))
             cfg.work_dir.mkdir()
             lock = cfg.work_dir / "run.lock"
-            lock.write_text("1", encoding="utf-8")
-            self.assertTrue(run_active(cfg))
-            old = time.time() - 25 * 3600
             import os
+            lock.write_text(str(os.getpid()), encoding="utf-8")  # held by a live process
+            self.assertTrue(run_active(cfg))
+            lock.write_text("999999", encoding="utf-8")  # its process was killed: nothing holds it
+            self.assertFalse(run_active(cfg))
+            lock.write_text(str(os.getpid()), encoding="utf-8")
+            old = time.time() - 25 * 3600
             os.utime(lock, (old, old))
             self.assertFalse(run_active(cfg))
 

@@ -9,6 +9,7 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
+from brain import proc
 from brain.projects import IGNORED_DIRS, Project
 
 MAX_FILES = 200_000
@@ -49,7 +50,7 @@ class Activity:
                 cmd = ["git", "-C", str(project.path), "log", "--all", "--format=%ct"]
                 cmd += [f"--author={a}" for a in self.git_authors]
                 try:
-                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+                    out = proc.run(cmd, capture_output=True, text=True, timeout=60).stdout
                 except (OSError, subprocess.TimeoutExpired):
                     out = ""
                 for line in out.split():

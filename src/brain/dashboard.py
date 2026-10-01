@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+import sys
 import threading
 import time
 import webbrowser
@@ -27,7 +28,7 @@ from brain.install import TIME, register_task
 from brain.knowledge import skill_standing
 from brain.projects import Catalog, scan
 from brain.render import has_page, render_all, slug
-from brain.run import Busy, commit, knowledge_for, read_run_log, run
+from brain.run import Busy, commit, knowledge_for, lock_held, read_run_log, run
 
 WEB = Path(__file__).parent / "web"
 IDLE_SHUTDOWN = 3 * 3600  # the server stops itself after 3 idle hours
@@ -39,11 +40,7 @@ _EFFORT = re.compile(r"^[a-z]{1,12}$")
 def run_active(cfg: Config) -> bool:
     """A brain update (Run now, the schedule, or a backfill) holds the run lock. Its knowledge is
     in memory and will be saved over any edit made meanwhile, so edits wait until it ends."""
-    lock = cfg.work_dir / "run.lock"
-    try:
-        return time.time() - lock.stat().st_mtime < 24 * 3600
-    except OSError:
-        return False
+    return lock_held(cfg.work_dir / "run.lock", 24 * 3600)
 
 
 def run_choice(body: dict) -> dict:
@@ -352,16 +349,35 @@ def _already_running(url: str) -> bool:
         return False
 
 
+def _set_window_title(title: str) -> None:
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleTitleW(title)
+        except (AttributeError, OSError):
+            pass
+
+
 def serve(cfg: Config, port: int = 8765, open_browser: bool = True) -> int:
+    """In a terminal window (the desktop shortcut), the dashboard runs until that window is closed.
+    Without one, it stops itself after IDLE_SHUTDOWN so it never lingers unseen."""
     url = f"http://127.0.0.1:{port}/"
+    in_window = bool(sys.stdout and sys.stdout.isatty())
     if _already_running(url):
         if open_browser:
             webbrowser.open(url)
-        print(f"Dashboard already running: {url}")
+        print(f"The dashboard is already open in another window: {url}")
+        if in_window:
+            time.sleep(3)  # long enough to read before this window closes
         return 0
     app = App(cfg)
     server = ThreadingHTTPServer(("127.0.0.1", port), _handler(app))
-    print(f"Second sbrain dashboard: {url}  (Ctrl+C to stop)")
+    if in_window:
+        _set_window_title("Second Brain dashboard")
+        print(f"Second Brain dashboard: {url}\n\nClose this window (or press Ctrl+C) to stop the dashboard.\n"
+              "A Run now in progress stops with it; the next run picks up where it left off.")
+    else:
+        print(f"Second Brain dashboard: {url}")
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
 
@@ -373,7 +389,8 @@ def serve(cfg: Config, port: int = 8765, open_browser: bool = True) -> int:
                 server.shutdown()
                 return
 
-    threading.Thread(target=idle_watch, daemon=True).start()
+    if not in_window:
+        threading.Thread(target=idle_watch, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
