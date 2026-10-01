@@ -31,6 +31,10 @@ A self-maintaining record of one person's work and working style, derived from t
 
 ## Capabilities and Constraints
 
+- Dashboard direction: Signal colors with Reading Room layout; week number opens annual navigation.
+- Skill progress is computed from weekly evidence and shown separately from observations. Stated facts, communication, goals and advice remain available; goals show open or settled state.
+
+
 - Views: the week (headline, summary, highlights, per-project summaries and stats), projects (ongoing, exploring, on hold, earlier, and every other folder), what was learned about the owner (confirmed items and candidates with evidence quotes), and runs (health, model, duration, failures, Run now with live progress).
 - Actions: remove and restore learned items and project notes; mark or unmark a folder as a real project; answer folder questions (one project, project with sub-projects, or a collection); run now.
 - Terminology: "ongoing", "exploring", "on hold", "earlier" for project states; "candidate" for an observation seen once; "confirmed" once it recurs in two projects or two weeks.

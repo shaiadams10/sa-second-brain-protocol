@@ -22,6 +22,7 @@ from urllib.request import urlopen
 
 from brain.config import Config
 from brain.digest import week_label
+from brain.knowledge import skill_standing
 from brain.projects import Catalog, scan
 from brain.render import has_page, render_all, slug
 from brain.run import Busy, commit, knowledge_for, read_run_log, run
@@ -151,7 +152,8 @@ class App:
                    for p in sorted(catalog.projects.values(), key=lambda p: ((p.group or ""), p.name.lower()))]
         review = {p.id: p.needs_review for p in catalog.projects.values()
                   if p.needs_review and p.id not in decisions.get("folders", {})}
-        items = [{"id": i, **it, "projects": sorted({knowledge.projects.get(e["project"], {}).get("name", e["project"])
+        items = [{"id": i, **it, **({"standing": skill_standing(it)} if it["kind"] == "skill" else {}),
+                  "projects": sorted({knowledge.projects.get(e["project"], {}).get("name", e["project"])
                                                       for e in it["evidence"]})}
                  for i, it in knowledge.items.items()]
         return {
