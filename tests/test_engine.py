@@ -414,3 +414,32 @@ class TextAndSignalTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgentSessionDigestTest(unittest.TestCase):
+    def test_agent_prompts_count_as_activity_not_words(self) -> None:
+        from brain.config import Config
+        from brain.digest import build
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            touch(root / "P", "App/package.json")
+            app = str(root / "P" / "App")
+
+            def rollout(name, source, day, text):
+                return jsonl(root / "sessions" / f"rollout-{name}.jsonl", [
+                    {"timestamp": f"2026-09-{day}T10:00:00Z", "type": "session_meta",
+                     "payload": {"id": name, "cwd": app, "source": source}},
+                    {"timestamp": f"2026-09-{day}T10:00:01Z", "type": "response_item",
+                     "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}},
+                ])
+
+            rollout("owner", "vscode", "15", "make the login page faster")
+            rollout("sub", {"subagent": {"thread_spawn": {}}}, "17", "Audit the parser and report every defect.")
+            cfg = Config(vault=root / "vault", projects_root=root / "P", sources={"codex": root / "sessions"})
+            digest = build(cfg, "2026-W38")
+            pw = next(p for p in digest.projects if p.name == "App")
+            self.assertEqual([e.user for e in pw.exchanges], ["make the login page faster"])
+            self.assertEqual(pw.exchange_count, 1)
+            self.assertEqual(pw.sessions, {"codex": 1})
+            self.assertEqual(pw.active_days, ["2026-09-15", "2026-09-17"])

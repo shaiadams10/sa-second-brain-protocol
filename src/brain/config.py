@@ -38,6 +38,8 @@ class Config:
     model_effort: str | None = None  # reasoning effort, e.g. "medium"; None: the CLI's default
     schedule_day: str = "Monday"  # the weekly run, in the PC's local time
     schedule_time: str = "09:00"
+    # Writing-style study (`sbrain corpus`, `sbrain voice`): export folders and the models per step.
+    voice: dict = field(default_factory=dict)
 
     @property
     def work_dir(self) -> Path:
@@ -89,6 +91,7 @@ def load(vault: Path) -> Config:
         model_effort=model.get("effort") or None,
         schedule_day=schedule.get("day") or "Monday",
         schedule_time=schedule.get("time") or "09:00",
+        voice=dict(data.get("voice", {})),
     )
 
 

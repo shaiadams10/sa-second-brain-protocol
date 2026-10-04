@@ -18,10 +18,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
 from brain import config as config_mod
+from brain import guide, voicetest
 from brain.config import DAYS, Config
 from brain.digest import week_label
 from brain.install import TIME, register_task
@@ -164,6 +165,7 @@ class App:
             "settings": {"cli": cfg.model_cli, "model": cfg.model_name or "", "effort": cfg.model_effort or "",
                          "day": cfg.schedule_day, "time": cfg.schedule_time},
             "vault": str(cfg.vault),
+            "blindTests": voicetest.summary(cfg),
         }
 
     def models(self) -> dict:
@@ -289,6 +291,25 @@ def _handler(app: App):
                 return self._json(app.run_state.snapshot())
             if path == "/api/models":
                 return self._json(app.models())
+            if path == "/api/guide":
+                return self._json({"docs": guide.documents(app.cfg), "commands": guide.commands(app.cfg),
+                                   "voice": guide.voice_status(app.cfg), "vault": str(app.cfg.vault)})
+            if path == "/api/doc":
+                rel = (parse_qs(urlparse(self.path).query).get("path") or [""])[0]
+                try:
+                    return self._json(guide.read_document(app.cfg, rel))
+                except KeyError:
+                    return self._json({"error": "not a guide document"}, HTTPStatus.NOT_FOUND)
+            if path == "/voice/test":
+                test = voicetest.load_test(app.cfg, (parse_qs(urlparse(self.path).query).get("id") or [None])[0])
+                if test:
+                    return self._send(200, voicetest.page(app.cfg, test).encode("utf-8"), "text/html; charset=utf-8")
+                return self._json({"error": "no blind test yet"}, HTTPStatus.NOT_FOUND)
+            if path == "/voice/blind-test.html":
+                page = app.cfg.work_dir / "voice" / "blind-test.html"
+                if page.is_file():
+                    return self._send(200, page.read_bytes(), "text/html; charset=utf-8")
+                return self._json({"error": "no blind test yet"}, HTTPStatus.NOT_FOUND)
             target = (WEB / (path.lstrip("/") or "index.html")).resolve()
             if not target.is_file() or WEB.resolve() not in target.parents:
                 target = WEB / "index.html"
@@ -324,6 +345,15 @@ def _handler(app: App):
                         return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
                     started = app.run_state.start(app.cfg, on_done=lambda: None, choice=choice)
                     return self._json({"started": started, **app.run_state.snapshot()})
+                elif parts[:3] == ["api", "voice", "test-result"]:
+                    try:
+                        return self._json(voicetest.save_result(app.cfg, body))
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                elif parts[:3] == ["api", "voice", "new-test"]:
+                    return self._json({"started": guide.start_test(app.cfg), "voice": guide.voice_status(app.cfg)})
+                elif parts[:3] == ["api", "voice", "start"]:
+                    return self._json({"started": guide.start_voice(app.cfg), "voice": guide.voice_status(app.cfg)})
                 elif parts[:2] == ["api", "settings"]:
                     try:
                         summary = app.settings(body)

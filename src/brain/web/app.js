@@ -166,7 +166,7 @@ async function write(path, body, done) {
 
 function readHash() {
   const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("/");
-  S.tab = ["log", "projects", "about", "runs"].includes(tab) ? tab : "log";
+  S.tab = ["log", "projects", "about", "runs", "guide"].includes(tab) ? tab : "log";
   if (S.tab === "log" && arg) {
     if (S.week !== arg) {
       S.week = arg;
@@ -272,6 +272,7 @@ function renderTabs() {
     ["projects", "Projects", `${ongoing} ongoing`, questions > 0],
     ["about", `About ${d.owner}`, `${inked} inked · ${pencil} pencilled`],
     ["runs", "Runs", d.run && d.run.running ? "running" : `${d.runs.length}`, failed],
+    ["guide", "Guide", guideTabCount()],
   ];
   $("#tabs").innerHTML = tabs.map(([id, label, count, flag]) => `
     <button class="tab" role="tab" type="button" aria-selected="${S.tab === id}" data-tab="${id}">
@@ -425,6 +426,7 @@ function viewLog() {
 
   const contextHtml = `
     <aside class="margin" aria-label="This week">
+      ${blindTestCard(w.week)}
       <div class="context-switch" role="group" aria-label="This week sections">
         <button class="btn small ${activeSection === "skills" ? "active" : "ghost"}" type="button" aria-pressed="${activeSection === "skills"}" data-log-section="skills">Skills this week <span class="count">${skills.length}</span></button>
         <button class="btn small ${activeSection === "learned" ? "active" : "ghost"}" type="button" aria-pressed="${activeSection === "learned"}" data-log-section="learned">Learned <span class="count">${learnedItems.length}</span></button>
@@ -1010,14 +1012,14 @@ function render() {
   if (!S.week && S.data.weeks.length) S.week = S.data.weeks[0].week;
   renderHeader();
   renderTabs();
-  const view = { log: viewLog, projects: viewProjects, about: viewAbout, runs: viewRuns }[S.tab]();
+  const view = { log: viewLog, projects: viewProjects, about: viewAbout, runs: viewRuns, guide: viewGuide }[S.tab]();
   $("#view").innerHTML = view;
   if (S.tab === "log") {
     // Timeouts, not animation frames: frames pause in background tabs, and text reflows once Barlow arrives.
     setTimeout(fillRuledPage, 0);
     document.fonts.ready.then(() => setTimeout(fillRuledPage, 0));
   }
-  document.title = `${{ log: `Week ${S.week ? weekNo(S.week) : ""}`, projects: "Projects", about: `About ${S.data.owner}`, runs: "Runs" }[S.tab]} · Logbook`;
+  document.title = `${{ log: `Week ${S.week ? weekNo(S.week) : ""}`, projects: "Projects", about: `About ${S.data.owner}`, runs: "Runs", guide: "Guide" }[S.tab]} · Logbook`;
   restoreFocus();
 }
 
@@ -1388,6 +1390,7 @@ async function boot() {
   render();
   focusProjectDeepLink();
   if (S.data.run && S.data.run.running) poll();
+  blindTestPopover();
 }
 
 boot();

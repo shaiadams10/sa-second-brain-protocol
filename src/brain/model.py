@@ -26,6 +26,9 @@ class Session:
     # Paths the assistant touched, used when a source records no working folder.
     path_hints: Counter = field(default_factory=Counter)
     exchanges: list[Exchange] = field(default_factory=list)
+    # Started by another agent (a subagent thread or a scripted run): its user turns are
+    # that agent's instructions, not the owner's words.
+    by_agent: bool = False
 
 
 class ExchangeBuilder:

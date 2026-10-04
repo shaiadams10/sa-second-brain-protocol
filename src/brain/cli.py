@@ -4,6 +4,8 @@
   sbrain digest [--week W]    build the no-AI weekly digest (W = 2026-W39, "last", or "this")
   sbrain run                  update the brain: catch up finished weeks (add --current for this week)
   sbrain run --learn          read logged weeks again for skills and what the owner stated
+  sbrain corpus               collect every message the owner typed, for the writing-style study
+  sbrain voice <step>         the writing-style study: mark, combine, write, test, status
   sbrain dashboard            open the dashboard
   sbrain install              weekly scheduled run + desktop shortcut (Windows)
   sbrain uninstall            remove both
@@ -12,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 
@@ -65,6 +68,14 @@ def cmd_run(cfg: config_mod.Config, args: argparse.Namespace) -> int:
     except Busy as exc:
         print(exc)
         return 1
+    if cfg.voice.get("weekly_test") and not (args.learn or args.backfill or args.week):
+        # The weekly blind test of the writing-style profile; its failure never fails the update.
+        try:
+            from brain import voice
+
+            voice.weekly(cfg, args)
+        except Exception as exc:  # noqa: BLE001
+            print(f"voice weekly: skipped after an error: {exc}")
     for r in results:
         if r.get("skipped"):
             continue
@@ -74,6 +85,40 @@ def cmd_run(cfg: config_mod.Config, args: argparse.Namespace) -> int:
         print(f"{r['week']}: {r['status']}, {r.get('model_calls', 0)} model calls, "
               f"{r.get('new_observations', 0)} new observations, {r['seconds']}s{tokens}")
     return 0
+
+
+def cmd_corpus(cfg: config_mod.Config, args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from brain import corpus
+
+    exports = [Path(p).expanduser() for p in (args.exports or cfg.voice.get("exports", []))]
+    missing = [str(p) for p in exports if not p.is_dir()]
+    if missing:
+        print(f"Export folder not found: {', '.join(missing)}")
+        return 1
+    started = time.time()
+    collected = corpus.collect(cfg, exports)
+    path = corpus.write(cfg, collected)
+    summary = json.loads((path.parent / "corpus-summary.json").read_text(encoding="utf-8"))
+    print(f"{summary['messages']} unique messages in {time.time() - started:.0f}s, "
+          f"{summary['first'][:10] if summary['first'] else '-'} to {summary['last'][:10] if summary['last'] else '-'}")
+    for source, n in sorted(summary["by_source"].items()):
+        print(f"  {source}: {n} messages from {summary['sessions'].get(source, 0)} sessions")
+    for reason, n in summary["excluded"].items():
+        print(f"  left out: {n} ({reason})")
+    if summary.get("local_messages_with_web_pastes_removed"):
+        print(f"  pasted from web chats: removed from {summary['local_messages_with_web_pastes_removed']} coding-agent messages")
+    for name in summary["unrecognized_export_files"]:
+        print(f"  not a known export format: {name}")
+    print(f"Wrote {path}")
+    return 0
+
+
+def cmd_voice(cfg: config_mod.Config, args: argparse.Namespace) -> int:
+    from brain import voice
+
+    return voice.main(cfg, args)
 
 
 def cmd_dashboard(cfg: config_mod.Config, args: argparse.Namespace) -> int:
@@ -113,6 +158,16 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--model", help="model id for this run (default: [model] name, else newest Gemini Flash "
                                        "or the Codex default); manual-<name> to answer by hand")
     p_run.add_argument("--effort", help="reasoning effort, e.g. low, medium, high (default: [model] effort)")
+    p_corpus = sub.add_parser("corpus", help="collect every message the owner typed (no AI)")
+    p_corpus.add_argument("--exports", action="append",
+                          help="folder of web chat exports (repeatable; default: [voice] exports in config.toml)")
+    p_voice = sub.add_parser("voice", help="the writing-style study, one step at a time")
+    p_voice.add_argument("step", choices=("mark", "combine", "write", "test", "weekly", "newtest", "status"))
+    p_voice.add_argument("--cli", choices=("agy", "codex"), help="CLI for this step (default: [voice] in config.toml)")
+    p_voice.add_argument("--model", help="model id for this step")
+    p_voice.add_argument("--effort", help="reasoning effort for this step")
+    p_voice.add_argument("--workers", type=int, help="model calls in parallel while marking (default 3)")
+    p_voice.add_argument("--limit", type=int, help="mark at most this many batches, then stop")
     p_dash = sub.add_parser("dashboard", help="open the dashboard")
     p_dash.add_argument("--port", type=int, default=8765)
     p_dash.add_argument("--no-browser", action="store_true")
@@ -128,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} brain {' '.join(argv or sys.argv[1:])}")
     elif hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    commands = {"scan": cmd_scan, "digest": cmd_digest, "run": cmd_run, "dashboard": cmd_dashboard,
+    commands = {"scan": cmd_scan, "digest": cmd_digest, "run": cmd_run, "corpus": cmd_corpus, "voice": cmd_voice,
+                "dashboard": cmd_dashboard,
                 "install": cmd_install, "uninstall": cmd_install}
     return commands[args.command](cfg, args)

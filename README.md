@@ -18,7 +18,7 @@ Version 2 is a rewrite. Version 1 was a large governed pipeline that grew hard t
 
    When files alone can't tell a monorepo from a collection of separate projects, the dashboard asks you once and remembers. Folders outside the projects root can be added as named places.
 3. **Keep history intact when folders move.** A conversation in a folder that has since moved is matched by name to where that folder lives now. A folder that no longer exists becomes a historical project under its old name, and one rule (`"Old Name": "part-of:New Name"`) merges its history into its successor.
-4. **Build the weekly digest, without AI.** Each project gets an attention score from active days, conversations, file changes, and commits (git is optional). Exchanges where you praised, corrected, or interrupted the assistant are always kept, because that's where your preferences show, and so are your questions about how something works, because that's where the edge of what you know shows. Pasted text is marked as pasted, and attached terminal output and agent handoff briefs are dropped: they aren't your words.
+4. **Build the weekly digest, without AI.** Each project gets an attention score from active days, conversations, file changes, and commits (git is optional). Exchanges where you praised, corrected, or interrupted the assistant are always kept, because that's where your preferences show, and so are your questions about how something works, because that's where the edge of what you know shows. Pasted text is marked as pasted, and attached terminal output and agent handoff briefs are dropped: they aren't your words. Sessions another agent started (Codex subagent threads and `codex exec` runs) count as activity on the days they ran, but their prompts were written by that agent, so they are not shown as you speaking and are not counted as conversations or exchanges.
 5. **Summarize with a model you choose.** Each project's week goes to a coding-agent CLI you already use, answering in JSON against a fixed schema. Code, not the model, writes the vault:
    - **Antigravity** (`agy -p`): with no model named, the newest Gemini Flash your account offers is picked at run time.
    - **Codex** (`codex exec`): read-only, ephemeral sandbox so the brain's own calls never show up as conversations; with no model named, your Codex default is used.
@@ -54,11 +54,30 @@ sbrain dashboard                  open the logbook dashboard
 sbrain install / uninstall        Windows scheduled run and desktop shortcut
 sbrain scan                       show how your projects folder is classified
 sbrain digest --week last         build a week's no-AI digest, for inspection
+sbrain corpus [--exports DIR]     collect every message you typed, plus web chat exports (no AI)
+sbrain voice mark|combine|write|test|weekly|newtest|status
+                                  the writing-style study, one step at a time (see below)
 ```
 
 Run inside your vault, or pass `--vault` or set `BRAIN_VAULT`.
 
 A backfill resumes where it stopped: finished weeks are skipped. For a one-time backfill answered by hand (or by another agent reading files), use `--model manual-<name>`: each request is written to `.brain/manual/<n>/request.md` with its schema, and the run waits for `answer.json` next to it.
+
+## Writing-style study
+
+A separate, on-demand study of how you write: your level, grammar, sentence shape, rhythm, wording, shortcuts, and recurring mistakes, not your topics. It ends in a profile another AI can load when you ask it to "write this like me": one part describes how you really type, and an output layer writes correct English at your level and in your shape.
+
+1. `sbrain corpus` collects every message you typed, from every session the sources hold, plus web chat exports (ChatGPT and Claude.ai `conversations.json`, Gemini Takeout `My Activity.json`, or any `{"messages": [...]}` file, loose or still zipped) from the folders under `[voice] exports`, plus writing you did for people from `[voice] samples` (default `brain/voice-samples`). When an export holds an assistant's reply and a coding-agent message contains 12 or more words of it in a row, that stretch is replaced with a pasted placeholder: you had a web chat write it. No AI. Sessions another agent started (Codex subagent threads, `codex exec` runs) are left out, because their prompts were written by an agent. So are injected context, slash commands, and tagged pastes.
+2. `sbrain voice mark` has a model read every message in full and mark it: typed, mixed, pasted, or not prose (judged from context and the quality of the English, since many pastes are untagged), what kind of message it is, every error with its fix, habits, and characteristic wording. Marks are cached per message, so new exports only cost what is new.
+3. `sbrain voice combine` turns the marks into counts across conversations, sources, and months, holds out 15 messages for a blind test, and draws a spread sample.
+4. `sbrain voice write` has a second model write the draft profile from the counts and the sample, and list what the evidence contradicts in your current voice notes.
+5. `sbrain voice test` has a fresh model write the held-out situations from the profile alone, and builds a blind page where you pick which message is really yours.
+
+6. `sbrain voice weekly` repeats the blind test every week on messages from the week just finished, which no profile has seen. With `weekly_test = true` under `[voice]` it runs after the scheduled update. Picks and the owner's notes on what gave the model away are saved from the dashboard to `brain/voice-tests.jsonl` and `brain/voice-tests.md` in the vault (scores and notes only, no message text), and the next profile and test read those notes, each with the model message it is about. `sbrain voice newtest` (or Start a new blind test on the Guide card) builds one now, topped up with older untested messages. The test page keeps progress if it is closed, saves itself at the end, and finished tests open as a read-only review. The Guide tab and each week in the Log show the open test and the scores.
+
+An optional `guidance` file (default `brain/voice-guidance.md`) holds what the owner wants from the profile; the writer follows it over its own judgment.
+
+Each step's CLI, model, and effort come from `[voice]` in `config.toml` (`mark_cli`, `mark_model`, `mark_effort`, `mark_workers`, `write_cli`, `write_model`, `write_effort`), with `background` describing your language background for both models. Everything stays in `<vault>/.brain/voice/`; the profile is a draft until you copy it into the vault yourself.
 
 ## The dashboard
 

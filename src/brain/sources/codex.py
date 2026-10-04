@@ -2,6 +2,7 @@
 
 Kept: the owner's messages, the assistant's final answer per turn, the working folder.
 Dropped: reasoning, tool calls and their output, token counts, injected context.
+Subagent threads and `codex exec` runs are flagged `by_agent`: another agent wrote their prompts.
 Session files can be hundreds of MB of tool output, so lines are filtered by
 substring before they are decoded.
 """
@@ -87,6 +88,10 @@ def parse(path: Path) -> Session:
             if kind == "session_meta":
                 session.id = payload.get("id") or session.id
                 session.cwd = payload.get("cwd") or session.cwd
+                source = payload.get("source")
+                session.by_agent = session.by_agent or (
+                    (isinstance(source, dict) and "subagent" in source)
+                    or source == "exec" or payload.get("originator") == "codex_exec")
             elif kind == "turn_context":
                 session.cwd = session.cwd or payload.get("cwd")
             elif kind == "response_item" and payload.get("type") == "message":
