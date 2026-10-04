@@ -187,11 +187,17 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
         return weeks[pid]
 
     raw: dict[str, list[DigestExchange]] = {}
+    agent_days: dict[str, set] = {}
     for session in load_sources_for(config.sources, start, end):
         location = session.cwd or (session.path_hints.most_common(1)[0][0] if session.path_hints else None)
         pid = catalog.resolve(location) or OUTSIDE
         sub = catalog.subproject(location, pid)
         pw = entry(pid)
+        if session.by_agent:
+            # Another agent wrote these prompts: the work counts as activity on its days,
+            # but nothing in it is the owner speaking, so it is not a conversation or an exchange.
+            agent_days.setdefault(pid, set()).update(ex.at.date() for ex in session.exchanges)
+            continue
         pw.sessions[session.tool] = pw.sessions.get(session.tool, 0) + 1
         user_limit = ABOUT_USER_LIMIT if pid in config.about_me else USER_LIMIT
         for ex in session.exchanges:
@@ -211,6 +217,7 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
             pw.commits = sum(commits.values())
             days = set(files) | set(commits)
             days |= {datetime.fromisoformat(e.at).date() for e in raw.get(pid, [])}
+            days |= agent_days.get(pid, set())
             pw.active_days = sorted(d.isoformat() for d in days)
 
     for pid, exchanges in raw.items():
@@ -220,6 +227,11 @@ def build(config: Config, week: str, catalog: Catalog | None = None,
         pw.exchanges = _select(exchanges, ABOUT_MAX if pid in config.about_me else MAX_PER_PROJECT)
         if not pw.active_days:
             pw.active_days = sorted({e.at[:10] for e in exchanges})
+
+    for pid, days in agent_days.items():
+        pw = entry(pid)
+        if not pw.active_days:
+            pw.active_days = sorted(d.isoformat() for d in days)
 
     for pw in weeks.values():
         pw.attention = _attention(pw)
