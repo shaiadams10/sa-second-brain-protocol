@@ -221,6 +221,44 @@ window.addEventListener("hashchange", () => {
 
 /* ---------- header + tabs */
 
+function renderNextRun() {
+  if (!S.data) return;
+  const raw = S.data.schedule?.next;
+  const next = raw && !raw.startsWith("0001") ? new Date(raw) : null;
+  const valid = next && Number.isFinite(next.getTime());
+  const date = $("#run-date");
+  const countdown = $("#run-countdown");
+  if (!valid) {
+    countdown.textContent = "Schedule unavailable";
+    date.textContent = "Check Weekly run on the Runs page";
+    date.removeAttribute("datetime");
+    return;
+  }
+  date.dateTime = next.toISOString();
+  date.textContent = next.toLocaleString([], {
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+  });
+  const seconds = Math.max(0, Math.ceil((next.getTime() - Date.now()) / 1000));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor(seconds / 3600) % 24;
+  const minutes = Math.floor(seconds / 60) % 60;
+  countdown.textContent = seconds
+    ? `in ${days ? `${days}d ` : ""}${days || hours ? `${hours}h ` : ""}${minutes}m ${seconds % 60}s`
+    : "Due now · waiting for scheduler";
+}
+
+let scheduleRefreshing = false;
+async function refreshSchedule() {
+  if (!S.data || document.hidden || scheduleRefreshing) return;
+  scheduleRefreshing = true;
+  try {
+    S.data.schedule = (await api("/api/state")).schedule;
+    renderNextRun();
+  } catch (e) { /* Keep the last known schedule while the server restarts. */ }
+  finally { scheduleRefreshing = false; }
+}
+
 function renderHeader() {
   const d = S.data;
   if (!$("#week-picker").hidden) showWeekPicker(false);
@@ -244,6 +282,7 @@ function renderHeader() {
       ? `Last entry <b>${esc(ago(last.started))}</b><br>${esc(last.model || "")}`
       : `<b style="color:var(--bad)">Last run failed</b><br>${esc(ago(last.started))}`)
     : "No runs yet";
+  renderNextRun();
 
   const running = d.run && d.run.running;
   const btn = $("#runnow");
@@ -1389,6 +1428,11 @@ async function boot() {
   }
   render();
   focusProjectDeepLink();
+  setInterval(renderNextRun, 1000);
+  setInterval(refreshSchedule, 300000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { renderNextRun(); refreshSchedule(); }
+  });
   if (S.data.run && S.data.run.running) poll();
   blindTestPopover();
 }

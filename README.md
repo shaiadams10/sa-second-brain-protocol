@@ -88,7 +88,7 @@ The desktop shortcut opens it from a normal terminal window titled "Second Brain
 - **Log**: each week has the complete project ledger, totals carried forward, headline, highlights, observations and skill activity. Wide tables scroll within the page on smaller screens.
 - **Projects**: ongoing, exploring, on hold, and earlier projects with an 8-week attention strip; mark a folder as a real project or not; answer folder questions; set how any folder is treated.
 - **About you**: inked (confirmed) and pencilled (candidate) entries with evidence quotes and reversible Strike/Undo. Filters include stated facts, communication, goals and advice. Skills show computed progress and evidence history; goals show whether they are open or settled.
-- **Runs**: the **Weekly run** settings (CLI, model, effort, day, time for every scheduled run), run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that one run.
+- **Runs**: the **Weekly run** settings (CLI, model, effort, day, time for every scheduled run), run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that one run. Beside Run now, every page shows the next weekly run's date and time in the browser's local timezone, with a live countdown from Windows Task Scheduler.
 
 ## Vault setup
 
