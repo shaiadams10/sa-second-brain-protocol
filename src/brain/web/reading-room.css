@@ -100,6 +100,26 @@ body .sheet,body .legend { border-radius:0; }
 main:focus {outline:none}
 .top {background:var(--top-ground);color:var(--top-ink);max-width:none;padding-left:max(24px,calc((100vw - 1452px)/2));padding-right:max(24px,calc((100vw - 1452px)/2))}
 .brand span,.lastrun,.lastrun b {color:var(--top-muted)}
+.top .right {display:grid;grid-template-columns:minmax(0,1fr) 36px auto;gap:6px 10px}
+.top .lastrun {grid-column:1;grid-row:1}
+.top #theme {grid-column:2;grid-row:1}
+.top .runsplit {grid-column:3;grid-row:1}
+.nextrun {grid-column:1 / -1;grid-row:2;text-align:right;color:var(--top-muted);font-size:12px;line-height:1.5}
+.nextrun-heading {display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.nextrun b {color:var(--top-ink);font-weight:500}
+.nextrun time {display:block}
+@media(max-width:1050px) and (min-width:761px) {
+ body .top {grid-template-columns:auto 1fr;min-height:110px;height:auto;padding-top:12px;padding-bottom:12px}
+ .top .pager {grid-column:1 / -1;grid-row:2;justify-content:center}
+ .top .right {grid-column:2;grid-row:1}
+}
+@media(max-width:760px) {
+ .top .right {grid-template-columns:36px auto;gap:5px}
+ .top #theme {grid-column:1}
+ .top .runsplit {grid-column:2}
+ .top .lastrun {grid-column:1 / -1;grid-row:2}
+ .nextrun {grid-row:3;font-size:11px;max-width:250px}
+}
 .top .btn.ghost {color:var(--top-muted)}
 .top .btn.ghost:hover {color:var(--top-ink);border-color:var(--top-muted)}
 .top :focus-visible {outline-color:var(--top-ink)}
