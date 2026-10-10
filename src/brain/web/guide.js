@@ -7,7 +7,7 @@
 
 const GUIDE_TABS = [
   ["start", "Start here"], ["about", "About"], ["experience", "Experience"],
-  ["career", "Career"], ["engine", "Engine"], ["results", "Results"],
+  ["career", "Career"], ["engine", "Engine"], ["results", "Results"], ["phrasing", "Phrasing"],
 ];
 const GUIDE_GROUP_OF = { "": "start", me: "about", experience: "experience", career: "career", brain: "engine", projects: "engine", ".brain/voice": "results" };
 const GUIDE_HOW = {
@@ -33,6 +33,13 @@ Every week the engine reads your conversations with coding agents and the folder
 4. **Write** the profile: how you write, and an output layer that writes correct English in your shape.
 5. **Test** it blind: a fresh model writes held-out messages, and you pick which one is really yours.
 
+## Phrase it better
+
+1. **Collect** the prompts you typed this week, with each agent's first reply and your next message. No AI.
+2. **Pick** up to ten cards: a right term, a shorter way to say it, or a misread caused by the wording.
+3. **Follow up** on terms from earlier cards you now use, rounds lost to wording, and once a month your patterns.
+4. **Read** them in the Phrase it better tab. Practice mode lets you try your own version first.
+
 ## Your part
 
 - **Read the Log.** Once a week is enough. A healthy week needs nothing from you.
@@ -41,6 +48,12 @@ Every week the engine reads your conversations with coding agents and the folder
 - **Copy a command.** From the card beside this sheet, whenever the terminal is quicker.
 `,
 };
+
+// Phrase it better's sheet is drawn by phrasing.js from live data, not read from a file.
+const GUIDE_PHRASING = {
+  path: "guide:phrasing", title: "Phrase it better: every week and card", group: "", modified: null, size: 0, text: "",
+};
+const GUIDE_PHRASING_FILES = new Set(["guide:phrasing", "brain/phrasing.md"]);
 
 const G = { data: null, loading: false, error: "", docs: {}, path: null, group: "start", timer: null, copied: new Set(), hint: "", swap: false, expanded: new Set(),
   commandsOpen: (() => { try { return localStorage.getItem("brain-guide-commands") === "open"; } catch (e) { return false; } })() };
@@ -68,9 +81,10 @@ function guideLoad() {
 }
 
 function guideDocs() {
-  return [GUIDE_HOW, ...((G.data && G.data.docs) || [])];
+  return [GUIDE_HOW, GUIDE_PHRASING, ...((G.data && G.data.docs) || [])];
 }
 function guideTabOf(doc) {
+  if (GUIDE_PHRASING_FILES.has(doc.path)) return "phrasing";
   return GUIDE_GROUP_OF[doc.group] || "engine";
 }
 function guideDocsIn(tab) {
@@ -79,6 +93,10 @@ function guideDocsIn(tab) {
 
 async function guideFetchDoc(path) {
   if (path === GUIDE_HOW.path) return GUIDE_HOW;
+  if (path === GUIDE_PHRASING.path) {
+    if (!P.data) await phrasingLoad();
+    return GUIDE_PHRASING;
+  }
   const meta = guideDocs().find((d) => d.path === path);
   const cached = G.docs[path];
   if (cached && meta && cached.modified === meta.modified) return cached;
@@ -156,7 +174,10 @@ async function guidePaintSheet() {
   const known = new Set(guideDocs().map((d) => d.path));
   let out;
   try {
-    out = GuideRender.render(doc, { path: doc.path, known, idPrefix: "kb" });
+    out = doc.path === GUIDE_PHRASING.path
+      ? { title: doc.title, words: 0, html: `<div class="phs" id="phs">${phrasingSummarySheet()}</div>`,
+          lede: "Every card from every week in one list, with what you answered and what is still open. Answers here and on the Phrase it better tab are the same answers." }
+      : GuideRender.render(doc, { path: doc.path, known, idPrefix: "kb" });
   } catch (err) {
     out = { title: doc.title || doc.path, lede: "", words: 0, html: `<pre class="g-raw">${esc(doc.text || "")}</pre>` };
   }
@@ -175,6 +196,7 @@ async function guidePaintSheet() {
     doc.path.startsWith("guide:") ? "Built into the dashboard" : `<code>${esc(doc.path)}</code>`,
     doc.modified ? `updated ${esc(guideAgo(doc.modified))}` : "",
     out.words ? `${minutes} min read` : "",
+    doc.path === GUIDE_PHRASING.path && P.data ? `<a href="#phrasing">Open the Phrase it better tab</a>` : "",
   ].filter(Boolean).join('<span class="kb-dot" aria-hidden="true"></span>');
   el.innerHTML = `${index}
     <header class="kb-head">
@@ -185,7 +207,7 @@ async function guidePaintSheet() {
     <div class="kb-body" id="kb-body">${out.html}</div>
     <div class="kb-fold" id="kb-fold" hidden><button type="button" class="kb-fold-btn" data-kb-expand="${esc(doc.path)}">Show the whole sheet<small>${minutes} min read</small></button></div>`;
   const body = document.getElementById("kb-body");
-  if (body && !G.expanded.has(doc.path) && body.scrollHeight > 1500) {
+  if (body && !G.expanded.has(doc.path) && doc.path !== GUIDE_PHRASING.path && body.scrollHeight > 1500) {
     body.classList.add("is-folded");
     document.getElementById("kb-fold").hidden = false;
   }
@@ -204,11 +226,12 @@ async function guidePaintSheet() {
 }
 
 function guideShort(d) {
+  if (d.path === GUIDE_PHRASING.path) return "Every card";
   if (d.path.startsWith("guide:")) return "How it works";
   const stem = d.path.split("/").pop().replace(/\.(md|json)$/, "");
   const named = { README: "Read me", AGENTS: "Agents", ACCESS: "Access", "writing-style.draft": "Profile draft", "write-notes": "Writer's notes",
     "voice-tests": "Blind tests", "voice-study": "Voice study", "voice-guidance": "Voice guidance", "pasted-review": "Pasted review",
-    "corpus-summary": "Corpus summary", "open-questions": "Open questions" };
+    "corpus-summary": "Corpus summary", "open-questions": "Open questions", phrasing: "As Markdown" };
   return named[stem] || stem.replace(/[-_.]/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
@@ -298,6 +321,7 @@ function guideCard() {
         </button></li>`).join("")}</ul></li>`).join("");
   return `<span class="kb-tab-l" aria-hidden="true"></span><span class="kb-tab-r" aria-hidden="true"></span>
     <div id="kb-live-slot">${guideLive()}</div>
+    <div id="ph-guide-slot">${phrasingGuideCard()}</div>
     <section class="kb-sec kb-commands ${G.commandsOpen ? "open" : ""}">
       <button type="button" class="kb-disclose" data-kb-commands aria-expanded="${G.commandsOpen}">Commands<span>${count}</span>${icon("down")}</button>
       <div class="kb-commands-body" ${G.commandsOpen ? "" : "hidden"}>

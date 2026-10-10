@@ -40,6 +40,8 @@ class Config:
     schedule_time: str = "09:00"
     # Writing-style study (`sbrain corpus`, `sbrain voice`): export folders and the models per step.
     voice: dict = field(default_factory=dict)
+    # Phrase it better (`sbrain phrasing`): weekly on or off, cards per week, and the model.
+    phrasing: dict = field(default_factory=dict)
 
     @property
     def work_dir(self) -> Path:
@@ -92,6 +94,7 @@ def load(vault: Path) -> Config:
         schedule_day=schedule.get("day") or "Monday",
         schedule_time=schedule.get("time") or "09:00",
         voice=dict(data.get("voice", {})),
+        phrasing=dict(data.get("phrasing", {})),
     )
 
 

@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
 from brain import config as config_mod
-from brain import guide, voicetest
+from brain import guide, phrasing, voicetest
 from brain.config import DAYS, Config
 from brain.digest import week_label
 from brain.install import TIME, register_task
@@ -166,6 +166,7 @@ class App:
                          "day": cfg.schedule_day, "time": cfg.schedule_time},
             "vault": str(cfg.vault),
             "blindTests": voicetest.summary(cfg),
+            "phrasing": phrasing.summary(cfg),
         }
 
     def models(self) -> dict:
@@ -291,6 +292,8 @@ def _handler(app: App):
                 return self._json(app.run_state.snapshot())
             if path == "/api/models":
                 return self._json(app.models())
+            if path == "/api/phrasing":
+                return self._json(phrasing.dashboard(app.cfg))
             if path == "/api/guide":
                 return self._json({"docs": guide.documents(app.cfg), "commands": guide.commands(app.cfg),
                                    "voice": guide.voice_status(app.cfg), "vault": str(app.cfg.vault)})
@@ -350,6 +353,13 @@ def _handler(app: App):
                         return self._json(voicetest.save_result(app.cfg, body))
                     except ValueError as exc:
                         return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                elif parts[:3] == ["api", "phrasing", "feedback"]:
+                    try:
+                        with app.write_lock:
+                            phrasing.save_feedback(app.cfg, body)
+                    except ValueError as exc:
+                        return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return self._json({**phrasing.dashboard(app.cfg), "summary": phrasing.summary(app.cfg)})
                 elif parts[:3] == ["api", "voice", "new-test"]:
                     return self._json({"started": guide.start_test(app.cfg), "voice": guide.voice_status(app.cfg)})
                 elif parts[:3] == ["api", "voice", "start"]:

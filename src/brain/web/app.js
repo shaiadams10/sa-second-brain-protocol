@@ -166,7 +166,7 @@ async function write(path, body, done) {
 
 function readHash() {
   const [tab, arg] = decodeURIComponent(location.hash.slice(1)).split("/");
-  S.tab = ["log", "projects", "about", "runs", "guide"].includes(tab) ? tab : "log";
+  S.tab = ["log", "projects", "about", "runs", "phrasing", "guide"].includes(tab) ? tab : "log";
   if (S.tab === "log" && arg) {
     if (S.week !== arg) {
       S.week = arg;
@@ -310,12 +310,13 @@ function renderTabs() {
     ["log", "Log", `${d.weeks.length}`],
     ["projects", "Projects", `${ongoing} ongoing`, questions > 0],
     ["about", `About ${d.owner}`, `${inked} inked · ${pencil} pencilled`],
+    ["phrasing", "Phrase it better", phrasingTabCount(), !!(d.phrasing && d.phrasing.unread), "Phrasing"],
     ["runs", "Runs", d.run && d.run.running ? "running" : `${d.runs.length}`, failed],
     ["guide", "Guide", guideTabCount()],
   ];
-  $("#tabs").innerHTML = tabs.map(([id, label, count, flag]) => `
-    <button class="tab" role="tab" type="button" aria-selected="${S.tab === id}" data-tab="${id}">
-      ${esc(label)}<span class="count">${esc(count)}</span>${flag ? '<span class="flag" aria-label="needs attention"></span>' : ""}
+  $("#tabs").innerHTML = tabs.map(([id, label, count, flag, short]) => `
+    <button class="tab" role="tab" type="button" aria-selected="${S.tab === id}" data-tab="${id}"${short ? ` aria-label="${esc(label)}"` : ""}>
+      ${short ? `<span class="tab-long">${esc(label)}</span><span class="tab-short" aria-hidden="true">${esc(short)}</span>` : esc(label)}<span class="count">${esc(count)}</span>${flag ? '<span class="flag" aria-label="needs attention"></span>' : ""}
     </button>`).join("");
   $("#tabs").querySelectorAll(".tab").forEach((t) => (t.onclick = () => go(t.dataset.tab, t.dataset.tab === "log" ? S.week : null)));
 }
@@ -466,6 +467,7 @@ function viewLog() {
   const contextHtml = `
     <aside class="margin" aria-label="This week">
       ${blindTestCard(w.week)}
+      ${phrasingLogCard(w.week)}
       <div class="context-switch" role="group" aria-label="This week sections">
         <button class="btn small ${activeSection === "skills" ? "active" : "ghost"}" type="button" aria-pressed="${activeSection === "skills"}" data-log-section="skills">Skills this week <span class="count">${skills.length}</span></button>
         <button class="btn small ${activeSection === "learned" ? "active" : "ghost"}" type="button" aria-pressed="${activeSection === "learned"}" data-log-section="learned">Learned <span class="count">${learnedItems.length}</span></button>
@@ -1051,14 +1053,14 @@ function render() {
   if (!S.week && S.data.weeks.length) S.week = S.data.weeks[0].week;
   renderHeader();
   renderTabs();
-  const view = { log: viewLog, projects: viewProjects, about: viewAbout, runs: viewRuns, guide: viewGuide }[S.tab]();
+  const view = { log: viewLog, projects: viewProjects, about: viewAbout, runs: viewRuns, phrasing: viewPhrasing, guide: viewGuide }[S.tab]();
   $("#view").innerHTML = view;
   if (S.tab === "log") {
     // Timeouts, not animation frames: frames pause in background tabs, and text reflows once Barlow arrives.
     setTimeout(fillRuledPage, 0);
     document.fonts.ready.then(() => setTimeout(fillRuledPage, 0));
   }
-  document.title = `${{ log: `Week ${S.week ? weekNo(S.week) : ""}`, projects: "Projects", about: `About ${S.data.owner}`, runs: "Runs", guide: "Guide" }[S.tab]} · Logbook`;
+  document.title = `${{ log: `Week ${S.week ? weekNo(S.week) : ""}`, projects: "Projects", about: `About ${S.data.owner}`, runs: "Runs", phrasing: "Phrase it better", guide: "Guide" }[S.tab]} · Logbook`;
   restoreFocus();
 }
 

@@ -219,6 +219,12 @@ def commands(cfg: Config) -> list[dict]:
             ("sbrain voice weekly", "This week's blind test: new messages only, results logged in the vault."),
             ("sbrain voice newtest", "A blind test right now, topped up with older untested messages."),
         ]},
+        {"title": "Phrase it better", "items": [
+            ("sbrain phrasing status", "Weeks built, cards, and terms in use."),
+            ("sbrain phrasing week --week this", "Cards for the week in progress; Monday's run builds it again when it ends."),
+            ("sbrain phrasing week --week 2026-W40", "Build one week again; answers stay with any card it picks again."),
+            ("sbrain phrasing weekly", "Build every finished week not built yet, as the Monday run does."),
+        ]},
         {"title": "Codex account", "items": [
             ("codex logout", "Sign out, when one account is out of usage."),
             ("codex login", "Sign in with another account, then resume the study."),
