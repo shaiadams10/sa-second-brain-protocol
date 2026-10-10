@@ -6,6 +6,7 @@
   sbrain run --learn          read logged weeks again for skills and what the owner stated
   sbrain corpus               collect every message the owner typed, for the writing-style study
   sbrain voice <step>         the writing-style study: mark, combine, write, test, status
+  sbrain phrasing <step>      phrase it better: weekly, week, status
   sbrain dashboard            open the dashboard
   sbrain install              weekly scheduled run + desktop shortcut (Windows)
   sbrain uninstall            remove both
@@ -76,6 +77,14 @@ def cmd_run(cfg: config_mod.Config, args: argparse.Namespace) -> int:
             voice.weekly(cfg, args)
         except Exception as exc:  # noqa: BLE001
             print(f"voice weekly: skipped after an error: {exc}")
+    if cfg.phrasing.get("weekly") and not (args.learn or args.backfill or args.week):
+        # After the blind test, which marks the week's new messages: the cards use those marks.
+        try:
+            from brain import phrasing
+
+            phrasing.weekly(cfg)
+        except Exception as exc:  # noqa: BLE001
+            print(f"phrasing weekly: skipped after an error: {exc}")
     for r in results:
         if r.get("skipped"):
             continue
@@ -119,6 +128,12 @@ def cmd_voice(cfg: config_mod.Config, args: argparse.Namespace) -> int:
     from brain import voice
 
     return voice.main(cfg, args)
+
+
+def cmd_phrasing(cfg: config_mod.Config, args: argparse.Namespace) -> int:
+    from brain import phrasing
+
+    return phrasing.main(cfg, args)
 
 
 def cmd_dashboard(cfg: config_mod.Config, args: argparse.Namespace) -> int:
@@ -168,6 +183,12 @@ def main(argv: list[str] | None = None) -> int:
     p_voice.add_argument("--effort", help="reasoning effort for this step")
     p_voice.add_argument("--workers", type=int, help="model calls in parallel while marking (default 3)")
     p_voice.add_argument("--limit", type=int, help="mark at most this many batches, then stop")
+    p_phrase = sub.add_parser("phrasing", help="phrase it better: cards on saying it shorter or with the right term")
+    p_phrase.add_argument("step", choices=("weekly", "week", "status"))
+    p_phrase.add_argument("--week", help="for `week`: 2026-W40, last (default), or this")
+    p_phrase.add_argument("--cli", choices=("agy", "codex"), help="CLI (default: [phrasing], else the voice writer's)")
+    p_phrase.add_argument("--model", help="model id")
+    p_phrase.add_argument("--effort", help="reasoning effort")
     p_dash = sub.add_parser("dashboard", help="open the dashboard")
     p_dash.add_argument("--port", type=int, default=8765)
     p_dash.add_argument("--no-browser", action="store_true")
@@ -184,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     elif hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     commands = {"scan": cmd_scan, "digest": cmd_digest, "run": cmd_run, "corpus": cmd_corpus, "voice": cmd_voice,
+                "phrasing": cmd_phrasing,
                 "dashboard": cmd_dashboard,
                 "install": cmd_install, "uninstall": cmd_install}
     return commands[args.command](cfg, args)

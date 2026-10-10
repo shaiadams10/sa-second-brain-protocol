@@ -57,6 +57,8 @@ sbrain digest --week last         build a week's no-AI digest, for inspection
 sbrain corpus [--exports DIR]     collect every message you typed, plus web chat exports (no AI)
 sbrain voice mark|combine|write|test|weekly|newtest|status
                                   the writing-style study, one step at a time (see below)
+sbrain phrasing weekly|week|status [--week W]
+                                  phrase it better: cards on saying it shorter or with the right term
 ```
 
 Run inside your vault, or pass `--vault` or set `BRAIN_VAULT`.
@@ -79,6 +81,20 @@ An optional `guidance` file (default `brain/voice-guidance.md`) holds what the o
 
 Each step's CLI, model, and effort come from `[voice]` in `config.toml` (`mark_cli`, `mark_model`, `mark_effort`, `mark_workers`, `write_cli`, `write_model`, `write_effort`), with `background` describing your language background for both models. Everything stays in `<vault>/.brain/voice/`; the profile is a draft until you copy it into the vault yourself.
 
+## Phrase it better
+
+Each week, code collects the prompts you typed to coding agents, each with the agent's first reply (where agents usually say back what they understood) and your next message (where a misunderstanding shows). Pasted text, code, and other languages are left out using the writing-style marks when they exist. A model then picks up to 10 cards:
+
+- **Right term**: a word that means something else ("wider" for a top bar that should be taller), or a long description where a term exists.
+- **Shorter**: the same request in far fewer words, keeping everything the agent needs.
+- **Misread**: the agent misunderstood because of the wording, and your next message had to correct it.
+
+Each card shows what you said, a better way to say it, why, the terms worth learning, and how the agent put it. A small grammar note comes from the writing-style marks, with no model call. In the same call the model confirms which terms from earlier cards you now use yourself, counts the rounds lost to wording, and once a month names habits that recur across cards. Up to two older cards whose terms are not in use yet come back each week.
+
+With `weekly = true` under `[phrasing]` it runs after the scheduled update (and after the weekly blind test, whose marks it uses), catching up at most four finished weeks. A week built while in progress is built again when it ends. `sbrain phrasing week --week 2026-W40` builds one week by hand. `[phrasing]` also takes `per_week` (default 10), `cli`, `model`, and `effort` (default: the writing-style writer's).
+
+Cards (with short excerpts) go to `brain/phrasing.jsonl`, your answers to `brain/phrasing-feedback.jsonl`, and both to `brain/phrasing.md` in the vault, committed. Full prompts stay in `.brain/phrasing/`. Next week's run reads your "I knew this" and "Not useful" answers and notes. Cards never reach the writing-style profile.
+
 ## The dashboard
 
 A local page on `127.0.0.1` with the Signal color theme and Reading Room layout, in light and dark modes. Press the week number to browse the year's saved weeks directly.
@@ -88,6 +104,7 @@ The desktop shortcut opens it from a normal terminal window titled "Second Brain
 - **Log**: each week has the complete project ledger, totals carried forward, headline, highlights, observations and skill activity. Wide tables scroll within the page on smaller screens.
 - **Projects**: ongoing, exploring, on hold, and earlier projects with an 8-week attention strip; mark a folder as a real project or not; answer folder questions; set how any folder is treated.
 - **About you**: inked (confirmed) and pencilled (candidate) entries with evidence quotes and reversible Strike/Undo. Filters include stated facts, communication, goals and advice. Skills show computed progress and evidence history; goals show whether they are open or settled.
+- **Phrase it better**: the week's cards, filters by kind, an optional practice mode that hides each answer until you try your own version, Got it / I knew this / Not useful and notes on every card, words per long prompt over the weeks, monthly patterns, and every term you have learned, marked once you use it. The Guide's **Phrasing** tab holds every week and card in one place: a table of weeks with what is still open, and a list of every card, showing whether you answered it and how, so you can answer the open ones from there.
 - **Runs**: the **Weekly run** settings (CLI, model, effort, day, time for every scheduled run), run history with model and token usage, the next scheduled run, and **Run now** with live progress. The arrow next to Run now picks the CLI, model and effort for that one run. Beside Run now, every page shows the next weekly run's date and time in the browser's local timezone, with a live countdown from Windows Task Scheduler.
 
 ## Vault setup

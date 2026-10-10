@@ -15,6 +15,8 @@ class Exchange:
     user: str
     reply: str = ""
     tool_calls: int = 0
+    # The assistant's first text in the round: where it usually says back what it understood.
+    opening: str = ""
 
 
 @dataclass
@@ -36,6 +38,7 @@ class ExchangeBuilder:
 
     The reply kept for an exchange is the assistant's final answer when the
     source marks one, otherwise the last assistant text before the owner spoke again.
+    The opening is its first text in the round.
     """
 
     def __init__(self) -> None:
@@ -52,6 +55,8 @@ class ExchangeBuilder:
         if self._current is None or not text.strip():
             return
         self._last = text
+        if not self._current.opening:
+            self._current.opening = text
         if final:
             self._final = text
 
